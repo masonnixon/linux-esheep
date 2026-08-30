@@ -6,6 +6,8 @@ DATADIR := $(PREFIX)/share/esheep
 BINDIR := $(PREFIX)/bin
 APPDIR := $(PREFIX)/share/applications
 
+all: esheep
+
 test-interpreter:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_interpreter tests/test_interpreter.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_interpreter
@@ -27,6 +29,6 @@ uninstall:
 	rmdir $(DESTDIR)$(DATADIR) 2>/dev/null || true
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 
-.PHONY: test-interpreter esheep install uninstall clean
+.PHONY: all test-interpreter esheep install uninstall clean
 clean:
 	rm -f esheep /tmp/esheep_test_interpreter /tmp/esheep-install-build
