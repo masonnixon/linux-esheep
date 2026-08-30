@@ -262,6 +262,21 @@ static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
     return FALSE;
 }
 
+static int pose_delta(const EsheepAnimation *anim, int frame_index, gboolean x_axis) {
+    const char *start = x_axis ? anim->start.x : anim->start.y;
+    const char *end = x_axis ? anim->end.x : anim->end.y;
+    int start_value = atoi(start);
+    int end_value = atoi(end);
+    if (anim->frame_count <= 1) return start_value;
+    double progress = (double)frame_index / (double)(anim->frame_count - 1);
+    return (int)(start_value + (end_value - start_value) * progress +
+                 (progress >= 0.5 ? 0.5 : -0.5));
+}
+
+static gboolean is_airborne_animation(int animation_id) {
+    return animation_id == 25 || animation_id == 44 || animation_id == 45;
+}
+
 static void set_sprite_input_region(App *app) {
     GdkWindow *window = gtk_widget_get_window(app->window);
     if (!window) return;
@@ -303,15 +318,13 @@ static void set_sprite_input_region(App *app) {
     cairo_region_destroy(region);
 }
 
-/* Apply the pose x/y deltas (constant per animation in this dataset -- start
- * and end always match for every animation currently in scope) for one
- * frame step of `anim`, then clamp to the monitor bounds. Returns a context
- * string ("none" or "vertical") describing which edge, if any, was hit
- * this step, for the caller to feed into esheep_border_event. */
-static const char *step_position(App *app, const EsheepAnimation *anim) {
+/* Apply the interpolated pose delta for one frame step of `anim`, then clamp
+ * to the monitor bounds. Returns the surface context hit by the step. */
+static const char *step_position(App *app, const EsheepAnimation *anim,
+                                 int frame_index) {
     int old_y = app->pos_y;
-    int dx = atoi(anim->start.x);
-    int dy = atoi(anim->start.y);
+    int dx = pose_delta(anim, frame_index, TRUE);
+    int dy = pose_delta(anim, frame_index, FALSE);
     app->pos_x += dx;
     app->pos_y += dy;
 
@@ -403,13 +416,15 @@ static gboolean on_tick(gpointer user_data) {
     gboolean climbing = FALSE;
     if (!surface && app->state.animation_id == ANIM_WALK)
         climbing = start_window_climb(app, &esheep_animations[ANIM_WALK - 1]);
-    if (!surface && !climbing && app->pos_y < floor_y &&
+    if (!surface && !climbing && !is_airborne_animation(app->state.animation_id) &&
+        app->pos_y < floor_y &&
         app->state.animation_id != ANIM_FALL) {
         esheep_gravity_event(&app->state, "none", rand() % 100);
         if (app->state.animation_id != ANIM_FALL)
             esheep_init(&app->state, ANIM_FALL);
     }
     int prev_anim = app->state.animation_id;
+    int prev_frame = app->state.frame_index;
     /* Movement/collision context is decided by the CURRENT position, before
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
@@ -425,23 +440,11 @@ static gboolean on_tick(gpointer user_data) {
     gboolean stepped = esheep_tick(&app->state, (int)app->tick_ms,
                                    pretick_context, roll);
 
-    /* A frame boundary was crossed this tick if the animation changed, the
-     * frame index moved, OR the repeat_index advanced -- that last case
-     * covers single-frame animations (e.g. "fall", frames=[133]) where
-     * frame_index wraps right back to the same value every step, so
-     * comparing (animation_id, frame_index) alone misses it and the sprite
-     * never moves. Known residual gap: an animation with BOTH frame_count
-     * 1 and repeat "0" (infinite loop) would still evade this -- neither
-     * frame_index nor repeat_index ever change. Only "fall_wina" (id 51)
-     * fits that, and it's a single-frame context animation, so not fixed
-     * here; a fully
-     * robust fix would have esheep_tick report "a step happened" directly
-     * rather than reconstructing it from state deltas. */
     if (stepped) {
         /* A frame boundary was crossed this tick -- apply the animation that
          * was PLAYING during that step's own pose delta, not the new one. */
         const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];
-        const char *hit = step_position(app, stepped_anim);
+        const char *hit = step_position(app, stepped_anim, prev_frame);
         gboolean edge_animation_finished = FALSE;
         int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
         if (prev_anim == 37 && app->pos_y <= app->climb_target_y) {
@@ -500,7 +503,9 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpoint
     App *app = user_data;
     (void)widget;
 
-    if (event->button == 1) {
+    if (event->button == 1 && event->type == GDK_2BUTTON_PRESS && !app->dragging) {
+        esheep_init(&app->state, 25); /* authored jump animation */
+    } else if (event->button == 1) {
         app->dragging = TRUE;
         app->drag_grab_x = (int)event->x;
         app->drag_grab_y = (int)event->y;
