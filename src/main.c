@@ -604,10 +604,16 @@ static gboolean on_tick(gpointer user_data) {
             gboolean edge_animation_finished = FALSE;
             int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
             if (event.animation_id == 37 && app->pos_y <= app->climb_target_y) {
+                /* The top traversal must head away from the edge we climbed.
+                 * Without this, a climb from the right edge enters top_walk2
+                 * moving right and repeatedly hits the same boundary. */
+                app->direction = app->pos_x <= app->bounds.x ? 1 : -1;
                 esheep_init(&app->state, 38); /* vertical up -> top walk */
                 edge_animation_finished = TRUE;
             } else if (event.animation_id == 39 &&
-                       app->pos_x <= app->bounds.x) {
+                       (app->pos_x <= app->bounds.x ||
+                        app->pos_x + app->tile_size >=
+                        app->bounds.x + app->bounds.width)) {
                 esheep_init(&app->state, 41); /* top walk -> vertical down */
                 edge_animation_finished = TRUE;
             } else if (event.animation_id == 41 && app->pos_y >= floor_y) {

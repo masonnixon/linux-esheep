@@ -106,6 +106,13 @@ int main() {
         int expected = (i % 2 == 0) ? 3 : 2;
         assert(esheep_current_tile(&state) == expected);
     }
+
+    /* A window landing must keep the ordinary walk frames cycling. */
+    esheep_init(&state, 1);
+    assert(esheep_tick(&state, 200, "window", 99));
+    assert(esheep_current_tile(&state) == 3);
+    assert(esheep_tick(&state, 200, "window", 99));
+    assert(esheep_current_tile(&state) == 2);
     
     /* Test 2: Exhaust repeat count (20) then transition.
        anim1 sequence_next: context "none" eligible: {90,"none",1}, {6,"none",15}.
