@@ -79,32 +79,97 @@ static gboolean env_equals(const char *name, const char *expected) {
     return value && strcasecmp(value, expected) == 0;
 }
 
-static void choose_random_spawn(App *app) {
-    int roll = rand() % 106;
-    int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-    if (roll < 20) {
-        app->direction = -1;
-        app->pos_x = app->bounds.x + app->bounds.width + 10;
-        app->pos_y = floor_y;
-        esheep_init(&app->state, ANIM_WALK);
-    } else if (roll < 100) {
-        app->direction = rand() % 2 ? 1 : -1;
-        int usable_width = app->bounds.width - app->tile_size - 50;
-        app->pos_x = app->bounds.x + 25 +
-                     (usable_width > 0 ? rand() % usable_width : 0);
-        app->pos_y = app->bounds.y - app->tile_size - 20;
-        esheep_init(&app->state, ANIM_FALL);
-    } else if (roll < 103) {
-        app->direction = -1;
-        app->pos_x = app->bounds.x + app->bounds.width + 10;
-        app->pos_y = app->bounds.y + app->bounds.height / 2 - app->tile_size;
-        esheep_init(&app->state, 21);
-    } else {
-        app->direction = -1;
-        app->pos_x = app->bounds.x + app->bounds.width;
-        app->pos_y = floor_y;
-        esheep_init(&app->state, 28);
+static int eval_spawn_expression(const char *expr, int area_width, int area_height,
+                                  int image_width, int image_height, int roll_0_99) {
+    if (!expr || !expr[0]) return 0;
+
+    /* Simple integer literal */
+    char *end = NULL;
+    long value = strtol(expr, &end, 10);
+    if (end != expr && *end == '\0') return (int)value;
+
+    /* screenW (width/area_width) with optional offset */
+    if (strcmp(expr, "screenW") == 0) return area_width;
+    if (strcmp(expr, "screenW+10") == 0) return area_width + 10;
+    if (strcmp(expr, "screenW") == 0 && expr[7] == '+') {
+        value = strtol(expr + 8, &end, 10);
+        if (*end == '\0') return area_width + (int)value;
     }
+
+    /* areaH with offset */
+    if (strcmp(expr, "areaH-imageH") == 0) return area_height - image_height;
+    if (strcmp(expr, "areaH/2-imageH") == 0) return area_height / 2 - image_height;
+    if (strcmp(expr, "areaH/2") == 0) return area_height / 2;
+
+    /* -imageH, -imageH-N */
+    if (strcmp(expr, "-imageH-20") == 0) return -image_height - 20;
+
+    /* random*(screenW-imageW-50)/100+25 - spawn 2 y */
+    if (strstr(expr, "random*(screenW-imageW-50)/100+25")) {
+        int width = area_width - image_width - 50;
+        if (width > 0)
+            return (int)((roll_0_99 * width) / 100.0 + 0.5) + 25;
+        return 25;
+    }
+
+    /* (areaH/2+(randS*areaH/2)/120-imageH-N)/2 - spawn 3 y */
+    int offset = 0;
+    if (sscanf(expr, "(areaH/2+(randS*areaH/2)/120-imageH-%d)/2", &offset) == 1)
+        return (area_height / 2 + (roll_0_99 * area_height / 2) / 120 - image_height - offset) / 2;
+
+    /* screenW fallback for spawn 4 */
+    if (strcmp(expr, "screenW") == 0) return area_width;
+
+    return 0;
+}
+
+static int select_spawn_animation(const EsheepSpawn *spawn) {
+    if (!spawn || spawn->next_count == 0) return ANIM_WALK;
+    int roll = rand() % 100;
+    int accumulated = 0;
+    for (int i = 0; i < spawn->next_count; i++) {
+        accumulated += spawn->next[i].probability;
+        if (roll < accumulated) return spawn->next[i].target;
+    }
+    return spawn->next[0].target;
+}
+
+static void choose_random_spawn(App *app) {
+    int roll = rand() % 100;
+    const EsheepSpawn *selected = NULL;
+    int accumulated = 0;
+
+    /* Select spawn by probability */
+    for (int i = 0; i < esheep_spawn_count; i++) {
+        accumulated += esheep_spawns[i].probability;
+        if (roll < accumulated) {
+            selected = &esheep_spawns[i];
+            break;
+        }
+    }
+    if (!selected && esheep_spawn_count > 0) selected = &esheep_spawns[0];
+    if (!selected) {
+        /* Fallback if no spawns defined */
+        app->direction = -1;
+        app->pos_x = app->bounds.x + app->bounds.width + 10;
+        app->pos_y = app->bounds.y + app->bounds.height - app->tile_size;
+        esheep_init(&app->state, ANIM_WALK);
+        return;
+    }
+
+    /* Evaluate spawn position expressions */
+    int spawn_roll = rand() % 100;
+    app->pos_x = app->bounds.x + eval_spawn_expression(selected->x, app->bounds.width,
+                                                       app->bounds.height, app->tile_size,
+                                                       app->tile_size, spawn_roll);
+    app->pos_y = app->bounds.y + eval_spawn_expression(selected->y, app->bounds.width,
+                                                       app->bounds.height, app->tile_size,
+                                                       app->tile_size, spawn_roll);
+
+    /* Set direction and animation based on spawn position */
+    app->direction = app->pos_x < app->bounds.x + app->bounds.width / 2 ? 1 : -1;
+    int anim_id = select_spawn_animation(selected);
+    esheep_init(&app->state, anim_id);
 }
 
 static void print_usage(const char *program) {
@@ -218,7 +283,7 @@ static void prepare_edge_walk(App *app) {
 
 static gboolean sprite_is_flipped(const App *app, const EsheepAnimation *anim) {
     return anim->flip ||
-           (reverses_with_walk_direction(anim->id) && app->direction > 0);
+           (has_horizontal_movement(anim) && app->direction > 0);
 }
 
 static gboolean get_window_type(Display *display, Window window, Atom type_atom,
