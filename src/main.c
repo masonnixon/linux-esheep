@@ -56,6 +56,9 @@ struct App {
     int direction; /* -1 = left, +1 = right */
     App *siblings;
     int sibling_count;
+    int child_animation_id;  /* active child animation id, or 0 if none */
+    int child_frame_index;   /* current frame within child animation */
+    int child_elapsed_ms;    /* elapsed time for child animation frame */
 };
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -113,6 +116,36 @@ static int eval_spawn_expression(const char *expr, int area_width, int area_heig
         return area_height / 2 - (roll_0_99 * area_height / 2) / 120 - image_height;
 
     return 0;
+}
+
+static int eval_child_expression(const char *expr, int area_width, int area_height,
+                                 int image_width, int image_height, int image_x, int image_y,
+                                 int roll_0_99) {
+    if (!expr || !expr[0]) return 0;
+
+    /* Simple integer literal */
+    char *end = NULL;
+    long value = strtol(expr, &end, 10);
+    if (end != expr && *end == '\0') return (int)value;
+
+    /* Simple cases like "-imageW" */
+    if (strcmp(expr, "-imageW") == 0) return -image_width;
+    if (strcmp(expr, "imageY") == 0) return image_y;
+    if (strcmp(expr, "imageX") == 0) return image_x;
+
+    /* imageX - imageW*0.9 (flower child at 26) */
+    if (strcmp(expr, "imageX-imageW*0.9") == 0) return image_x - (int)(image_width * 0.9);
+
+    /* areaH - imageH */
+    if (strcmp(expr, "areaH-imageH") == 0) return area_height - image_height;
+
+    /* Complex spawn 21 child: screenW+10-areaH/2-(randS*areaH/2)/120 */
+    if (strcmp(expr, "screenW+10-areaH/2-(randS*areaH/2)/120") == 0) {
+        return area_width + 10 - area_height / 2 - (roll_0_99 * area_height / 2) / 120;
+    }
+
+    /* Fall back to spawn expression handler */
+    return eval_spawn_expression(expr, area_width, area_height, image_width, image_height, roll_0_99);
 }
 
 static int select_spawn_animation(const EsheepSpawn *spawn) {
@@ -184,6 +217,7 @@ static void print_usage(const char *program) {
     g_print("  --x11-fallback         Use XWayland when available.\n");
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
     g_print("  --walk-keep N          Keep walking probability (0-100, default 90).\n");
+    g_print("  --review-animation N   Show animation N for transition review.\n");
 }
 
 static void update_monitor_bounds(App *app) {
@@ -645,6 +679,15 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
     return surface ? surface : context;
 }
 
+static const EsheepChild* find_child_for_animation(int parent_anim_id) {
+    for (int i = 0; i < esheep_child_count; i++) {
+        if (esheep_childs[i].animation_id == parent_anim_id) {
+            return &esheep_childs[i];
+        }
+    }
+    return NULL;
+}
+
 static void draw_current_tile(cairo_t *cr, App *app) {
     const EsheepAnimation *anim = &esheep_animations[app->state.animation_id - 1];
     int tile = esheep_current_tile(&app->state);
@@ -670,6 +713,36 @@ static void draw_current_tile(cairo_t *cr, App *app) {
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint_with_alpha(cr, pose_opacity(anim, app->state.frame_index));
     g_object_unref(subtile);
+
+    /* Render child animation if active. */
+    if (app->child_animation_id > 0 && app->child_animation_id <= esheep_animation_count) {
+        const EsheepAnimation *child_anim = &esheep_animations[app->child_animation_id - 1];
+        int child_tile = child_anim->frames[app->child_frame_index];
+        int child_sx = (child_tile % esheep_tiles_x) * tile_size;
+        int child_sy = (child_tile / esheep_tiles_x) * tile_size;
+
+        /* Find the child record to get offset expressions. */
+        const EsheepChild *child_record = find_child_for_animation(app->state.animation_id);
+        if (child_record) {
+            int child_offset_x = eval_child_expression(child_record->x, app->bounds.width,
+                                                        app->bounds.height, app->tile_size,
+                                                        app->tile_size, 0, 0, rand() % 100);
+            int child_offset_y = eval_child_expression(child_record->y, app->bounds.width,
+                                                        app->bounds.height, app->tile_size,
+                                                        app->tile_size, 0, 0, rand() % 100);
+
+            cairo_save(cr);
+            cairo_translate(cr, child_offset_x, child_offset_y);
+            GdkPixbuf *child_subtile = gdk_pixbuf_new_subpixbuf(app->sheet, child_sx, child_sy,
+                                                                 tile_size, tile_size);
+            gdk_cairo_set_source_pixbuf(cr, child_subtile, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+            cairo_paint_with_alpha(cr, pose_opacity(child_anim, app->child_frame_index));
+            g_object_unref(child_subtile);
+            cairo_restore(cr);
+        }
+    }
+
     cairo_restore(cr);
 }
 
@@ -677,6 +750,58 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
     (void)widget;
     draw_current_tile(cr, (App *)user_data);
     return FALSE;
+}
+
+static int frame_interval(const EsheepAnimation *anim, int frame_index) {
+    if (anim->frame_count <= 1) return anim->start.interval_ms;
+    double progress = (double)frame_index / (double)(anim->frame_count - 1);
+    double interval = anim->start.interval_ms +
+                      (anim->end.interval_ms - anim->start.interval_ms) *
+                      progress;
+    return (int)(interval + 0.5);
+}
+
+static void update_child_animation(App *app) {
+    /* Check if current animation has a child record. If transitioning to a new
+     * animation with a child, activate it. If the child is already active and
+     * the parent animation changed to something without a child, deactivate it. */
+    const EsheepChild *child_record = find_child_for_animation(app->state.animation_id);
+    if (child_record && child_record->next > 0) {
+        /* Parent animation has a child. Activate if not already. */
+        if (app->child_animation_id != child_record->next) {
+            app->child_animation_id = child_record->next;
+            app->child_frame_index = 0;
+            app->child_elapsed_ms = 0;
+        }
+    } else {
+        /* Parent animation has no child. Deactivate if active. */
+        app->child_animation_id = 0;
+        app->child_frame_index = 0;
+        app->child_elapsed_ms = 0;
+    }
+}
+
+static void advance_child_animation(App *app, int dt_ms) {
+    if (app->child_animation_id <= 0 || app->child_animation_id > esheep_animation_count)
+        return;
+
+    const EsheepAnimation *child_anim = &esheep_animations[app->child_animation_id - 1];
+    app->child_elapsed_ms += dt_ms;
+
+    while (app->child_elapsed_ms > 0 && app->child_frame_index < child_anim->frame_count) {
+        int interval = frame_interval(child_anim, app->child_frame_index);
+        if (interval <= 0 || app->child_elapsed_ms < interval)
+            break;
+
+        app->child_elapsed_ms -= interval;
+        app->child_frame_index++;
+    }
+
+    /* If child animation finished, reset (don't cycle). */
+    if (app->child_frame_index >= child_anim->frame_count) {
+        app->child_frame_index = 0;
+        app->child_elapsed_ms = 0;
+    }
 }
 
 static gboolean on_tick(gpointer user_data) {
@@ -687,6 +812,8 @@ static gboolean on_tick(gpointer user_data) {
          * interpreter step so the drag animation's frames keep cycling. */
         int roll = rand() % 100;
         esheep_tick(&app->state, (int)app->tick_ms, "none", roll);
+        update_child_animation(app);
+        advance_child_animation(app, (int)app->tick_ms);
         gtk_widget_queue_draw(app->window);
         set_sprite_input_region(app);
         return G_SOURCE_CONTINUE;
@@ -782,6 +909,10 @@ static gboolean on_tick(gpointer user_data) {
      * more tick. Make the next walk direction agree with the actual pose
      * delta so it cannot repeatedly turn into the same edge. */
     keep_walk_inside_bounds(app);
+
+    /* Update child animation state. */
+    update_child_animation(app);
+    advance_child_animation(app, (int)app->tick_ms);
 
     gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
     gtk_widget_queue_draw(app->window);
@@ -917,6 +1048,7 @@ int main(int argc, char **argv) {
     gboolean window_landing_cli = FALSE;
     gboolean exclude_conky_cli = FALSE;
     gboolean walk_keep_cli = FALSE;
+    int review_animation = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -988,6 +1120,17 @@ int main(int argc, char **argv) {
             }
             walk_keep_probability = (guint)value;
             walk_keep_cli = TRUE;
+            continue;
+        }
+        if (strcmp(argv[i], "--review-animation") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            long value = strtol(argv[++i], &end, 10);
+            if (*end || value < 1 || value > esheep_animation_count) {
+                g_printerr("invalid --review-animation value (use 1-%d)\n",
+                           esheep_animation_count);
+                return 2;
+            }
+            review_animation = (int)value;
             continue;
         }
         g_printerr("unknown or incomplete option: %s\n", argv[i]);
@@ -1124,6 +1267,8 @@ int main(int argc, char **argv) {
         setup_sheep_window(app, display, monitor);
         esheep_set_walk_keep_probability(&app->state,
                                          (int)walk_keep_probability);
+        if (review_animation > 0)
+            esheep_init(&app->state, review_animation);
         if (!app->random_spawn && !app->spawn_on_window && count > 1) {
             int offset = (int)i * app->tile_size * 2;
             int max_x = app->bounds.x + app->bounds.width - app->tile_size;

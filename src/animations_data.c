@@ -1240,3 +1240,16 @@ const EsheepAnimation esheep_animations[] = {
     },
 };
 const int esheep_animation_count = 54;
+
+const EsheepChild esheep_childs[] = {
+    {
+        21, "screenW+10-areaH/2-(randS*areaH/2)/120", "areaH-imageH", 23
+    },
+    {
+        26, "imageX-imageW*0.9", "imageY", 27
+    },
+    {
+        28, "-imageW", "imageY", 31
+    },
+};
+const int esheep_child_count = 3;

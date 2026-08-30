@@ -29,7 +29,10 @@ test-gui: esheep
 test-assets:
 	python3 tests/test_spritesheet.py
 
-test: test-interpreter test-runtime test-assets test-gui
+test-child-animations:
+	python3 tests/test_child_animations.py
+
+test: test-interpreter test-runtime test-assets test-child-animations test-gui
 
 esheep: src/main.c src/interpreter.c src/animations_data.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c $(GTK_LIBS) $(X11_LIBS)

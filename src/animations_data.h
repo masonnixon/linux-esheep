@@ -26,6 +26,13 @@ typedef struct {
 } EsheepSpawn;
 
 typedef struct {
+    int animation_id;    /* parent animation id */
+    const char *x;       /* relative offset expression */
+    const char *y;
+    int next;            /* child animation id to display */
+} EsheepChild;
+
+typedef struct {
     int id;
     const char *name;
     EsheepPose start;
@@ -51,5 +58,8 @@ extern const int esheep_spawn_count;
 
 extern const EsheepAnimation esheep_animations[];
 extern const int esheep_animation_count;
+
+extern const EsheepChild esheep_childs[];
+extern const int esheep_child_count;
 
 #endif /* ESHEEP_ANIMATIONS_DATA_H */
