@@ -28,6 +28,7 @@ install: src/main.c src/interpreter.c src/animations_data.c
 		-o /tmp/esheep-install-build src/main.c src/interpreter.c src/animations_data.c $(GTK_LIBS) $(X11_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
 	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
+	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
 	install -Dm644 packaging/esheep.desktop $(DESTDIR)$(APPDIR)/esheep.desktop
 	install -Dm644 packaging/esheep.1 $(DESTDIR)$(MANDIR)/esheep.1
 	rm -f /tmp/esheep-install-build
@@ -35,6 +36,7 @@ install: src/main.c src/interpreter.c src/animations_data.c
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/esheep
 	rm -f $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
+	rm -f $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
 	rmdir $(DESTDIR)$(DATADIR) 2>/dev/null || true
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1

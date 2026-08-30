@@ -102,6 +102,7 @@ static void print_usage(const char *program) {
     g_print("  --help                 Show this help.\n");
     g_print("  --version              Show the version.\n");
     g_print("  --sprite PATH          Use a spritesheet.\n");
+    g_print("  --character NAME       Use sheep or penguin sprites.\n");
     g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
     g_print("  --no-window-landing    Disable window and panel landing.\n");
     g_print("  --allow-conky          Allow landing on Conky.\n");
@@ -614,6 +615,7 @@ static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer use
 
 int main(int argc, char **argv) {
     const char *sprite_override = NULL;
+    const char *character_override = NULL;
     const char *spawn_override = NULL;
     guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
     gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
@@ -629,6 +631,10 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "--sprite") == 0 && i + 1 < argc) {
             sprite_override = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--character") == 0 && i + 1 < argc) {
+            character_override = argv[++i];
             continue;
         }
         if (strcmp(argv[i], "--spawn") == 0 && i + 1 < argc) {
@@ -661,12 +667,21 @@ int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
     srand((unsigned)time(NULL));
 
+    const char *character = character_override ? character_override :
+                            getenv("ESHEEP_CHARACTER");
+    if (character && strcasecmp(character, "sheep") != 0 &&
+        strcasecmp(character, "penguin") != 0) {
+        g_printerr("invalid character '%s' (use sheep or penguin)\n", character);
+        return 2;
+    }
     const char *sheet_path = sprite_override ? sprite_override :
                              getenv("ESHEEP_SPRITESHEET");
     char default_sheet_path[4096];
     if (!sheet_path) {
         snprintf(default_sheet_path, sizeof(default_sheet_path),
-                 "%s/sheep_spritesheet.png", ESHEEP_DATADIR);
+                 "%s/%s_spritesheet.png", ESHEEP_DATADIR,
+                 character && strcasecmp(character, "penguin") == 0 ?
+                 "penguin_ice_blue" : "sheep");
         sheet_path = default_sheet_path;
     }
 

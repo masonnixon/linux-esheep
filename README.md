@@ -15,6 +15,7 @@ Command-line options are available with `./esheep --help`:
 
 ```text
 --sprite PATH       Use a different spritesheet.
+--character sheep    Use sheep or penguin sprites.
 --spawn bottom      Start at the monitor bottom (default).
 --spawn window      Start on a visible application window.
 --spawn random      Use the authored weighted spawn points.
@@ -29,6 +30,9 @@ it finds `assets/sheep_spritesheet.png`, or point it elsewhere:
 ```sh
 ESHEEP_SPRITESHEET=/path/to/spritesheet.png ./esheep
 ```
+
+Use `--character penguin` or `ESHEEP_CHARACTER=penguin` to select the bundled
+ice-blue penguin. An explicit `--sprite` path takes precedence.
 
 Runtime settings can be overridden with environment variables:
 
@@ -74,11 +78,8 @@ Installs the binary, spritesheet, and a `.desktop` entry.
 
 ## Known limitations / not yet built
 
-- Window and taskbar detection uses X11 (`_NET_CLIENT_LIST`) and has no
-  Wayland window-discovery path yet.
-- A penguin character variant (`assets/penguin_ice_blue_spritesheet.png`
-  and siblings) exists but isn't wired up as the default yet -- pending
-  design approval. Override with `ESHEEP_SPRITESHEET` to try it.
+- Wayland window discovery still needs compositor-specific integration. The
+  sheep remains usable there for monitor-bottom movement and dragging.
 
 ## Assets
 
