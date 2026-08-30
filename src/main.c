@@ -249,7 +249,22 @@ int main(int argc, char **argv) {
     gtk_window_stick(GTK_WINDOW(window));
 
     GdkDisplay *display = gdk_display_get_default();
-    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    /* Spawn on whichever monitor the pointer is actually on, not GDK's
+     * notion of "primary" -- on a multi-monitor setup those can easily
+     * differ, and a sheep spawning on a monitor you're not looking at
+     * just looks like the app did nothing. */
+    GdkMonitor *monitor = NULL;
+    GdkSeat *seat = gdk_display_get_default_seat(display);
+    if (seat) {
+        GdkDevice *pointer = gdk_seat_get_pointer(seat);
+        if (pointer) {
+            GdkScreen *pointer_screen;
+            int px, py;
+            gdk_device_get_position(pointer, &pointer_screen, &px, &py);
+            monitor = gdk_display_get_monitor_at_point(display, px, py);
+        }
+    }
+    if (!monitor) monitor = gdk_display_get_primary_monitor(display);
     if (!monitor) monitor = gdk_display_get_monitor(display, 0);
     /* workarea excludes panels/docks/taskbars -- using raw geometry here
      * would let the sheep spawn flush with the physical bottom edge of the
