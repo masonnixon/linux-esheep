@@ -74,6 +74,15 @@ def c_str(s):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__.strip())
+        print()
+        print("usage: gen_animations.py [INPUT_XML] [OUTPUT_DIR]")
+        print()
+        print("  INPUT_XML  path to animations.xml (default: tools/esheep_animations.xml)")
+        print("  OUTPUT_DIR directory for animations_data.c/.h (default: src)")
+        return
+
     src = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("tools/esheep_animations.xml")
     out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("src")
     out_dir.mkdir(parents=True, exist_ok=True)
