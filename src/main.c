@@ -161,6 +161,13 @@ static int horizontal_delta(const App *app, const EsheepAnimation *anim,
 static int pose_delta(const App *app, const EsheepAnimation *anim,
                       int frame_index, gboolean x_axis);
 
+static void nudge_walk_inside_bounds(App *app) {
+    app->pos_x += app->direction * 2;
+    if (app->pos_x < app->bounds.x) app->pos_x = app->bounds.x;
+    int right = app->bounds.x + app->bounds.width - app->tile_size;
+    if (app->pos_x > right) app->pos_x = right;
+}
+
 static void keep_walk_inside_bounds(App *app) {
     if (app->state.animation_id != ANIM_WALK) return;
     const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
@@ -170,6 +177,7 @@ static void keep_walk_inside_bounds(App *app) {
                         app->bounds.x + app->bounds.width;
     if ((at_left && dx < 0) || (at_right && dx > 0)) {
         app->direction = -app->direction;
+        nudge_walk_inside_bounds(app);
         esheep_init(&app->state, 2);
     }
 }
@@ -187,6 +195,7 @@ static void prepare_edge_walk(App *app) {
      * does not select climbing, turn before advancing another walk frame. */
     if (esheep_border_event(&app->state, "vertical", rand() % 100)) return;
     app->direction = -app->direction;
+    nudge_walk_inside_bounds(app);
     esheep_init(&app->state, 2);
 }
 
@@ -683,6 +692,7 @@ static gboolean on_tick(gpointer user_data) {
                 event.animation_id == ANIM_WALK && !edge_animation_finished &&
                 !border_changed) {
                 app->direction = -app->direction;
+                nudge_walk_inside_bounds(app);
                 esheep_init(&app->state, 2); /* turn before walking back */
             }
             if (edge_animation_finished || hit[0] != 'n') break;
