@@ -23,6 +23,8 @@ Runtime settings can be overridden with environment variables:
 - `ESHEEP_TICK_MS`: update interval in milliseconds, from 10 to 1000.
 - `ESHEEP_WINDOW_LANDING=0`: disable X11 window and panel landing.
 - `ESHEEP_EXCLUDE_CONKY=0`: allow landing on Conky windows.
+- `ESHEEP_SPAWN=window`: start on a visible application window instead of
+  the default monitor bottom.
 
 Left-click-drag picks the sheep up; right-click shows a Quit menu.
 

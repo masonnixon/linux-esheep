@@ -45,6 +45,7 @@ typedef struct {
     guint tick_ms;
     gboolean window_landing;
     gboolean exclude_conky;
+    gboolean spawn_on_window;
 } App;
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -61,6 +62,11 @@ static guint env_uint(const char *name, guint fallback, guint minimum, guint max
     unsigned long parsed = strtoul(value, &end, 10);
     if (*end || parsed < minimum || parsed > maximum) return fallback;
     return (guint)parsed;
+}
+
+static gboolean env_equals(const char *name, const char *expected) {
+    const char *value = getenv(name);
+    return value && strcasecmp(value, expected) == 0;
 }
 
 static void update_monitor_bounds(App *app) {
@@ -521,6 +527,7 @@ int main(int argc, char **argv) {
     app.tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
     app.window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
     app.exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
+    app.spawn_on_window = env_equals("ESHEEP_SPAWN", "window");
     esheep_init(&app.state, ANIM_WALK);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
@@ -589,6 +596,17 @@ int main(int argc, char **argv) {
     if (GDK_IS_X11_DISPLAY(display)) {
         app.xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
         refresh_objects(&app);
+        if (app.spawn_on_window) {
+            for (int i = app.object_count - 1; i >= 0; i--) {
+                DesktopObject *object = &app.objects[i];
+                if (object->taskbar || object->rect.width < app.tile_size ||
+                    object->rect.y - app.tile_size < app.bounds.y) continue;
+                app.pos_x = object->rect.x +
+                            (object->rect.width - app.tile_size) / 2;
+                app.pos_y = object->rect.y - app.tile_size;
+                break;
+            }
+        }
         gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
     }
     set_sprite_input_region(&app);
