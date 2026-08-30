@@ -174,6 +174,22 @@ static void keep_walk_inside_bounds(App *app) {
     }
 }
 
+static void prepare_edge_walk(App *app) {
+    if (app->state.animation_id != ANIM_WALK) return;
+    const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
+    int dx = horizontal_delta(app, walk, pose_delta(app, walk, 0, TRUE));
+    gboolean at_left = app->pos_x <= app->bounds.x;
+    gboolean at_right = app->pos_x + app->tile_size >=
+                        app->bounds.x + app->bounds.width;
+    if ((!at_left || dx >= 0) && (!at_right || dx <= 0)) return;
+
+    /* Preserve the authored small chance of climbing a screen edge. If it
+     * does not select climbing, turn before advancing another walk frame. */
+    if (esheep_border_event(&app->state, "vertical", rand() % 100)) return;
+    app->direction = -app->direction;
+    esheep_init(&app->state, 2);
+}
+
 static gboolean sprite_is_flipped(const App *app, const EsheepAnimation *anim) {
     return anim->flip ||
            (reverses_with_walk_direction(anim->id) && app->direction > 0);
@@ -434,10 +450,6 @@ static double pose_opacity(const EsheepAnimation *anim, int frame_index) {
 }
 
 static gboolean is_airborne_animation(int animation_id) {
-    return animation_id == 25 || animation_id == 44 || animation_id == 45;
-}
-
-static gboolean is_landing_animation(int animation_id) {
     switch (animation_id) {
     case 5: case 6: case 9: case 10:
     case 25: case 44: case 45: case 46:
@@ -446,6 +458,10 @@ static gboolean is_landing_animation(int animation_id) {
     default:
         return FALSE;
     }
+}
+
+static gboolean is_landing_animation(int animation_id) {
+    return is_airborne_animation(animation_id);
 }
 
 static void set_sprite_input_region(App *app) {
@@ -596,6 +612,7 @@ static gboolean on_tick(gpointer user_data) {
     gboolean climbing = FALSE;
     if (!surface && app->state.animation_id == ANIM_WALK)
         climbing = start_window_climb(app, &esheep_animations[ANIM_WALK - 1]);
+    if (!surface && !climbing) prepare_edge_walk(app);
     if (!surface && !climbing && !is_airborne_animation(app->state.animation_id) &&
         app->pos_y < floor_y &&
         app->state.animation_id != ANIM_FALL) {
