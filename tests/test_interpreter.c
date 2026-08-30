@@ -113,6 +113,19 @@ int main() {
     esheep_tick(&state, 200, "none", 0);
     assert(state.animation_id == 3);
 
+    /* Test 12: screen-width repeat expressions are evaluated against the
+       configured monitor instead of falling back to one repetition. */
+    esheep_set_environment(&state, 1920, 1080, 40, 40);
+    esheep_init(&state, 28);
+    esheep_tick(&state, 100, "none", 0);
+    esheep_tick(&state, 100, "none", 0);
+    esheep_tick(&state, 100, "none", 0);
+    assert(state.repeat_index == 1);
+    esheep_init(&state, 29);
+    esheep_tick(&state, 100, "none", 0);
+    esheep_tick(&state, 100, "none", 0);
+    assert(state.repeat_index == 1);
+
     printf("All tests passed\n");
     return 0;
 }

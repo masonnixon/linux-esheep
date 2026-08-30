@@ -39,6 +39,16 @@ static int repeat_value(const EsheepState *state, const char *repeat_str,
         return (state->area_height / 2 +
                 (roll_0_99 * state->area_height / 2) / 120 -
                 state->image_height - offset) / 2;
+    if (strcmp(repeat_str, "(screenW/2)/30-6") == 0 && state->area_width > 0)
+        return (state->area_width / 2) / 30 - 6;
+    if (strcmp(repeat_str,
+               "24+(Convert(screenW/2,System.Int32)%30)/7") == 0 &&
+        state->area_width > 0)
+        return 24 + ((state->area_width / 2) % 30) / 7;
+    if (strcmp(repeat_str,
+               "25+(Convert(screenW/2,System.Int32)%30)/7") == 0 &&
+        state->area_width > 0)
+        return 25 + ((state->area_width / 2) % 30) / 7;
     return 1;
 }
 
