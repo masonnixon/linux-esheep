@@ -161,6 +161,19 @@ static int horizontal_delta(const App *app, const EsheepAnimation *anim,
 static int pose_delta(const App *app, const EsheepAnimation *anim,
                       int frame_index, gboolean x_axis);
 
+static void keep_walk_inside_bounds(App *app) {
+    if (app->state.animation_id != ANIM_WALK) return;
+    const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
+    int dx = horizontal_delta(app, walk, pose_delta(app, walk, 0, TRUE));
+    gboolean at_left = app->pos_x <= app->bounds.x;
+    gboolean at_right = app->pos_x + app->tile_size >=
+                        app->bounds.x + app->bounds.width;
+    if ((at_left && dx < 0) || (at_right && dx > 0)) {
+        app->direction = -app->direction;
+        esheep_init(&app->state, 2);
+    }
+}
+
 static gboolean sprite_is_flipped(const App *app, const EsheepAnimation *anim) {
     return anim->flip ||
            (reverses_with_walk_direction(anim->id) && app->direction > 0);
@@ -646,6 +659,11 @@ static gboolean on_tick(gpointer user_data) {
             if (edge_animation_finished || hit[0] != 'n') break;
         }
     }
+
+    /* A completed turn can leave the sprite on the same boundary for one
+     * more tick. Make the next walk direction agree with the actual pose
+     * delta so it cannot repeatedly turn into the same edge. */
+    keep_walk_inside_bounds(app);
 
     gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
     gtk_widget_queue_draw(app->window);
