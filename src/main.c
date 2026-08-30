@@ -117,17 +117,32 @@ static void refresh_objects(App *app) {
             attributes.map_state != IsViewable || attributes.class != InputOutput ||
             attributes.width <= 1 || attributes.height <= 1) continue;
 
+        /* _NET_CLIENT_LIST contains client windows.  Their origin starts
+         * below the window-manager title bar, so use the parent frame for
+         * collision geometry when one exists. */
+        Window tree_root, parent, *children = NULL;
+        unsigned int child_count = 0;
+        Window geometry_window = windows[i];
+        if (XQueryTree(display, windows[i], &tree_root, &parent, &children,
+                       &child_count)) {
+            if (parent != root) geometry_window = parent;
+            if (children) XFree(children);
+        }
+
+        XWindowAttributes geometry;
+        if (!XGetWindowAttributes(display, geometry_window, &geometry) ||
+            geometry.width <= 1 || geometry.height <= 1) continue;
         int root_x, root_y;
         Window child;
-        if (!XTranslateCoordinates(display, windows[i], root, 0, 0, &root_x,
+        if (!XTranslateCoordinates(display, geometry_window, root, 0, 0, &root_x,
                                    &root_y, &child)) continue;
 
         Atom type;
         gboolean is_taskbar = get_window_type(display, windows[i], window_type, &type) &&
                               type == dock_type;
         DesktopObject *object = &app->objects[app->object_count++];
-        object->rect = (GdkRectangle){ root_x, root_y, attributes.width,
-                                       attributes.height };
+        object->rect = (GdkRectangle){ root_x, root_y, geometry.width,
+                                       geometry.height };
         object->taskbar = is_taskbar;
     }
     XFree(windows);
@@ -316,8 +331,15 @@ static gboolean on_tick(gpointer user_data) {
         const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];
         const char *hit = step_position(app, stepped_anim);
         if (hit[0] != 'n') { /* a screen edge, window, or taskbar */
-            int border_roll = rand() % 100;
-            esheep_border_event(&app->state, hit, border_roll);
+            if (hit[0] == 'w' || hit[0] == 't') {
+                /* The source animation graph only has a "none" transition
+                 * out of falling.  A detected desktop object is a valid
+                 * landing surface, so start walking on it directly. */
+                esheep_init(&app->state, ANIM_WALK);
+            } else {
+                int border_roll = rand() % 100;
+                esheep_border_event(&app->state, hit, border_roll);
+            }
         }
     }
 
