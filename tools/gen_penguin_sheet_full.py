@@ -3,9 +3,12 @@
 176 grid cells) for the Ice Blue penguin. Reuses the Phase-2 MVP poses already
 placed (walk/fall/spin/sleep/climb, 36 tiles) and adds the rest: run, jump,
 grooming, dizzy/reaction shots, bounce squash-stretch, catching fire, sooty
-aftermath, and a black-morph gag. Three tile groups are true scene props
-(water trough, flowers) rather than character poses -- those are copied
-directly from the original sheep sheet instead of redrawn.
+aftermath, and a black-morph gag. Only the flower-growth tiles (149-153) are
+true scene props copied directly from the sheep sheet; everything else,
+including the closeup reaction shots, is redrawn as the penguin -- do not
+assume a tile is a generic prop just because it looks decorative without
+checking the actual sheep-sheet art first (169-171 look like they could be
+a water trough at a glance; they are not).
 """
 import os
 import sys
@@ -60,6 +63,18 @@ def add_soot(img, level):
         y = rnd.randint(6, TILE - 6)
         r = rnd.randint(1, 2)
         d.ellipse([x - r, y - r, x + r, y + r], fill=(25, 22, 20, 220))
+    return img
+
+
+def add_half_lids(img):
+    """Droopy half-closed eyelids (a lowered lid line, not a full blackout),
+    for a blink/drowsy sequence -- pupil still peeks out underneath."""
+    img = img.copy()
+    d = ImageDraw.Draw(img)
+    for ex in (13, 27):
+        ey = 15
+        d.chord([ex - 7, ey - 7, ex + 7, ey + 7], start=190, end=350,
+                fill=BELLY, outline=OUTLINE, width=2)
     return img
 
 
@@ -133,7 +148,7 @@ def copy_prop(idx):
     put(idx, tile)
 
 
-for idx in (169, 170, 171, 149, 150, 151, 152, 153):
+for idx in (149, 150, 151, 152, 153):
     copy_prop(idx)
 
 # --- run / stride (4, 5) ---
@@ -175,15 +190,29 @@ for idx, ph in ((58, 0), (59, 1), (60, -1), (61, 0)):
 for idx, f in ((62, 0.55), (63, 0.7), (64, 1.15), (65, 0.85), (66, 1.1), (67, 0.75), (70, 1.0)):
     put(idx, squash_stretch(f))
 
-# --- jump arch (76, 81, 82) ---
+# --- jump arch (76) ---
 put(76, stand(wave=True, lean=1, cross=False))
-put(81, stand(wave=True, lean=-1, cross=False))
-put(82, stand(wave=True, lean=0, cross=False))
 
-# --- dizzy reactions (96, 119, 127, 128, 129, 130) ---
+# --- dizzy reactions (96, 127, 128, 129, 130) ---
 put(96, zoom_closeup(make_dizzy(stand(cross=False)), cx_frac=0.5))
-for idx, lean in ((119, 0), (127, -1), (128, 1), (129, -1), (130, 1)):
+for idx, lean in ((127, -1), (128, 1), (129, -1), (130, 1)):
     put(idx, make_dizzy(stand(lean=lean, cross=False)))
+
+# --- closeup blink sequence (animations 47 "bathc" and 48 "bathd" cycle
+# through these -- open eyes, drowsy half-lids, fully closed -- as a
+# closeup reaction shot, NOT a water trough; I originally mis-copied 169-171
+# straight from the sheep sheet here, which is exactly wrong: those three
+# ARE sheep character closeups in the source, so a literal copy puts actual
+# sheep art in the penguin sheet. Redrawn as penguin closeups instead. ---
+_blink_open = zoom_closeup(stand(cross=False), cx_frac=0.5, cy_frac=0.32, zoom=1.8)
+_blink_half = zoom_closeup(add_half_lids(stand(cross=False)), cx_frac=0.5, cy_frac=0.32, zoom=1.8)
+_blink_closed = zoom_closeup(draw_closed_eyes(), cx_frac=0.5, cy_frac=0.32, zoom=1.8)
+put(119, _blink_open)
+put(81, _blink_half)
+put(82, _blink_closed)
+put(169, _blink_open)
+put(170, _blink_half)
+put(171, _blink_closed)
 
 # --- crouch gag (103, 104, 105, 106) ---
 for idx, lean in ((103, 0), (104, -1), (105, 1), (106, 0)):
