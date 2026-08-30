@@ -126,6 +126,15 @@ int main() {
     esheep_tick(&state, 100, "none", 0);
     assert(state.repeat_index == 1);
 
+    /* Test 13: sequence transitions retain timer overshoot for the target
+       animation instead of introducing a silent timing pause. */
+    esheep_init(&state, 2);
+    esheep_tick(&state, 250, "none", 0);
+    esheep_tick(&state, 200, "none", 0);
+    esheep_tick(&state, 200, "none", 0);
+    assert(state.animation_id == 3);
+    assert(state.elapsed_ms == 50);
+
     printf("All tests passed\n");
     return 0;
 }

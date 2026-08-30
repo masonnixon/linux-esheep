@@ -123,7 +123,6 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
             if (target >= 0) {
                 state->animation_id = target;
                 state->frame_index = 0;
-                state->elapsed_ms = 0;
                 state->repeat_index = 0;
                 return true;
             }
