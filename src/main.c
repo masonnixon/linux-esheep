@@ -398,6 +398,7 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
     app->pos_y += dy;
 
     const char *context = "none";
+    gboolean hit_floor = FALSE;
     if (dy > 0) {
         int old_bottom = old_y + app->tile_size;
         int new_bottom = app->pos_y + app->tile_size;
@@ -417,10 +418,14 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
     }
 
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-    if (app->pos_y > floor_y) app->pos_y = floor_y;
+    if (app->pos_y > floor_y) {
+        app->pos_y = floor_y;
+        hit_floor = dy > 0;
+    }
     if (app->pos_y < app->bounds.y) app->pos_y = app->bounds.y;
 
     if (context[0] != 'n') return context;
+    if (hit_floor) return "horizontal+";
     if (app->pos_x <= app->bounds.x) {
         app->pos_x = app->bounds.x;
         context = "vertical";
@@ -537,7 +542,9 @@ static gboolean on_tick(gpointer user_data) {
                     esheep_init(&app->state, ANIM_WALK);
                 } else {
                     int border_roll = rand() % 100;
-                    esheep_border_event(&app->state, hit, border_roll);
+                    if (!esheep_border_event(&app->state, hit, border_roll) &&
+                        strcmp(hit, "horizontal+") == 0)
+                        esheep_border_event(&app->state, "none", border_roll);
                 }
             }
             if (edge_animation_finished || hit[0] != 'n') break;

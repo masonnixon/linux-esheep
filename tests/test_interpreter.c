@@ -154,6 +154,11 @@ int main() {
     assert(esheep_tick(&state, 99, "none", 0) == false);
     assert(esheep_tick(&state, 1, "none", 0) == true);
 
+    /* Test 16: the authored jump route recognizes the bottom-edge context. */
+    esheep_init(&state, 25);
+    assert(esheep_border_event(&state, "horizontal+", 0) == true);
+    assert(state.animation_id == 36);
+
     printf("All tests passed\n");
     return 0;
 }
