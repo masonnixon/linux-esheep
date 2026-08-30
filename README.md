@@ -17,6 +17,7 @@ Command-line options are available with `./esheep --help`:
 --sprite PATH       Use a different spritesheet.
 --spawn bottom      Start at the monitor bottom (default).
 --spawn window      Start on a visible application window.
+--spawn random      Use the authored weighted spawn points.
 --no-window-landing Disable window and panel landing.
 --allow-conky       Allow Conky as a landing surface.
 --tick-ms N         Set the update interval from 10 to 1000 ms.

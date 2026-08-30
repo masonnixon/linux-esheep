@@ -47,6 +47,7 @@ typedef struct {
     gboolean window_landing;
     gboolean exclude_conky;
     gboolean spawn_on_window;
+    gboolean random_spawn;
     int climb_target_y;
 } App;
 
@@ -71,13 +72,37 @@ static gboolean env_equals(const char *name, const char *expected) {
     return value && strcasecmp(value, expected) == 0;
 }
 
+static void choose_random_spawn(App *app) {
+    int roll = rand() % 106;
+    int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
+    if (roll < 20) {
+        app->pos_x = app->bounds.x + app->bounds.width + 10;
+        app->pos_y = floor_y;
+        esheep_init(&app->state, ANIM_WALK);
+    } else if (roll < 100) {
+        int usable_width = app->bounds.width - app->tile_size - 50;
+        app->pos_x = app->bounds.x + 25 +
+                     (usable_width > 0 ? rand() % usable_width : 0);
+        app->pos_y = app->bounds.y - app->tile_size - 20;
+        esheep_init(&app->state, ANIM_FALL);
+    } else if (roll < 103) {
+        app->pos_x = app->bounds.x + app->bounds.width + 10;
+        app->pos_y = app->bounds.y + app->bounds.height / 2 - app->tile_size;
+        esheep_init(&app->state, 21);
+    } else {
+        app->pos_x = app->bounds.x + app->bounds.width;
+        app->pos_y = floor_y;
+        esheep_init(&app->state, 28);
+    }
+}
+
 static void print_usage(const char *program) {
     g_print("Usage: %s [options]\n\n", program);
     g_print("Options:\n");
     g_print("  --help                 Show this help.\n");
     g_print("  --version              Show the version.\n");
     g_print("  --sprite PATH          Use a spritesheet.\n");
-    g_print("  --spawn MODE           Use bottom or window spawn.\n");
+    g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
     g_print("  --no-window-landing    Disable window and panel landing.\n");
     g_print("  --allow-conky          Allow landing on Conky.\n");
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
@@ -635,6 +660,9 @@ int main(int argc, char **argv) {
     app.spawn_on_window = spawn_override ?
                           strcasecmp(spawn_override, "window") == 0 :
                           env_equals("ESHEEP_SPAWN", "window");
+    app.random_spawn = spawn_override ?
+                       strcasecmp(spawn_override, "random") == 0 :
+                       env_equals("ESHEEP_SPAWN", "random");
     esheep_init(&app.state, ANIM_WALK);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
@@ -713,6 +741,8 @@ int main(int argc, char **argv) {
                 app.pos_y = object->rect.y - app.tile_size;
                 break;
             }
+        } else if (app.random_spawn) {
+            choose_random_spawn(&app);
         }
         gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
     }
