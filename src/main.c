@@ -437,6 +437,17 @@ static gboolean is_airborne_animation(int animation_id) {
     return animation_id == 25 || animation_id == 44 || animation_id == 45;
 }
 
+static gboolean is_landing_animation(int animation_id) {
+    switch (animation_id) {
+    case 5: case 6: case 9: case 10:
+    case 25: case 44: case 45: case 46:
+    case 51: case 52: case 53: case 54:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
 static void set_sprite_input_region(App *app) {
     GdkWindow *window = gtk_widget_get_window(app->window);
     if (!window) return;
@@ -638,10 +649,11 @@ static gboolean on_tick(gpointer user_data) {
             if (!edge_animation_finished && hit[0] != 'n') {
                 /* a screen edge, window, or taskbar */
                 if (hit[0] == 'w' || hit[0] == 't') {
-                    /* The source animation graph only has a "none"
-                     * transition out of falling. A detected desktop object
-                     * is a valid landing surface, so start walking directly. */
-                    esheep_init(&app->state, ANIM_WALK);
+                    /* Landing should start walking after a fall. A walking
+                     * or window behavior frame also reports its supporting
+                     * surface, so do not reset it on every frame. */
+                    if (is_landing_animation(event.animation_id))
+                        esheep_init(&app->state, ANIM_WALK);
                 } else {
                     int border_roll = rand() % 100;
                     border_changed = esheep_border_event(&app->state, hit,
