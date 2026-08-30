@@ -46,6 +46,7 @@ typedef struct {
     gboolean window_landing;
     gboolean exclude_conky;
     gboolean spawn_on_window;
+    int climb_target_y;
 } App;
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -225,6 +226,42 @@ static const char *object_underfoot(const App *app) {
     return best ? (best->taskbar ? "taskbar" : "window") : NULL;
 }
 
+static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
+    if (app->state.animation_id != ANIM_WALK) return FALSE;
+    int dx = atoi(anim->start.x);
+    if (dx == 0) return FALSE;
+
+    int next_x = app->pos_x + dx;
+    int bottom = app->pos_y + app->tile_size;
+    for (int i = 0; i < app->object_count; i++) {
+        const DesktopObject *object = &app->objects[i];
+        int object_bottom = object->rect.y + object->rect.height;
+        if (bottom <= object->rect.y || app->pos_y >= object_bottom ||
+            bottom == object->rect.y) continue;
+
+        gboolean approaching_left = dx > 0 &&
+            app->pos_x + app->tile_size <= object->rect.x &&
+            next_x + app->tile_size >= object->rect.x;
+        gboolean approaching_right = dx < 0 &&
+            app->pos_x >= object->rect.x + object->rect.width &&
+            next_x <= object->rect.x + object->rect.width;
+        if (!approaching_left && !approaching_right) continue;
+
+        int target_y = object->rect.y - app->tile_size;
+        if (target_y >= app->pos_y) continue;
+
+        app->pos_x = approaching_left ? object->rect.x
+                                      : object->rect.x + object->rect.width -
+                                        app->tile_size;
+        app->climb_target_y = target_y;
+        if (app->climb_target_y < app->bounds.y)
+            app->climb_target_y = app->bounds.y;
+        esheep_init(&app->state, 37);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void set_sprite_input_region(App *app) {
     GdkWindow *window = gtk_widget_get_window(app->window);
     if (!window) return;
@@ -363,7 +400,11 @@ static gboolean on_tick(gpointer user_data) {
     refresh_objects(app);
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
     const char *surface = object_underfoot(app);
-    if (!surface && app->pos_y < floor_y && app->state.animation_id != ANIM_FALL) {
+    gboolean climbing = FALSE;
+    if (!surface && app->state.animation_id == ANIM_WALK)
+        climbing = start_window_climb(app, &esheep_animations[ANIM_WALK - 1]);
+    if (!surface && !climbing && app->pos_y < floor_y &&
+        app->state.animation_id != ANIM_FALL) {
         esheep_gravity_event(&app->state, "none", rand() % 100);
         if (app->state.animation_id != ANIM_FALL)
             esheep_init(&app->state, ANIM_FALL);
@@ -403,7 +444,7 @@ static gboolean on_tick(gpointer user_data) {
         const char *hit = step_position(app, stepped_anim);
         gboolean edge_animation_finished = FALSE;
         int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-        if (prev_anim == 37 && app->pos_y <= app->bounds.y) {
+        if (prev_anim == 37 && app->pos_y <= app->climb_target_y) {
             esheep_init(&app->state, 38); /* vertical up -> top walk */
             edge_animation_finished = TRUE;
         } else if (prev_anim == 39 && app->pos_x <= app->bounds.x) {
