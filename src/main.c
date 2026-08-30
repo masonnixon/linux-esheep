@@ -11,6 +11,10 @@
 
 #define TICK_MS 33
 
+#ifndef ESHEEP_DATADIR
+#define ESHEEP_DATADIR "assets" /* dev-build default: run from the repo root */
+#endif
+
 #define ANIM_WALK 1
 #define ANIM_DRAG 4
 #define ANIM_FALL 5
@@ -204,7 +208,12 @@ int main(int argc, char **argv) {
     srand((unsigned)time(NULL));
 
     const char *sheet_path = getenv("ESHEEP_SPRITESHEET");
-    if (!sheet_path) sheet_path = "assets/sheep_spritesheet.png";
+    char default_sheet_path[4096];
+    if (!sheet_path) {
+        snprintf(default_sheet_path, sizeof(default_sheet_path),
+                 "%s/sheep_spritesheet.png", ESHEEP_DATADIR);
+        sheet_path = default_sheet_path;
+    }
 
     GError *error = NULL;
     GdkPixbuf *sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
