@@ -63,6 +63,20 @@ static guint env_uint(const char *name, guint fallback, guint minimum, guint max
     return (guint)parsed;
 }
 
+static void update_monitor_bounds(App *app) {
+    GdkDisplay *display = gtk_widget_get_display(app->window);
+    int center_x = app->pos_x + app->tile_size / 2;
+    int center_y = app->pos_y + app->tile_size / 2;
+    GdkMonitor *monitor = gdk_display_get_monitor_at_point(display, center_x,
+                                                             center_y);
+    if (!monitor) return;
+
+    GdkRectangle workarea;
+    gdk_monitor_get_workarea(monitor, &workarea);
+    if (memcmp(&app->bounds, &workarea, sizeof(workarea)) != 0)
+        app->bounds = workarea;
+}
+
 static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b) {
     return left_a < left_b + width_b && left_a + width_a > left_b;
 }
@@ -339,6 +353,7 @@ static gboolean on_tick(gpointer user_data) {
         return G_SOURCE_CONTINUE;
     }
 
+    update_monitor_bounds(app);
     refresh_objects(app);
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
     const char *surface = object_underfoot(app);
@@ -457,6 +472,7 @@ static gboolean on_button_release(GtkWidget *widget, GdkEventButton *event, gpoi
     if (event->button == 1 && app->dragging) {
         app->dragging = FALSE;
         gtk_window_get_position(GTK_WINDOW(app->window), &app->pos_x, &app->pos_y);
+        update_monitor_bounds(app);
         int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
         esheep_init(&app->state, app->pos_y < floor_y ? ANIM_FALL : ANIM_WALK);
         refresh_objects(app);
