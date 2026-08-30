@@ -169,12 +169,23 @@ static void nudge_walk_inside_bounds(App *app) {
 }
 
 static void keep_walk_inside_bounds(App *app) {
-    if (app->state.animation_id != ANIM_WALK) return;
-    const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
-    int dx = horizontal_delta(app, walk, pose_delta(app, walk, 0, TRUE));
     gboolean at_left = app->pos_x <= app->bounds.x;
     gboolean at_right = app->pos_x + app->tile_size >=
                         app->bounds.x + app->bounds.width;
+    if (app->state.animation_id == 38 && at_right) {
+        /* A climb from the right reaches the top while top_walk still has
+         * its authored positive delta. Descend at this edge instead of
+         * letting that pose push against the boundary. */
+        esheep_init(&app->state, 41);
+        return;
+    }
+    if (app->state.animation_id == 39 && (at_left || at_right)) {
+        esheep_init(&app->state, 41);
+        return;
+    }
+    if (app->state.animation_id != ANIM_WALK) return;
+    const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
+    int dx = horizontal_delta(app, walk, pose_delta(app, walk, 0, TRUE));
     if ((at_left && dx < 0) || (at_right && dx > 0)) {
         app->direction = -app->direction;
         nudge_walk_inside_bounds(app);
