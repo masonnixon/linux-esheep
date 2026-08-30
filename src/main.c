@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     srand((unsigned)time(NULL));
 
     const char *sheet_path = getenv("ESHEEP_SPRITESHEET");
-    if (!sheet_path) sheet_path = "assets/penguin_ice_blue_spritesheet.png";
+    if (!sheet_path) sheet_path = "assets/sheep_spritesheet.png";
 
     GError *error = NULL;
     GdkPixbuf *sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
