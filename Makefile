@@ -14,6 +14,10 @@ test-interpreter:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_interpreter tests/test_interpreter.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_interpreter
 
+test-actor:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_actor tests/test_actor.c src/actor.c src/interpreter.c src/animations_data.c
+	/tmp/esheep_test_actor
+
 test-runtime:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_runtime tests/test_runtime.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_runtime
@@ -35,7 +39,7 @@ test-animation-data:
 test-child-animations:
 	python3 tests/test_child_animations.py
 
-test: test-interpreter test-runtime test-animation-data test-assets test-child-animations test-gui
+test: test-actor test-interpreter test-runtime test-animation-data test-assets test-child-animations test-gui
 
 esheep: src/main.c src/interpreter.c src/animations_data.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c $(GTK_LIBS) $(X11_LIBS)
@@ -58,6 +62,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-interpreter test-runtime test-animation-data test-assets test-gui esheep install uninstall clean
+.PHONY: all test test-actor test-interpreter test-runtime test-animation-data test-assets test-gui esheep install uninstall clean
 clean:
-	rm -f esheep /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep-install-build
+	rm -f esheep /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep-install-build
