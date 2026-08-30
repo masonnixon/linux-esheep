@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test child animation data generation and consistency."""
 import sys
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -78,6 +79,16 @@ def test_eating_animation_has_flower():
     assert x_expr, "Eating child x expression is empty"
     assert y_expr, "Eating child y expression is empty"
 
+    # The first child frame is the authored blank lead-in. Later frames must
+    # contain the visible flower growth sequence.
+    anim_data = Path("src/animations_data.c").read_text()
+    flower = re.search(r"anim27_frames\[\] = \{([^}]*)\};", anim_data)
+    assert flower is not None, "Flower animation frames are missing"
+    frames = [int(value) for value in re.findall(r"\d+", flower.group(1))]
+    assert frames[0] == 174, "Flower must preserve its blank lead-in frame"
+    assert any(frame in (149, 150, 151, 152, 153) for frame in frames[1:]), \
+        "Flower animation has no visible growth frames"
+
     print("OK: Eating animation (26) has correct flower child (27)")
     return True
 
@@ -104,11 +115,21 @@ def test_generated_child_data():
     print(f"OK: Generated C data has {child_count} child records")
     return True
 
+def test_child_review_uses_parent():
+    """The visual review must launch a child transition from its parent."""
+    review = Path("tools/review_transitions.py").read_text()
+    assert 'transition["kind"] == "child"' in review
+    assert '"--review-parent"' in review
+    assert 'review_id = source' in review
+    print("OK: Child review launches the authored parent scene")
+    return True
+
 if __name__ == "__main__":
     try:
         test_child_records_valid()
         test_eating_animation_has_flower()
         test_generated_child_data()
+        test_child_review_uses_parent()
         print("\nAll child animation tests passed!")
         sys.exit(0)
     except AssertionError as e:

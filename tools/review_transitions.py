@@ -93,7 +93,10 @@ def main():
               % (index, len(transitions), source, transition["kind"],
                  transition["context"], transition["probability"], target),
               flush=True)
-        command = runner + [PROGRAM, "--review-animation", str(target),
+        review_option = "--review-parent" if transition["kind"] == "child" \
+            else "--review-animation"
+        review_id = source if transition["kind"] == "child" else target
+        command = runner + [PROGRAM, review_option, str(review_id),
                             "--spawn", "bottom", "--no-window-landing"]
         environment = os.environ.copy()
         environment["ESHEEP_AUTOQUIT_MS"] = str(args.duration)

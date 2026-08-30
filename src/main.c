@@ -218,6 +218,7 @@ static void print_usage(const char *program) {
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
     g_print("  --walk-keep N          Keep walking probability (0-100, default 90).\n");
     g_print("  --review-animation N   Show animation N for transition review.\n");
+    g_print("  --review-parent N      Show parent N with its authored child.\n");
 }
 
 static void update_monitor_bounds(App *app) {
@@ -731,6 +732,13 @@ static void draw_current_tile(cairo_t *cr, App *app) {
                                                         app->bounds.height, app->tile_size,
                                                         app->tile_size, 0, 0, rand() % 100);
 
+            /* A child is authored as a separate image window. The current
+             * sprite window is only one tile wide, so keep an off-window
+             * child visible until the renderer grows a separate child window.
+             */
+            if (child_offset_x < 0) child_offset_x = 0;
+            if (child_offset_x > app->tile_size) child_offset_x = app->tile_size;
+
             cairo_save(cr);
             cairo_translate(cr, child_offset_x, child_offset_y);
             GdkPixbuf *child_subtile = gdk_pixbuf_new_subpixbuf(app->sheet, child_sx, child_sy,
@@ -1049,6 +1057,7 @@ int main(int argc, char **argv) {
     gboolean exclude_conky_cli = FALSE;
     gboolean walk_keep_cli = FALSE;
     int review_animation = 0;
+    int review_parent = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -1131,6 +1140,17 @@ int main(int argc, char **argv) {
                 return 2;
             }
             review_animation = (int)value;
+            continue;
+        }
+        if (strcmp(argv[i], "--review-parent") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            long value = strtol(argv[++i], &end, 10);
+            if (*end || value < 1 || value > esheep_animation_count) {
+                g_printerr("invalid --review-parent value (use 1-%d)\n",
+                           esheep_animation_count);
+                return 2;
+            }
+            review_parent = (int)value;
             continue;
         }
         g_printerr("unknown or incomplete option: %s\n", argv[i]);
@@ -1267,7 +1287,9 @@ int main(int argc, char **argv) {
         setup_sheep_window(app, display, monitor);
         esheep_set_walk_keep_probability(&app->state,
                                          (int)walk_keep_probability);
-        if (review_animation > 0)
+        if (review_parent > 0)
+            esheep_init(&app->state, review_parent);
+        else if (review_animation > 0)
             esheep_init(&app->state, review_animation);
         if (!app->random_spawn && !app->spawn_on_window && count > 1) {
             int offset = (int)i * app->tile_size * 2;
