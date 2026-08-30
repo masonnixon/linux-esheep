@@ -274,11 +274,19 @@ static gboolean on_tick(gpointer user_data) {
     int prev_anim = app->state.animation_id;
     int prev_frame = app->state.frame_index;
     int prev_repeat = app->state.repeat_index;
+    int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
+    const char *surface = object_underfoot(app);
+    if (!surface && app->pos_y < floor_y && app->state.animation_id != ANIM_FALL) {
+        esheep_init(&app->state, ANIM_FALL);
+        prev_anim = app->state.animation_id;
+        prev_frame = app->state.frame_index;
+        prev_repeat = app->state.repeat_index;
+    }
     /* Movement/collision context is decided by the CURRENT position, before
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
      * direction the current animation is trying to move. */
-    const char *pretick_context = object_underfoot(app);
+    const char *pretick_context = surface;
     if (!pretick_context &&
         (app->pos_x <= app->bounds.x ||
          app->pos_x + app->tile_size >= app->bounds.x + app->bounds.width))
