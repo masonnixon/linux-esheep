@@ -14,6 +14,10 @@ test-interpreter:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_interpreter tests/test_interpreter.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_interpreter
 
+test-runtime:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_runtime tests/test_runtime.c src/interpreter.c src/animations_data.c
+	/tmp/esheep_test_runtime
+
 test-gui: esheep
 	command -v xvfb-run >/dev/null
 	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --no-window-landing
@@ -22,7 +26,10 @@ test-gui: esheep
 	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
 	xvfb-run -a env WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
 
-test: test-interpreter test-gui
+test-assets:
+	python3 tests/test_spritesheet.py
+
+test: test-interpreter test-runtime test-assets test-gui
 
 esheep: src/main.c src/interpreter.c src/animations_data.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c $(GTK_LIBS) $(X11_LIBS)
@@ -45,6 +52,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-interpreter test-gui esheep install uninstall clean
+.PHONY: all test test-interpreter test-runtime test-assets test-gui esheep install uninstall clean
 clean:
-	rm -f esheep /tmp/esheep_test_interpreter /tmp/esheep-install-build
+	rm -f esheep /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep-install-build

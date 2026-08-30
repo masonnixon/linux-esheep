@@ -142,19 +142,25 @@ static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b
     return left_a < left_b + width_b && left_a + width_a > left_b;
 }
 
-static gboolean reverses_with_walk_direction(int animation_id) {
-    switch (animation_id) {
-    case 1: case 7: case 25: case 28: case 29: case 35:
-    case 36: case 39: case 44: case 49: case 50: case 51:
-        return TRUE;
-    default:
-        return FALSE;
+static gboolean has_horizontal_movement(const EsheepAnimation *anim) {
+    /* Animations with authored horizontal movement should reverse based on
+     * walk direction. Check if either start or end x pose is non-zero. */
+    char *end = NULL;
+    if (anim->start.x && anim->start.x[0]) {
+        strtol(anim->start.x, &end, 10);
+        if (end != anim->start.x) return TRUE;
     }
+    end = NULL;
+    if (anim->end.x && anim->end.x[0]) {
+        strtol(anim->end.x, &end, 10);
+        if (end != anim->end.x) return TRUE;
+    }
+    return FALSE;
 }
 
 static int horizontal_delta(const App *app, const EsheepAnimation *anim,
                             int delta) {
-    if (!reverses_with_walk_direction(anim->id)) return delta;
+    if (!has_horizontal_movement(anim)) return delta;
     return app->direction < 0 ? delta : -delta;
 }
 
