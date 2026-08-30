@@ -1573,12 +1573,11 @@
 <next>27</next>
 </child>
 <child animationid="28">
-<x>-imageW</x>
+<x>-imageW-8</x>
 <y>imageY</y>
 <next>31</next>
 </child>
 </childs>
 </animations>
-
 
 

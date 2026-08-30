@@ -131,6 +131,7 @@ static int eval_child_expression(const char *expr, int area_width, int area_heig
 
     /* A negative image width is relative to the parent image. */
     if (strcmp(expr, "-imageW") == 0) return image_x - image_width;
+    if (strcmp(expr, "-imageW-8") == 0) return image_x - image_width - 8;
     if (strcmp(expr, "imageY") == 0) return image_y;
     if (strcmp(expr, "imageX") == 0) return image_x;
 
@@ -784,6 +785,7 @@ static void update_child_animation(App *app) {
                                              app->tile_size, app->pos_x, app->pos_y, 0);
         gtk_window_move(GTK_WINDOW(app->child_window), offset_x, offset_y);
         gtk_widget_show(app->child_window);
+        gdk_window_raise(gtk_widget_get_window(app->child_window));
         gtk_widget_queue_draw(app->child_window);
     } else {
         /* Parent animation has no child. Deactivate if active. */
@@ -1049,6 +1051,7 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     gtk_window_set_resizable(GTK_WINDOW(child_window), FALSE);
     gtk_window_set_decorated(GTK_WINDOW(child_window), FALSE);
     gtk_window_set_keep_above(GTK_WINDOW(child_window), TRUE);
+    gtk_window_set_transient_for(GTK_WINDOW(child_window), GTK_WINDOW(window));
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(child_window), TRUE);
     gtk_window_set_skip_pager_hint(GTK_WINDOW(child_window), TRUE);
     gtk_window_stick(GTK_WINDOW(child_window));

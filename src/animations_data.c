@@ -1249,7 +1249,7 @@ const EsheepChild esheep_childs[] = {
         26, "imageX-imageW*0.9", "imageY", 27
     },
     {
-        28, "-imageW", "imageY", 31
+        28, "-imageW-8", "imageY", 31
     },
 };
 const int esheep_child_count = 3;

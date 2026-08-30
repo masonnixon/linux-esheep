@@ -128,7 +128,7 @@ def test_child_coordinate_semantics():
     """Relative black-sheep placement must stay beside its parent."""
     source = Path("src/main.c").read_text()
     assert 'strcmp(expr, "-imageW") == 0' in source
-    assert 'return image_x - image_width' in source
+    assert 'return image_x - image_width - 8' in source
     print("OK: Relative child coordinates use the parent image position")
     return True
 
