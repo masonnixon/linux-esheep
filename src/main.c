@@ -735,6 +735,8 @@ int main(int argc, char **argv) {
      * screen, which on most desktops means directly underneath (and fully
      * hidden by) a bottom panel. */
     gdk_monitor_get_workarea(monitor, &app.bounds);
+    esheep_set_environment(&app.state, app.bounds.width, app.bounds.height,
+                           tile_size, tile_size);
     app.pos_x = app.bounds.x + app.bounds.width / 2;
     app.pos_y = app.bounds.y + app.bounds.height - tile_size;
     gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);

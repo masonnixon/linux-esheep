@@ -91,6 +91,20 @@ int main() {
     assert(wrapped == true);  /* repeat_index 1 of 20, no transition yet */
     assert(esheep_current_tile(&state) == 96);  /* wraps to repeat_from=1, not 0 */
 
+    /* Test 9: Size-dependent repeat expressions remain finite and do not
+       collapse to zero through atoi. */
+    esheep_init(&state, 21);
+    esheep_set_environment(&state, 1920, 1080, 40, 40);
+    esheep_tick(&state, 30, "none", 0);
+    assert(state.animation_id == 21);
+    assert(state.repeat_index == 1);
+
+    /* Test 10: Interval overshoot is carried into the next frame. */
+    esheep_init(&state, 1);
+    esheep_tick(&state, 250, "none", 0);
+    assert(state.frame_index == 1);
+    assert(state.elapsed_ms == 50);
+
     printf("All tests passed\n");
     return 0;
 }

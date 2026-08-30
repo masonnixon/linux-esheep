@@ -9,7 +9,13 @@ static const EsheepAnimation* get_animation(int id) {
     return &esheep_animations[id-1];
 }
 
-static int repeat_value(const char *repeat_str, int roll_0_99) {
+static int default_area_width = 1920;
+static int default_area_height = 1080;
+static int default_image_width = 40;
+static int default_image_height = 40;
+
+static int repeat_value(const EsheepState *state, const char *repeat_str,
+                        int roll_0_99) {
     if (!repeat_str) return 0;
     char *end = NULL;
     long value = strtol(repeat_str, &end, 10);
@@ -26,6 +32,13 @@ static int repeat_value(const char *repeat_str, int roll_0_99) {
     if (sscanf(repeat_str, "%d+random/%d", &addend, &divisor) == 2 &&
         divisor > 0)
         return addend + roll_0_99 / divisor;
+    int offset;
+    if (sscanf(repeat_str,
+               "(areaH/2+(randS*areaH/2)/120-imageH-%d)/2", &offset) == 1 &&
+        state->area_height > 0)
+        return (state->area_height / 2 +
+                (roll_0_99 * state->area_height / 2) / 120 -
+                state->image_height - offset) / 2;
     return 1;
 }
 
@@ -34,6 +47,22 @@ void esheep_init(EsheepState *state, int animation_id) {
     state->frame_index = 0;
     state->elapsed_ms = 0;
     state->repeat_index = 0;
+    state->area_width = default_area_width;
+    state->area_height = default_area_height;
+    state->image_width = default_image_width;
+    state->image_height = default_image_height;
+}
+
+void esheep_set_environment(EsheepState *state, int area_width, int area_height,
+                            int image_width, int image_height) {
+    state->area_width = area_width;
+    state->area_height = area_height;
+    state->image_width = image_width;
+    state->image_height = image_height;
+    default_area_width = area_width;
+    default_area_height = area_height;
+    default_image_width = image_width;
+    default_image_height = image_height;
 }
 
 int esheep_current_tile(const EsheepState *state) {
@@ -75,8 +104,8 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
     state->frame_index++;
 
     if (state->frame_index >= anim->frame_count) {
-        state->frame_index = repeat_value(anim->repeat_from, roll_0_99);
-        int repeat_count = repeat_value(anim->repeat, roll_0_99);
+        state->frame_index = repeat_value(state, anim->repeat_from, roll_0_99);
+        int repeat_count = repeat_value(state, anim->repeat, roll_0_99);
         if (repeat_count == 0) {
             return true;
         }

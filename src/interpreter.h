@@ -9,9 +9,15 @@ typedef struct {
     int frame_index;
     int elapsed_ms;
     int repeat_index;
+    int area_width;
+    int area_height;
+    int image_width;
+    int image_height;
 } EsheepState;
 
 void esheep_init(EsheepState *state, int animation_id);
+void esheep_set_environment(EsheepState *state, int area_width, int area_height,
+                            int image_width, int image_height);
 int esheep_current_tile(const EsheepState *state);
 /* Advance one animation frame when its interval has elapsed. Returns true
  * when a frame boundary was crossed, including repeat and wrap boundaries. */
