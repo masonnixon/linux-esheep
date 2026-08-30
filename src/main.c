@@ -121,6 +121,7 @@ static void print_usage(const char *program) {
     g_print("  --allow-conky          Allow landing on Conky.\n");
     g_print("  --x11-fallback         Use XWayland when available.\n");
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
+    g_print("  --walk-keep N          Keep walking probability (0-100, default 90).\n");
 }
 
 static void update_monitor_bounds(App *app) {
@@ -769,6 +770,8 @@ int main(int argc, char **argv) {
     const char *config_override = NULL;
     guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
     guint count = env_uint("ESHEEP_COUNT", 1, 1, MAX_SHEEP);
+    guint walk_keep_probability = env_uint("ESHEEP_WALK_KEEP_PROBABILITY",
+                                           90, 0, 100);
     gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
     gboolean exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
     gboolean x11_fallback = env_bool("ESHEEP_X11_FALLBACK", FALSE);
@@ -777,6 +780,7 @@ int main(int argc, char **argv) {
     gboolean spawn_cli = FALSE;
     gboolean window_landing_cli = FALSE;
     gboolean exclude_conky_cli = FALSE;
+    gboolean walk_keep_cli = FALSE;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -839,6 +843,17 @@ int main(int argc, char **argv) {
             tick_cli = TRUE;
             continue;
         }
+        if (strcmp(argv[i], "--walk-keep") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            unsigned long value = strtoul(argv[++i], &end, 10);
+            if (*end || value > 100) {
+                g_printerr("invalid --walk-keep value (use 0-100)\n");
+                return 2;
+            }
+            walk_keep_probability = (guint)value;
+            walk_keep_cli = TRUE;
+            continue;
+        }
         g_printerr("unknown or incomplete option: %s\n", argv[i]);
         print_usage(argv[0]);
         return 2;
@@ -885,6 +900,12 @@ int main(int argc, char **argv) {
             g_key_file_has_key(config, "esheep", "count", NULL)) {
             gint64 value = g_key_file_get_int64(config, "esheep", "count", NULL);
             if (value >= 1 && value <= MAX_SHEEP) count = (guint)value;
+        }
+        if (!walk_keep_cli && !getenv("ESHEEP_WALK_KEEP_PROBABILITY") &&
+            g_key_file_has_key(config, "esheep", "walk_keep_probability", NULL)) {
+            gint64 value = g_key_file_get_int64(config, "esheep",
+                                                "walk_keep_probability", NULL);
+            if (value >= 0 && value <= 100) walk_keep_probability = (guint)value;
         }
         if (!window_landing_cli && !getenv("ESHEEP_WINDOW_LANDING") &&
             g_key_file_has_key(config, "esheep", "window_landing", NULL))
@@ -965,6 +986,8 @@ int main(int argc, char **argv) {
         app->sibling_count = (int)count;
         esheep_init(&app->state, ANIM_WALK);
         setup_sheep_window(app, display, monitor);
+        esheep_set_walk_keep_probability(&app->state,
+                                         (int)walk_keep_probability);
         if (!app->random_spawn && !app->spawn_on_window && count > 1) {
             int offset = (int)i * app->tile_size * 2;
             int max_x = app->bounds.x + app->bounds.width - app->tile_size;

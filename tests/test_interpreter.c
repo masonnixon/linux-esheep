@@ -138,6 +138,17 @@ int main() {
     last_t = esheep_tick(&state, 200, "none", 92);
     assert(last_t == true);
     assert(state.animation_id == 15);
+
+    /* The runtime tuning keeps the original graph by default but can make
+       alternate floor behaviors occur more often. */
+    esheep_init(&state, 1);
+    esheep_set_walk_keep_probability(&state, 0);
+    for (int i = 0; i < 39; i++) {
+        esheep_tick(&state, 200, "none", 0);
+    }
+    assert(esheep_tick(&state, 200, "none", 0));
+    assert(state.animation_id == 15);
+    esheep_set_walk_keep_probability(&state, 90);
     
     /* Test 4: Context filtering. anim1 seq has window/taskbar/none entries.
        With context "none" and roll=1, should target anim 1 (roll<90), NOT anim 11 (window). */
