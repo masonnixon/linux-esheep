@@ -14,6 +14,7 @@
 #include "interpreter.h"
 
 #define TICK_MS 33
+#define ESHEEP_VERSION "0.1.0"
 
 #ifndef ESHEEP_DATADIR
 #define ESHEEP_DATADIR "assets" /* dev-build default: run from the repo root */
@@ -68,6 +69,18 @@ static guint env_uint(const char *name, guint fallback, guint minimum, guint max
 static gboolean env_equals(const char *name, const char *expected) {
     const char *value = getenv(name);
     return value && strcasecmp(value, expected) == 0;
+}
+
+static void print_usage(const char *program) {
+    g_print("Usage: %s [options]\n\n", program);
+    g_print("Options:\n");
+    g_print("  --help                 Show this help.\n");
+    g_print("  --version              Show the version.\n");
+    g_print("  --sprite PATH          Use a spritesheet.\n");
+    g_print("  --spawn MODE           Use bottom or window spawn.\n");
+    g_print("  --no-window-landing    Disable window and panel landing.\n");
+    g_print("  --allow-conky          Allow landing on Conky.\n");
+    g_print("  --tick-ms N            Set the update interval (10-1000).\n");
 }
 
 static void update_monitor_bounds(App *app) {
@@ -546,10 +559,56 @@ static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer use
 }
 
 int main(int argc, char **argv) {
+    const char *sprite_override = NULL;
+    const char *spawn_override = NULL;
+    guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
+    gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
+    gboolean exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        }
+        if (strcmp(argv[i], "--version") == 0) {
+            g_print("linux-esheep %s\n", ESHEEP_VERSION);
+            return 0;
+        }
+        if (strcmp(argv[i], "--sprite") == 0 && i + 1 < argc) {
+            sprite_override = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--spawn") == 0 && i + 1 < argc) {
+            spawn_override = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--no-window-landing") == 0) {
+            window_landing = FALSE;
+            continue;
+        }
+        if (strcmp(argv[i], "--allow-conky") == 0) {
+            exclude_conky = FALSE;
+            continue;
+        }
+        if (strcmp(argv[i], "--tick-ms") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            unsigned long value = strtoul(argv[++i], &end, 10);
+            if (*end || value < 10 || value > 1000) {
+                g_printerr("invalid --tick-ms value\n");
+                return 2;
+            }
+            tick_ms = (guint)value;
+            continue;
+        }
+        g_printerr("unknown or incomplete option: %s\n", argv[i]);
+        print_usage(argv[0]);
+        return 2;
+    }
+
     gtk_init(&argc, &argv);
     srand((unsigned)time(NULL));
 
-    const char *sheet_path = getenv("ESHEEP_SPRITESHEET");
+    const char *sheet_path = sprite_override ? sprite_override :
+                             getenv("ESHEEP_SPRITESHEET");
     char default_sheet_path[4096];
     if (!sheet_path) {
         snprintf(default_sheet_path, sizeof(default_sheet_path),
@@ -570,10 +629,12 @@ int main(int argc, char **argv) {
     App app = {0};
     app.sheet = sheet;
     app.tile_size = tile_size;
-    app.tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
-    app.window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
-    app.exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
-    app.spawn_on_window = env_equals("ESHEEP_SPAWN", "window");
+    app.tick_ms = tick_ms;
+    app.window_landing = window_landing;
+    app.exclude_conky = exclude_conky;
+    app.spawn_on_window = spawn_override ?
+                          strcasecmp(spawn_override, "window") == 0 :
+                          env_equals("ESHEEP_SPAWN", "window");
     esheep_init(&app.state, ANIM_WALK);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);

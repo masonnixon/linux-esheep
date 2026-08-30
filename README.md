@@ -11,6 +11,17 @@ make esheep
 ./esheep
 ```
 
+Command-line options are available with `./esheep --help`:
+
+```text
+--sprite PATH       Use a different spritesheet.
+--spawn bottom      Start at the monitor bottom (default).
+--spawn window      Start on a visible application window.
+--no-window-landing Disable window and panel landing.
+--allow-conky       Allow Conky as a landing surface.
+--tick-ms N         Set the update interval from 10 to 1000 ms.
+```
+
 Requires `libgtk-3-dev` (`pkg-config gtk+-3.0`). Run from the repo root so
 it finds `assets/sheep_spritesheet.png`, or point it elsewhere:
 

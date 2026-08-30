@@ -1,0 +1,51 @@
+.TH ESHEEP 1 "August 2026" "linux-esheep 0.1.0" "User Commands"
+.SH NAME
+esheep \- a small animated desktop sheep
+.SH SYNOPSIS
+.B esheep
+.RI [ options ]
+.SH DESCRIPTION
+eSheep walks across the monitor workarea and, on X11, can land on visible
+application windows and panels. Left-click and drag moves the sheep. A
+double-click makes it jump. Right-click opens the quit menu.
+.SH OPTIONS
+.TP
+.B --help
+Show command-line help.
+.TP
+.B --version
+Show the program version.
+.TP
+.BI --sprite\  PATH
+Use the specified spritesheet.
+.TP
+.BI --spawn\  MODE
+Use \fBbottom\fR (default) or \fBwindow\fR startup placement.
+.TP
+.B --no-window-landing
+Disable X11 window and panel detection.
+.TP
+.B --allow-conky
+Allow Conky windows as landing surfaces.
+.TP
+.BI --tick-ms\  N
+Set the update interval from 10 to 1000 milliseconds.
+.SH ENVIRONMENT
+.TP
+.B ESHEEP_SPRITESHEET
+Default spritesheet path.
+.TP
+.B ESHEEP_TICK_MS
+Default update interval.
+.TP
+.B ESHEEP_WINDOW_LANDING
+Set to 0 to disable X11 landing.
+.TP
+.B ESHEEP_EXCLUDE_CONKY
+Set to 0 to allow Conky landing.
+.TP
+.B ESHEEP_SPAWN
+Set to \fBwindow\fR to start on an application window.
+.SH NOTES
+Window discovery is available on X11. On Wayland, the sheep retains monitor
+bottom movement and dragging without application-window discovery.
