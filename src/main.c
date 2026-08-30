@@ -436,6 +436,7 @@ int main(int argc, char **argv) {
     gtk_widget_set_double_buffered(window, FALSE);
     G_GNUC_END_IGNORE_DEPRECATIONS
     gtk_window_set_default_size(GTK_WINDOW(window), tile_size, tile_size);
+    gtk_widget_set_size_request(window, tile_size, tile_size);
     gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
     gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
@@ -484,22 +485,6 @@ int main(int argc, char **argv) {
     if (GDK_IS_X11_DISPLAY(display)) {
         app.xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
         refresh_objects(&app);
-        /* Start on a visible application window when one exists.  A window
-         * manager panel is tracked for landing, but is not a spawn target. */
-        for (int i = app.object_count - 1; i >= 0; i--) {
-            DesktopObject *object = &app.objects[i];
-            if (object->taskbar || object->rect.width < app.tile_size) continue;
-            int spawn_x = object->rect.x + (object->rect.width - app.tile_size) / 2;
-            int spawn_y = object->rect.y - app.tile_size;
-            if (spawn_y < app.bounds.y) continue;
-            app.pos_x = spawn_x;
-            app.pos_y = spawn_y;
-            break;
-        }
-        if (app.pos_x < app.bounds.x) app.pos_x = app.bounds.x;
-        if (app.pos_x + app.tile_size > app.bounds.x + app.bounds.width)
-            app.pos_x = app.bounds.x + app.bounds.width - app.tile_size;
-        if (app.pos_y < app.bounds.y) app.pos_y = app.bounds.y;
         gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
     }
     set_sprite_input_region(&app);
