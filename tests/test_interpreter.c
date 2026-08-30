@@ -145,6 +145,15 @@ int main() {
     assert(state.frame_index == 0);
     assert(state.elapsed_ms == 50);
 
+    /* Test 15: frame intervals interpolate from the authored start to end
+       values instead of using the first interval for the whole animation. */
+    esheep_init(&state, 14);  /* sync: 30ms first frame, 100ms second */
+    assert(esheep_tick(&state, 29, "none", 0) == false);
+    assert(esheep_tick(&state, 1, "none", 0) == true);
+    assert(state.frame_index == 1);
+    assert(esheep_tick(&state, 99, "none", 0) == false);
+    assert(esheep_tick(&state, 1, "none", 0) == true);
+
     printf("All tests passed\n");
     return 0;
 }

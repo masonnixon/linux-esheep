@@ -52,6 +52,15 @@ static int repeat_value(const EsheepState *state, const char *repeat_str,
     return 1;
 }
 
+static int frame_interval(const EsheepAnimation *anim, int frame_index) {
+    if (anim->frame_count <= 1) return anim->start.interval_ms;
+    double progress = (double)frame_index / (double)(anim->frame_count - 1);
+    double interval = anim->start.interval_ms +
+                      (anim->end.interval_ms - anim->start.interval_ms) *
+                      progress;
+    return (int)(interval + 0.5);
+}
+
 void esheep_init(EsheepState *state, int animation_id) {
     state->animation_id = animation_id;
     state->frame_index = 0;
@@ -108,11 +117,11 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
 
     while (state->event_count < ESHEEP_MAX_TICK_EVENTS) {
         const EsheepAnimation *anim = get_animation(state->animation_id);
-        if (!anim || anim->start.interval_ms <= 0 ||
-            state->elapsed_ms < anim->start.interval_ms)
+        int interval = anim ? frame_interval(anim, state->frame_index) : 0;
+        if (!anim || interval <= 0 || state->elapsed_ms < interval)
             break;
 
-        state->elapsed_ms -= anim->start.interval_ms;
+        state->elapsed_ms -= interval;
         state->events[state->event_count++] =
             (EsheepFrameEvent){ state->animation_id, state->frame_index };
         state->frame_index++;
