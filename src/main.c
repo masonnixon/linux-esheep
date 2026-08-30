@@ -11,6 +11,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <unistd.h>
 #include "interpreter.h"
 
 #define TICK_MS 33
@@ -297,13 +298,26 @@ static const char *object_underfoot(const App *app) {
     const DesktopObject *best = NULL;
     for (int i = 0; i < app->object_count; i++) {
         const DesktopObject *object = &app->objects[i];
-        if (bottom == object->rect.y &&
+        if (abs(bottom - object->rect.y) <= 2 &&
             rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
                             object->rect.width) &&
             (!best || object->stack_order > best->stack_order))
             best = object;
     }
     return best ? (best->taskbar ? "taskbar" : "window") : NULL;
+}
+
+static void snap_to_surface(App *app) {
+    int bottom = app->pos_y + app->tile_size;
+    for (int i = 0; i < app->object_count; i++) {
+        const DesktopObject *object = &app->objects[i];
+        if (abs(bottom - object->rect.y) <= 2 &&
+            rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
+                            object->rect.width)) {
+            app->pos_y = object->rect.y - app->tile_size;
+            return;
+        }
+    }
 }
 
 static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
@@ -553,6 +567,7 @@ static gboolean on_tick(gpointer user_data) {
     refresh_objects(app);
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
     const char *surface = object_underfoot(app);
+    if (surface) snap_to_surface(app);
     gboolean climbing = FALSE;
     if (!surface && app->state.animation_id == ANIM_WALK)
         climbing = start_window_climb(app, &esheep_animations[ANIM_WALK - 1]);
@@ -828,7 +843,7 @@ int main(int argc, char **argv) {
         g_setenv("GDK_BACKEND", "x11", FALSE);
     }
     gtk_init(&argc, &argv);
-    srand((unsigned)time(NULL));
+    srand((unsigned)time(NULL) ^ (unsigned)getpid());
 
     GKeyFile *config = g_key_file_new();
     gchar *default_config_path = NULL;
@@ -930,7 +945,7 @@ int main(int argc, char **argv) {
         App *app = &sheep[i];
         app->sheet = sheet;
         app->tile_size = tile_size;
-        app->direction = (i % 2 == 0) ? -1 : 1;
+        app->direction = rand() % 2 ? 1 : -1;
         app->tick_ms = tick_ms;
         app->window_landing = window_landing;
         app->exclude_conky = exclude_conky;
