@@ -31,6 +31,9 @@ Disable X11 window and panel detection.
 .B --allow-conky
 Allow Conky windows as landing surfaces.
 .TP
+.B --x11-fallback
+Use the XWayland-backed GTK X11 backend when running under Wayland.
+.TP
 .BI --tick-ms\  N
 Set the update interval from 10 to 1000 milliseconds.
 .SH ENVIRONMENT
@@ -50,8 +53,12 @@ Set to 0 to disable X11 landing.
 .B ESHEEP_EXCLUDE_CONKY
 Set to 0 to allow Conky landing.
 .TP
+.B ESHEEP_X11_FALLBACK
+Set to 1 to select the X11 backend through XWayland when available.
+.TP
 .B ESHEEP_SPAWN
 Set to \fBwindow\fR to start on an application window.
 .SH NOTES
-Window discovery is available on X11. On Wayland, the sheep retains monitor
-bottom movement and dragging without application-window discovery.
+Window discovery and arbitrary popup positioning are available through the X11
+backend. Native Wayland sessions require compositor-specific protocols; when
+XWayland is available, use \fB--x11-fallback\fR.

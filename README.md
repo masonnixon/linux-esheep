@@ -21,6 +21,7 @@ Command-line options are available with `./esheep --help`:
 --spawn random      Use the authored weighted spawn points.
 --no-window-landing Disable window and panel landing.
 --allow-conky       Allow Conky as a landing surface.
+--x11-fallback      Use XWayland when available.
 --tick-ms N         Set the update interval from 10 to 1000 ms.
 ```
 
@@ -39,6 +40,8 @@ Runtime settings can be overridden with environment variables:
 - `ESHEEP_TICK_MS`: update interval in milliseconds, from 10 to 1000.
 - `ESHEEP_WINDOW_LANDING=0`: disable X11 window and panel landing.
 - `ESHEEP_EXCLUDE_CONKY=0`: allow landing on Conky windows.
+- `ESHEEP_X11_FALLBACK=1`: on Wayland with XWayland, select GTK's X11 backend
+  so application-window landing remains available.
 - `ESHEEP_SPAWN=window`: start on a visible application window instead of
   the default monitor bottom.
 
@@ -78,8 +81,9 @@ Installs the binary, spritesheet, and a `.desktop` entry.
 
 ## Known limitations / not yet built
 
-- Wayland window discovery still needs compositor-specific integration. The
-  sheep remains usable there for monitor-bottom movement and dragging.
+- Native Wayland window discovery and arbitrary popup positioning require
+  compositor-specific protocols. On Wayland with XWayland, use
+  `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
 
 ## Assets
 

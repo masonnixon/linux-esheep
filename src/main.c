@@ -106,6 +106,7 @@ static void print_usage(const char *program) {
     g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
     g_print("  --no-window-landing    Disable window and panel landing.\n");
     g_print("  --allow-conky          Allow landing on Conky.\n");
+    g_print("  --x11-fallback         Use XWayland when available.\n");
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
 }
 
@@ -624,6 +625,7 @@ int main(int argc, char **argv) {
     guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
     gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
     gboolean exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
+    gboolean x11_fallback = env_bool("ESHEEP_X11_FALLBACK", FALSE);
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -653,6 +655,10 @@ int main(int argc, char **argv) {
             exclude_conky = FALSE;
             continue;
         }
+        if (strcmp(argv[i], "--x11-fallback") == 0) {
+            x11_fallback = TRUE;
+            continue;
+        }
         if (strcmp(argv[i], "--tick-ms") == 0 && i + 1 < argc) {
             char *end = NULL;
             unsigned long value = strtoul(argv[++i], &end, 10);
@@ -668,6 +674,10 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    if (x11_fallback && getenv("WAYLAND_DISPLAY") && getenv("DISPLAY") &&
+        !getenv("GDK_BACKEND")) {
+        g_setenv("GDK_BACKEND", "x11", FALSE);
+    }
     gtk_init(&argc, &argv);
     srand((unsigned)time(NULL));
 
