@@ -54,13 +54,13 @@ Installs the binary, spritesheet, and a `.desktop` entry.
   flipping, opacity, and vertical pose offsets are applied at runtime.
 - Real movement and collision with visible X11 windows, panels, and the
   monitor workarea.
+- Screen-edge and detected-window-side climbing with top-surface traversal.
 - Mouse drag and a right-click quit menu.
 
 ## Known limitations / not yet built
 
 - Window and taskbar detection uses X11 (`_NET_CLIENT_LIST`) and has no
-  Wayland path yet.
-- Single-monitor movement world (uses the monitor under the pointer at start).
+  Wayland window-discovery path yet.
 - A penguin character variant (`assets/penguin_ice_blue_spritesheet.png`
   and siblings) exists but isn't wired up as the default yet -- pending
   design approval. Override with `ESHEEP_SPRITESHEET` to try it.
