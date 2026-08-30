@@ -91,10 +91,6 @@ static int eval_spawn_expression(const char *expr, int area_width, int area_heig
     /* screenW (width/area_width) with optional offset */
     if (strcmp(expr, "screenW") == 0) return area_width;
     if (strcmp(expr, "screenW+10") == 0) return area_width + 10;
-    if (strcmp(expr, "screenW") == 0 && expr[7] == '+') {
-        value = strtol(expr + 8, &end, 10);
-        if (*end == '\0') return area_width + (int)value;
-    }
 
     /* areaH with offset */
     if (strcmp(expr, "areaH-imageH") == 0) return area_height - image_height;
@@ -112,13 +108,9 @@ static int eval_spawn_expression(const char *expr, int area_width, int area_heig
         return 25;
     }
 
-    /* (areaH/2+(randS*areaH/2)/120-imageH-N)/2 - spawn 3 y */
-    int offset = 0;
-    if (sscanf(expr, "(areaH/2+(randS*areaH/2)/120-imageH-%d)/2", &offset) == 1)
-        return (area_height / 2 + (roll_0_99 * area_height / 2) / 120 - image_height - offset) / 2;
-
-    /* screenW fallback for spawn 4 */
-    if (strcmp(expr, "screenW") == 0) return area_width;
+    /* areaH/2-(randS*areaH/2)/120-imageH - spawn 3 y */
+    if (strcmp(expr, "areaH/2-(randS*areaH/2)/120-imageH") == 0)
+        return area_height / 2 - (roll_0_99 * area_height / 2) / 120 - image_height;
 
     return 0;
 }
@@ -135,7 +127,12 @@ static int select_spawn_animation(const EsheepSpawn *spawn) {
 }
 
 static void choose_random_spawn(App *app) {
-    int roll = rand() % 100;
+    /* Compute total spawn weight from generated data */
+    int total_weight = 0;
+    for (int i = 0; i < esheep_spawn_count; i++)
+        total_weight += esheep_spawns[i].probability;
+
+    int roll = rand() % (total_weight > 0 ? total_weight : 1);
     const EsheepSpawn *selected = NULL;
     int accumulated = 0;
 
