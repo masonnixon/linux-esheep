@@ -14,7 +14,7 @@ int main() {
     assert(esheep_current_tile(&state) == 2);  /* frame 0 -> tile 2 */
     for (int i = 0; i < 4; i++) {
         bool t = esheep_tick(&state, 200, "none", 0);
-        assert(t == false);
+        assert(t == true);
         int expected = (i % 2 == 0) ? 3 : 2;
         assert(esheep_current_tile(&state) == expected);
     }
@@ -28,7 +28,7 @@ int main() {
     for (int i = 0; i < 39; i++) {  /* 39 ticks of advance */
         last_t = esheep_tick(&state, 200, "none", 0);
     }
-    assert(last_t == false);
+    assert(last_t == true);
     last_t = esheep_tick(&state, 200, "none", 0);  /* 40th tick = transition */
     assert(last_t == true);
     assert(state.animation_id == 1);
@@ -88,7 +88,7 @@ int main() {
     esheep_tick(&state, 100, "none", 0);
     assert(esheep_current_tile(&state) == 96);  /* frame 2 */
     bool wrapped = esheep_tick(&state, 100, "none", 0);  /* frame_index wraps */
-    assert(wrapped == false);  /* repeat_index 1 of 20, no transition yet */
+    assert(wrapped == true);  /* repeat_index 1 of 20, no transition yet */
     assert(esheep_current_tile(&state) == 96);  /* wraps to repeat_from=1, not 0 */
 
     printf("All tests passed\n");

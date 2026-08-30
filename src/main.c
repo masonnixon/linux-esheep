@@ -165,6 +165,7 @@ static void set_sprite_input_region(App *app) {
     if (!window) return;
 
     int tile = esheep_current_tile(&app->state);
+    const EsheepAnimation *anim = &esheep_animations[app->state.animation_id - 1];
     int sx = (tile % esheep_tiles_x) * app->tile_size;
     int sy = (tile / esheep_tiles_x) * app->tile_size;
     int rowstride = gdk_pixbuf_get_rowstride(app->sheet);
@@ -183,7 +184,10 @@ static void set_sprite_input_region(App *app) {
             }
             if (opaque && run_start < 0) run_start = x;
             if (!opaque && run_start >= 0) {
-                cairo_rectangle_int_t rect = { run_start, y, x - run_start, 1 };
+                int run_width = x - run_start;
+                int region_x = anim->flip ? app->tile_size - x : run_start;
+                cairo_rectangle_int_t rect = { region_x, y + atoi(anim->start.offsety),
+                                               run_width, 1 };
                 cairo_region_union_rectangle(region, &rect);
                 run_start = -1;
             }
@@ -256,14 +260,16 @@ static void draw_current_tile(cairo_t *cr, App *app) {
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
+    int offset_y = atoi(anim->start.offsety);
+    cairo_translate(cr, anim->flip ? tile_size : 0, offset_y);
+    cairo_scale(cr, anim->flip ? -1 : 1, 1);
+
     GdkPixbuf *subtile = gdk_pixbuf_new_subpixbuf(app->sheet, sx, sy, tile_size, tile_size);
     gdk_cairo_set_source_pixbuf(cr, subtile, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-    cairo_paint(cr);
+    cairo_paint_with_alpha(cr, anim->start.opacity);
     g_object_unref(subtile);
     cairo_restore(cr);
-
-    (void)anim; /* reserved for Phase 3 flip/opacity handling */
 }
 
 static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
@@ -286,17 +292,14 @@ static gboolean on_tick(gpointer user_data) {
     }
 
     refresh_objects(app);
-    int prev_anim = app->state.animation_id;
-    int prev_frame = app->state.frame_index;
-    int prev_repeat = app->state.repeat_index;
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
     const char *surface = object_underfoot(app);
     if (!surface && app->pos_y < floor_y && app->state.animation_id != ANIM_FALL) {
-        esheep_init(&app->state, ANIM_FALL);
-        prev_anim = app->state.animation_id;
-        prev_frame = app->state.frame_index;
-        prev_repeat = app->state.repeat_index;
+        esheep_gravity_event(&app->state, "none", rand() % 100);
+        if (app->state.animation_id != ANIM_FALL)
+            esheep_init(&app->state, ANIM_FALL);
     }
+    int prev_anim = app->state.animation_id;
     /* Movement/collision context is decided by the CURRENT position, before
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
@@ -309,7 +312,7 @@ static gboolean on_tick(gpointer user_data) {
     if (!pretick_context) pretick_context = "none";
 
     int roll = rand() % 100;
-    esheep_tick(&app->state, TICK_MS, pretick_context, roll);
+    gboolean stepped = esheep_tick(&app->state, TICK_MS, pretick_context, roll);
 
     /* A frame boundary was crossed this tick if the animation changed, the
      * frame index moved, OR the repeat_index advanced -- that last case
@@ -323,9 +326,7 @@ static gboolean on_tick(gpointer user_data) {
      * here; a fully
      * robust fix would have esheep_tick report "a step happened" directly
      * rather than reconstructing it from state deltas. */
-    if (app->state.animation_id != prev_anim ||
-        app->state.frame_index != prev_frame ||
-        app->state.repeat_index != prev_repeat) {
+    if (stepped) {
         /* A frame boundary was crossed this tick -- apply the animation that
          * was PLAYING during that step's own pose delta, not the new one. */
         const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];

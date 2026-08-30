@@ -62,7 +62,7 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
         state->frame_index = repeat_value(anim->repeat_from);
         int repeat_count = repeat_value(anim->repeat);
         if (repeat_count == 0) {
-            return false;
+            return true;
         }
         state->repeat_index++;
         if (state->repeat_index >= repeat_count) {
@@ -75,11 +75,11 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
                 state->repeat_index = 0;
                 return true;
             }
-            return false;
+            return true;
         }
-        return false;
+        return true;
     }
-    return false;
+    return true;
 }
 
 bool esheep_border_event(EsheepState *state, const char *context, int roll_0_99) {
