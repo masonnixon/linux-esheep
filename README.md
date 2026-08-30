@@ -18,6 +18,12 @@ it finds `assets/sheep_spritesheet.png`, or point it elsewhere:
 ESHEEP_SPRITESHEET=/path/to/spritesheet.png ./esheep
 ```
 
+Runtime settings can be overridden with environment variables:
+
+- `ESHEEP_TICK_MS`: update interval in milliseconds, from 10 to 1000.
+- `ESHEEP_WINDOW_LANDING=0`: disable X11 window and panel landing.
+- `ESHEEP_EXCLUDE_CONKY=0`: allow landing on Conky windows.
+
 Left-click-drag picks the sheep up; right-click shows a Quit menu.
 
 ## Tests

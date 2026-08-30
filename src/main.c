@@ -8,6 +8,7 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <time.h>
 #include "interpreter.h"
@@ -26,6 +27,7 @@
 typedef struct {
     GdkRectangle rect;
     gboolean taskbar;
+    int stack_order;
 } DesktopObject;
 
 typedef struct {
@@ -40,7 +42,26 @@ typedef struct {
     Window xwindow;
     DesktopObject objects[MAX_OBJECTS];
     int object_count;
+    guint tick_ms;
+    gboolean window_landing;
+    gboolean exclude_conky;
 } App;
+
+static gboolean env_bool(const char *name, gboolean fallback) {
+    const char *value = getenv(name);
+    if (!value) return fallback;
+    return strcmp(value, "1") == 0 || strcasecmp(value, "true") == 0 ||
+           strcasecmp(value, "yes") == 0 || strcasecmp(value, "on") == 0;
+}
+
+static guint env_uint(const char *name, guint fallback, guint minimum, guint maximum) {
+    const char *value = getenv(name);
+    if (!value || !*value) return fallback;
+    char *end = NULL;
+    unsigned long parsed = strtoul(value, &end, 10);
+    if (*end || parsed < minimum || parsed > maximum) return fallback;
+    return (guint)parsed;
+}
 
 static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b) {
     return left_a < left_b + width_b && left_a + width_a > left_b;
@@ -84,8 +105,15 @@ static gboolean is_conky_window(Display *display, Window window) {
     return is_conky;
 }
 
+static int stacking_order(const Window *stacking, unsigned long count, Window window) {
+    for (unsigned long i = 0; i < count; i++)
+        if (stacking[i] == window) return (int)i;
+    return -1;
+}
+
 static void refresh_objects(App *app) {
     app->object_count = 0;
+    if (!app->window_landing) return;
     GdkDisplay *gdk_display = gtk_widget_get_display(app->window);
     if (!GDK_IS_X11_DISPLAY(gdk_display)) return;
 
@@ -95,10 +123,12 @@ static void refresh_objects(App *app) {
     Atom window_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
     Atom dock_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK", False);
     Atom desktop_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DESKTOP", False);
+    Atom client_list_stacking = XInternAtom(display, "_NET_CLIENT_LIST_STACKING", False);
     Atom actual_type;
     int format;
     unsigned long count, bytes_after;
     Window *windows = NULL;
+    Window *stacking = NULL;
     int result = XGetWindowProperty(display, root, client_list, 0, MAX_OBJECTS,
                                     False, XA_WINDOW, &actual_type, &format,
                                     &count, &bytes_after,
@@ -108,10 +138,21 @@ static void refresh_objects(App *app) {
         return;
     }
 
+    unsigned long stacking_count = 0;
+    result = XGetWindowProperty(display, root, client_list_stacking, 0,
+                                MAX_OBJECTS, False, XA_WINDOW, &actual_type,
+                                &format, &stacking_count, &bytes_after,
+                                (unsigned char **)&stacking);
+    if (result != Success || !stacking || format != 32) {
+        if (stacking) XFree(stacking);
+        stacking = NULL;
+        stacking_count = 0;
+    }
+
     for (unsigned long i = 0; i < count && app->object_count < MAX_OBJECTS; i++) {
         if (windows[i] == app->xwindow) continue;
         if (window_has_type(display, windows[i], window_type, desktop_type)) continue;
-        if (is_conky_window(display, windows[i])) continue;
+        if (app->exclude_conky && is_conky_window(display, windows[i])) continue;
         XWindowAttributes attributes;
         if (!XGetWindowAttributes(display, windows[i], &attributes) ||
             attributes.map_state != IsViewable || attributes.class != InputOutput ||
@@ -144,20 +185,24 @@ static void refresh_objects(App *app) {
         object->rect = (GdkRectangle){ root_x, root_y, geometry.width,
                                        geometry.height };
         object->taskbar = is_taskbar;
+        object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
     }
     XFree(windows);
+    if (stacking) XFree(stacking);
 }
 
 static const char *object_underfoot(const App *app) {
     int bottom = app->pos_y + app->tile_size;
+    const DesktopObject *best = NULL;
     for (int i = 0; i < app->object_count; i++) {
         const DesktopObject *object = &app->objects[i];
         if (bottom == object->rect.y &&
             rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
-                            object->rect.width))
-            return object->taskbar ? "taskbar" : "window";
+                            object->rect.width) &&
+            (!best || object->stack_order > best->stack_order))
+            best = object;
     }
-    return NULL;
+    return best ? (best->taskbar ? "taskbar" : "window") : NULL;
 }
 
 static void set_sprite_input_region(App *app) {
@@ -217,15 +262,18 @@ static const char *step_position(App *app, const EsheepAnimation *anim) {
     if (dy > 0) {
         int old_bottom = old_y + app->tile_size;
         int new_bottom = app->pos_y + app->tile_size;
+        const DesktopObject *best = NULL;
         for (int i = 0; i < app->object_count; i++) {
             const DesktopObject *object = &app->objects[i];
             if (old_bottom <= object->rect.y && new_bottom >= object->rect.y &&
                 rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
-                                object->rect.width)) {
-                app->pos_y = object->rect.y - app->tile_size;
-                context = object->taskbar ? "taskbar" : "window";
-                break;
-            }
+                                object->rect.width) &&
+                (!best || object->stack_order > best->stack_order))
+                best = object;
+        }
+        if (best) {
+            app->pos_y = best->rect.y - app->tile_size;
+            context = best->taskbar ? "taskbar" : "window";
         }
     }
 
@@ -285,7 +333,7 @@ static gboolean on_tick(gpointer user_data) {
         /* Position is driven by the pointer while dragging; still let the
          * interpreter step so the drag animation's frames keep cycling. */
         int roll = rand() % 100;
-        esheep_tick(&app->state, TICK_MS, "none", roll);
+        esheep_tick(&app->state, (int)app->tick_ms, "none", roll);
         gtk_widget_queue_draw(app->window);
         set_sprite_input_region(app);
         return G_SOURCE_CONTINUE;
@@ -312,7 +360,8 @@ static gboolean on_tick(gpointer user_data) {
     if (!pretick_context) pretick_context = "none";
 
     int roll = rand() % 100;
-    gboolean stepped = esheep_tick(&app->state, TICK_MS, pretick_context, roll);
+    gboolean stepped = esheep_tick(&app->state, (int)app->tick_ms,
+                                   pretick_context, roll);
 
     /* A frame boundary was crossed this tick if the animation changed, the
      * frame index moved, OR the repeat_index advanced -- that last case
@@ -453,6 +502,9 @@ int main(int argc, char **argv) {
     App app = {0};
     app.sheet = sheet;
     app.tile_size = tile_size;
+    app.tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
+    app.window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
+    app.exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
     esheep_init(&app.state, ANIM_WALK);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
@@ -525,7 +577,7 @@ int main(int argc, char **argv) {
     }
     set_sprite_input_region(&app);
 
-    g_timeout_add(TICK_MS, on_tick, &app);
+    g_timeout_add(app.tick_ms, on_tick, &app);
 
     const char *autoquit = getenv("ESHEEP_AUTOQUIT_MS");
     if (autoquit) {
