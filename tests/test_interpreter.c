@@ -105,6 +105,14 @@ int main() {
     assert(state.frame_index == 1);
     assert(state.elapsed_ms == 50);
 
+    /* Test 11: repeat=0 means play once, then follow sequence_next. */
+    esheep_init(&state, 2);  /* rotate1a -> rotate1b */
+    esheep_tick(&state, 200, "none", 0);
+    esheep_tick(&state, 200, "none", 0);
+    assert(state.animation_id == 2);
+    esheep_tick(&state, 200, "none", 0);
+    assert(state.animation_id == 3);
+
     printf("All tests passed\n");
     return 0;
 }

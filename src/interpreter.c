@@ -106,9 +106,6 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
     if (state->frame_index >= anim->frame_count) {
         state->frame_index = repeat_value(state, anim->repeat_from, roll_0_99);
         int repeat_count = repeat_value(state, anim->repeat, roll_0_99);
-        if (repeat_count == 0) {
-            return true;
-        }
         state->repeat_index++;
         if (state->repeat_index >= repeat_count) {
             int target = roll_for_transition(anim->sequence_next, anim->sequence_next_count,
