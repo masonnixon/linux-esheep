@@ -135,6 +135,16 @@ int main() {
     assert(state.animation_id == 3);
     assert(state.elapsed_ms == 50);
 
+    /* Test 14: a long timer interval emits every crossed frame boundary. */
+    esheep_init(&state, 1);
+    esheep_tick(&state, 450, "none", 0);
+    assert(state.event_count == 2);
+    assert(state.events[0].animation_id == 1);
+    assert(state.events[0].frame_index == 0);
+    assert(state.events[1].frame_index == 1);
+    assert(state.frame_index == 0);
+    assert(state.elapsed_ms == 50);
+
     printf("All tests passed\n");
     return 0;
 }

@@ -491,8 +491,6 @@ static gboolean on_tick(gpointer user_data) {
         if (app->state.animation_id != ANIM_FALL)
             esheep_init(&app->state, ANIM_FALL);
     }
-    int prev_anim = app->state.animation_id;
-    int prev_frame = app->state.frame_index;
     /* Movement/collision context is decided by the CURRENT position, before
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
@@ -509,33 +507,39 @@ static gboolean on_tick(gpointer user_data) {
                                    pretick_context, roll);
 
     if (stepped) {
-        /* A frame boundary was crossed this tick -- apply the animation that
-         * was PLAYING during that step's own pose delta, not the new one. */
-        const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];
-        const char *hit = step_position(app, stepped_anim, prev_frame);
-        gboolean edge_animation_finished = FALSE;
-        int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-        if (prev_anim == 37 && app->pos_y <= app->climb_target_y) {
-            esheep_init(&app->state, 38); /* vertical up -> top walk */
-            edge_animation_finished = TRUE;
-        } else if (prev_anim == 39 && app->pos_x <= app->bounds.x) {
-            esheep_init(&app->state, 41); /* top walk -> vertical down */
-            edge_animation_finished = TRUE;
-        } else if (prev_anim == 41 && app->pos_y >= floor_y) {
-            esheep_init(&app->state, 42); /* vertical down -> edge crossing */
-            edge_animation_finished = TRUE;
-        }
-        if (!edge_animation_finished && hit[0] != 'n') {
-            /* a screen edge, window, or taskbar */
-            if (hit[0] == 'w' || hit[0] == 't') {
-                /* The source animation graph only has a "none" transition
-                 * out of falling.  A detected desktop object is a valid
-                 * landing surface, so start walking on it directly. */
-                esheep_init(&app->state, ANIM_WALK);
-            } else {
-                int border_roll = rand() % 100;
-                esheep_border_event(&app->state, hit, border_roll);
+        const char *hit = "none";
+        for (int event_index = 0; event_index < app->state.event_count;
+             event_index++) {
+            EsheepFrameEvent event = app->state.events[event_index];
+            const EsheepAnimation *stepped_anim =
+                &esheep_animations[event.animation_id - 1];
+            hit = step_position(app, stepped_anim, event.frame_index);
+            gboolean edge_animation_finished = FALSE;
+            int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
+            if (event.animation_id == 37 && app->pos_y <= app->climb_target_y) {
+                esheep_init(&app->state, 38); /* vertical up -> top walk */
+                edge_animation_finished = TRUE;
+            } else if (event.animation_id == 39 &&
+                       app->pos_x <= app->bounds.x) {
+                esheep_init(&app->state, 41); /* top walk -> vertical down */
+                edge_animation_finished = TRUE;
+            } else if (event.animation_id == 41 && app->pos_y >= floor_y) {
+                esheep_init(&app->state, 42); /* vertical down -> edge crossing */
+                edge_animation_finished = TRUE;
             }
+            if (!edge_animation_finished && hit[0] != 'n') {
+                /* a screen edge, window, or taskbar */
+                if (hit[0] == 'w' || hit[0] == 't') {
+                    /* The source animation graph only has a "none"
+                     * transition out of falling. A detected desktop object
+                     * is a valid landing surface, so start walking directly. */
+                    esheep_init(&app->state, ANIM_WALK);
+                } else {
+                    int border_roll = rand() % 100;
+                    esheep_border_event(&app->state, hit, border_roll);
+                }
+            }
+            if (edge_animation_finished || hit[0] != 'n') break;
         }
     }
 

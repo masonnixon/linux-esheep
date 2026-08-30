@@ -61,6 +61,7 @@ void esheep_init(EsheepState *state, int animation_id) {
     state->area_height = default_area_height;
     state->image_width = default_image_width;
     state->image_height = default_image_height;
+    state->event_count = 0;
 }
 
 void esheep_set_environment(EsheepState *state, int area_width, int area_height,
@@ -102,35 +103,37 @@ static int roll_for_transition(const EsheepTransition *transitions, int count,
 }
 
 bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_99) {
-    const EsheepAnimation *anim = get_animation(state->animation_id);
-    if (!anim) return false;
-
+    state->event_count = 0;
     state->elapsed_ms += dt_ms;
-    if (state->elapsed_ms < anim->start.interval_ms) {
-        return false;
-    }
 
-    state->elapsed_ms -= anim->start.interval_ms;
-    state->frame_index++;
+    while (state->event_count < ESHEEP_MAX_TICK_EVENTS) {
+        const EsheepAnimation *anim = get_animation(state->animation_id);
+        if (!anim || anim->start.interval_ms <= 0 ||
+            state->elapsed_ms < anim->start.interval_ms)
+            break;
 
-    if (state->frame_index >= anim->frame_count) {
-        state->frame_index = repeat_value(state, anim->repeat_from, roll_0_99);
-        int repeat_count = repeat_value(state, anim->repeat, roll_0_99);
-        state->repeat_index++;
-        if (state->repeat_index >= repeat_count) {
-            int target = roll_for_transition(anim->sequence_next, anim->sequence_next_count,
-                                           context, roll_0_99);
-            if (target >= 0) {
-                state->animation_id = target;
-                state->frame_index = 0;
-                state->repeat_index = 0;
-                return true;
+        state->elapsed_ms -= anim->start.interval_ms;
+        state->events[state->event_count++] =
+            (EsheepFrameEvent){ state->animation_id, state->frame_index };
+        state->frame_index++;
+
+        if (state->frame_index >= anim->frame_count) {
+            state->frame_index = repeat_value(state, anim->repeat_from, roll_0_99);
+            int repeat_count = repeat_value(state, anim->repeat, roll_0_99);
+            state->repeat_index++;
+            if (state->repeat_index >= repeat_count) {
+                int target = roll_for_transition(anim->sequence_next,
+                                                 anim->sequence_next_count,
+                                                 context, roll_0_99);
+                if (target >= 0) {
+                    state->animation_id = target;
+                    state->frame_index = 0;
+                    state->repeat_index = 0;
+                }
             }
-            return true;
         }
-        return true;
     }
-    return true;
+    return state->event_count > 0;
 }
 
 bool esheep_border_event(EsheepState *state, const char *context, int roll_0_99) {
