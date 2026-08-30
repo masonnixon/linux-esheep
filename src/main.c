@@ -11,6 +11,10 @@
 
 #define TICK_MS 33
 
+#define ANIM_WALK 1
+#define ANIM_DRAG 4
+#define ANIM_FALL 5
+
 typedef struct {
     GtkWidget *window;
     GdkPixbuf *sheet;
@@ -18,6 +22,8 @@ typedef struct {
     int tile_size;
     GdkRectangle bounds; /* primary monitor geometry, the whole "world" for now */
     int pos_x, pos_y;    /* top-left of the sprite window, in screen coords */
+    gboolean dragging;
+    int drag_grab_x, drag_grab_y; /* pointer offset from window origin at grab time */
 } App;
 
 /* Apply the pose x/y deltas (constant per animation in this dataset -- start
@@ -77,8 +83,18 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
 static gboolean on_tick(gpointer user_data) {
     App *app = user_data;
 
+    if (app->dragging) {
+        /* Position is driven by the pointer while dragging; still let the
+         * interpreter step so the drag animation's frames keep cycling. */
+        int roll = rand() % 100;
+        esheep_tick(&app->state, TICK_MS, "none", roll);
+        gtk_widget_queue_draw(app->window);
+        return G_SOURCE_CONTINUE;
+    }
+
     int prev_anim = app->state.animation_id;
     int prev_frame = app->state.frame_index;
+    int prev_repeat = app->state.repeat_index;
     /* Movement/collision context is decided by the CURRENT position, before
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
@@ -91,7 +107,21 @@ static gboolean on_tick(gpointer user_data) {
     int roll = rand() % 100;
     esheep_tick(&app->state, TICK_MS, pretick_context, roll);
 
-    if (app->state.animation_id != prev_anim || app->state.frame_index != prev_frame) {
+    /* A frame boundary was crossed this tick if the animation changed, the
+     * frame index moved, OR the repeat_index advanced -- that last case
+     * covers single-frame animations (e.g. "fall", frames=[133]) where
+     * frame_index wraps right back to the same value every step, so
+     * comparing (animation_id, frame_index) alone misses it and the sprite
+     * never moves. Known residual gap: an animation with BOTH frame_count
+     * 1 and repeat "0" (infinite loop) would still evade this -- neither
+     * frame_index nor repeat_index ever change. Only "fall_wina" (id 51)
+     * fits that, and it's a window-docking animation unreachable without
+     * that (not yet implemented) context, so not fixed here; a fully
+     * robust fix would have esheep_tick report "a step happened" directly
+     * rather than reconstructing it from state deltas. */
+    if (app->state.animation_id != prev_anim ||
+        app->state.frame_index != prev_frame ||
+        app->state.repeat_index != prev_repeat) {
         /* A frame boundary was crossed this tick -- apply the animation that
          * was PLAYING during that step's own pose delta, not the new one. */
         const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];
@@ -111,6 +141,62 @@ static gboolean on_autoquit(gpointer user_data) {
     (void)user_data;
     gtk_main_quit();
     return G_SOURCE_REMOVE;
+}
+
+static void on_quit_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    (void)user_data;
+    gtk_main_quit();
+}
+
+static void show_quit_menu(App *app, GdkEventButton *event) {
+    (void)app;
+    GtkWidget *menu = gtk_menu_new();
+    GtkWidget *quit_item = gtk_menu_item_new_with_label("Quit");
+    g_signal_connect(quit_item, "activate", G_CALLBACK(on_quit_activate), NULL);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit_item);
+    gtk_widget_show_all(menu);
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+}
+
+static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data) {
+    App *app = user_data;
+    (void)widget;
+
+    if (event->button == 1) {
+        app->dragging = TRUE;
+        app->drag_grab_x = (int)event->x;
+        app->drag_grab_y = (int)event->y;
+        esheep_init(&app->state, ANIM_DRAG);
+    } else if (event->button == 3) {
+        show_quit_menu(app, event);
+    }
+    return TRUE;
+}
+
+static gboolean on_button_release(GtkWidget *widget, GdkEventButton *event, gpointer user_data) {
+    App *app = user_data;
+    (void)widget;
+
+    if (event->button == 1 && app->dragging) {
+        app->dragging = FALSE;
+        gtk_window_get_position(GTK_WINDOW(app->window), &app->pos_x, &app->pos_y);
+        int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
+        esheep_init(&app->state, app->pos_y < floor_y ? ANIM_FALL : ANIM_WALK);
+    }
+    return TRUE;
+}
+
+static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer user_data) {
+    App *app = user_data;
+    (void)widget;
+
+    if (app->dragging) {
+        app->pos_x = (int)event->x_root - app->drag_grab_x;
+        app->pos_y = (int)event->y_root - app->drag_grab_y;
+        gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
+    }
+    return TRUE;
 }
 
 int main(int argc, char **argv) {
@@ -133,7 +219,7 @@ int main(int argc, char **argv) {
     App app = {0};
     app.sheet = sheet;
     app.tile_size = tile_size;
-    esheep_init(&app.state, 1); /* start on animation 1, "walk" */
+    esheep_init(&app.state, ANIM_WALK);
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
     app.window = window;
@@ -161,8 +247,14 @@ int main(int argc, char **argv) {
     app.pos_y = app.bounds.y + app.bounds.height - tile_size;
     gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
 
+    gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK |
+                                       GDK_POINTER_MOTION_MASK);
+
     g_signal_connect(window, "draw", G_CALLBACK(on_draw), &app);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(window, "button-press-event", G_CALLBACK(on_button_press), &app);
+    g_signal_connect(window, "button-release-event", G_CALLBACK(on_button_release), &app);
+    g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_motion), &app);
 
     gtk_widget_show_all(window);
 
