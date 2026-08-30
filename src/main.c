@@ -49,6 +49,7 @@ typedef struct {
     gboolean spawn_on_window;
     gboolean random_spawn;
     int climb_target_y;
+    int direction; /* -1 = left, +1 = right */
 } App;
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -126,6 +127,30 @@ static void update_monitor_bounds(App *app) {
 
 static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b) {
     return left_a < left_b + width_b && left_a + width_a > left_b;
+}
+
+static gboolean reverses_with_walk_direction(int animation_id) {
+    switch (animation_id) {
+    case 1: case 7: case 25: case 28: case 29: case 35:
+    case 36: case 39: case 44: case 49: case 50: case 51:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+static int horizontal_delta(const App *app, const EsheepAnimation *anim,
+                            int delta) {
+    if (!reverses_with_walk_direction(anim->id)) return delta;
+    return app->direction < 0 ? delta : -delta;
+}
+
+static int pose_delta(const App *app, const EsheepAnimation *anim,
+                      int frame_index, gboolean x_axis);
+
+static gboolean sprite_is_flipped(const App *app, const EsheepAnimation *anim) {
+    return anim->flip ||
+           (reverses_with_walk_direction(anim->id) && app->direction > 0);
 }
 
 static gboolean get_window_type(Display *display, Window window, Atom type_atom,
@@ -268,7 +293,7 @@ static const char *object_underfoot(const App *app) {
 
 static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
     if (app->state.animation_id != ANIM_WALK) return FALSE;
-    int dx = atoi(anim->start.x);
+    int dx = horizontal_delta(app, anim, pose_delta(app, anim, 0, TRUE));
     if (dx == 0) return FALSE;
 
     int next_x = app->pos_x + dx;
@@ -302,13 +327,36 @@ static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
     return FALSE;
 }
 
-static int pose_delta(const EsheepAnimation *anim, int frame_index, gboolean x_axis) {
+static int pose_value(const char *expression, int image_width, int image_height) {
+    char *end = NULL;
+    long integer = strtol(expression, &end, 10);
+    if (end != expression && *end == '\0') return (int)integer;
+
+    double factor;
+    if (sscanf(expression, "-imageW*%lf", &factor) == 1)
+        return (int)(-image_width * factor + 0.5);
+    if (sscanf(expression, "imageW*%lf", &factor) == 1)
+        return (int)(image_width * factor + 0.5);
+    if (sscanf(expression, "-imageH*%lf", &factor) == 1)
+        return (int)(-image_height * factor + 0.5);
+    if (sscanf(expression, "imageH*%lf", &factor) == 1)
+        return (int)(image_height * factor + 0.5);
+    return 0;
+}
+
+static int pose_delta(const App *app, const EsheepAnimation *anim,
+                      int frame_index, gboolean x_axis) {
     const char *start = x_axis ? anim->start.x : anim->start.y;
     const char *end = x_axis ? anim->end.x : anim->end.y;
-    int start_value = atoi(start);
-    int end_value = atoi(end);
-    if (anim->frame_count <= 1) return start_value;
-    if (frame_index <= 0) return start_value;
+    int start_value = pose_value(start, app->tile_size, app->tile_size);
+    int end_value = pose_value(end, app->tile_size, app->tile_size);
+    if (anim->frame_count <= 1)
+        return x_axis ? horizontal_delta(app, anim, start_value) :
+                        start_value;
+    if (frame_index <= 0) {
+        return x_axis ? horizontal_delta(app, anim, start_value) :
+                        start_value;
+    }
 
     double progress = (double)frame_index / (double)(anim->frame_count - 1);
     double previous_progress = (double)(frame_index - 1) /
@@ -317,7 +365,8 @@ static int pose_delta(const EsheepAnimation *anim, int frame_index, gboolean x_a
     double previous = start_value +
                       (end_value - start_value) * previous_progress;
     double delta = current - previous;
-    return (int)(delta + (delta >= 0.0 ? 0.5 : -0.5));
+    int result = (int)(delta + (delta >= 0.0 ? 0.5 : -0.5));
+    return x_axis ? horizontal_delta(app, anim, result) : result;
 }
 
 static double pose_progress(const EsheepAnimation *anim, int frame_index) {
@@ -370,7 +419,8 @@ static void set_sprite_input_region(App *app) {
             if (opaque && run_start < 0) run_start = x;
             if (!opaque && run_start >= 0) {
                 int run_width = x - run_start;
-                int region_x = anim->flip ? app->tile_size - x : run_start;
+                int region_x = sprite_is_flipped(app, anim) ?
+                               app->tile_size - x : run_start;
                 cairo_rectangle_int_t rect = { region_x, y + pose_offset_y(anim,
                                                                             app->state.frame_index),
                                                run_width, 1 };
@@ -392,8 +442,8 @@ static void set_sprite_input_region(App *app) {
 static const char *step_position(App *app, const EsheepAnimation *anim,
                                  int frame_index) {
     int old_y = app->pos_y;
-    int dx = pose_delta(anim, frame_index, TRUE);
-    int dy = pose_delta(anim, frame_index, FALSE);
+    int dx = pose_delta(app, anim, frame_index, TRUE);
+    int dy = pose_delta(app, anim, frame_index, FALSE);
     app->pos_x += dx;
     app->pos_y += dy;
 
@@ -453,8 +503,9 @@ static void draw_current_tile(cairo_t *cr, App *app) {
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
     int offset_y = pose_offset_y(anim, app->state.frame_index);
-    cairo_translate(cr, anim->flip ? tile_size : 0, offset_y);
-    cairo_scale(cr, anim->flip ? -1 : 1, 1);
+    gboolean flipped = sprite_is_flipped(app, anim);
+    cairo_translate(cr, flipped ? tile_size : 0, offset_y);
+    cairo_scale(cr, flipped ? -1 : 1, 1);
 
     GdkPixbuf *subtile = gdk_pixbuf_new_subpixbuf(app->sheet, sx, sy, tile_size, tile_size);
     gdk_cairo_set_source_pixbuf(cr, subtile, 0, 0);
@@ -533,6 +584,7 @@ static gboolean on_tick(gpointer user_data) {
                 esheep_init(&app->state, 42); /* vertical down -> edge crossing */
                 edge_animation_finished = TRUE;
             }
+            gboolean border_changed = FALSE;
             if (!edge_animation_finished && hit[0] != 'n') {
                 /* a screen edge, window, or taskbar */
                 if (hit[0] == 'w' || hit[0] == 't') {
@@ -542,10 +594,17 @@ static gboolean on_tick(gpointer user_data) {
                     esheep_init(&app->state, ANIM_WALK);
                 } else {
                     int border_roll = rand() % 100;
-                    if (!esheep_border_event(&app->state, hit, border_roll) &&
-                        strcmp(hit, "horizontal+") == 0)
+                    border_changed = esheep_border_event(&app->state, hit,
+                                                         border_roll);
+                    if (!border_changed && strcmp(hit, "horizontal+") == 0)
                         esheep_border_event(&app->state, "none", border_roll);
                 }
+            }
+            if (strcmp(hit, "vertical") == 0 &&
+                event.animation_id == ANIM_WALK && !edge_animation_finished &&
+                !border_changed) {
+                app->direction = -app->direction;
+                esheep_init(&app->state, 2); /* turn before walking back */
             }
             if (edge_animation_finished || hit[0] != 'n') break;
         }
@@ -719,6 +778,7 @@ int main(int argc, char **argv) {
     App app = {0};
     app.sheet = sheet;
     app.tile_size = tile_size;
+    app.direction = -1;
     app.tick_ms = tick_ms;
     app.window_landing = window_landing;
     app.exclude_conky = exclude_conky;

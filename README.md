@@ -86,6 +86,16 @@ Installs the binary, spritesheet, and a `.desktop` entry.
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
 
+## Planned Wayland migration path
+
+1. Keep the current X11 backend as the complete window-landing implementation.
+2. Add a native Wayland surface for bottom and edge walking, dragging, and
+   output-scale handling, using layer-shell where the compositor supports it.
+3. Add compositor-specific window providers for landing geometry, starting
+   with one selected compositor family and keeping the provider optional.
+4. Retain XWayland fallback for desktops that do not expose the required
+   native protocols.
+
 ## Assets
 
 `assets/sheep_spritesheet.png` and the source behavior data in
