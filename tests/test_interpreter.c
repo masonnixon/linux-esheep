@@ -1,7 +1,95 @@
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include "interpreter.h"
 #include "animations_data.h"
+
+static const char *transition_context(const char *only) {
+    return only ? only : "none";
+}
+
+static int roll_for_transition_index(const EsheepTransition *transitions,
+                                     int count, int wanted) {
+    int accumulated = 0;
+    for (int i = 0; i < count; i++) {
+        bool same_context =
+            (!transitions[i].only && !transitions[wanted].only) ||
+            (transitions[i].only && transitions[wanted].only &&
+             strcmp(transitions[i].only, transitions[wanted].only) == 0);
+        if (same_context) {
+            if (i == wanted) {
+                int roll = accumulated;
+                if (roll >= 100) {
+                    fprintf(stderr, "unreachable transition bucket %d: prior probability %d\n",
+                            wanted, accumulated);
+                    assert(roll < 100);
+                }
+                return roll;
+            }
+            accumulated += transitions[i].probability;
+        }
+    }
+    assert(!"transition index was not eligible");
+    return 0;
+}
+
+static int boundary_interval(const EsheepAnimation *anim) {
+    return anim->frame_count <= 1 ? anim->start.interval_ms :
+                                    anim->end.interval_ms;
+}
+
+static void test_every_animation_frame(void) {
+    EsheepState state;
+    for (int i = 0; i < esheep_animation_count; i++) {
+        const EsheepAnimation *anim = &esheep_animations[i];
+        esheep_init(&state, anim->id);
+        assert(esheep_current_tile(&state) >= 0);
+        assert(esheep_tick(&state, anim->start.interval_ms, "none", 0));
+        assert(state.event_count == 1);
+        assert(esheep_current_tile(&state) >= 0);
+        assert(state.animation_id >= 1 &&
+               state.animation_id <= esheep_animation_count);
+    }
+}
+
+static void test_every_transition(const EsheepTransition *transitions, int count,
+                                  int animation_id, bool sequence) {
+    EsheepState state;
+    const EsheepAnimation *anim = &esheep_animations[animation_id - 1];
+    for (int i = 0; i < count; i++) {
+        const char *context = transition_context(transitions[i].only);
+        int roll = roll_for_transition_index(transitions, count, i);
+        esheep_init(&state, animation_id);
+        if (sequence) {
+            state.frame_index = anim->frame_count - 1;
+            state.repeat_index = 100000;
+            state.elapsed_ms = boundary_interval(anim);
+            assert(esheep_tick(&state, 0, context, roll));
+        } else if (transitions == anim->border_next) {
+            assert(esheep_border_event(&state, context, roll));
+        } else {
+            assert(esheep_gravity_event(&state, context, roll));
+        }
+        if (state.animation_id != transitions[i].target) {
+            fprintf(stderr, "transition mismatch: animation %d, %s[%d], got %d expected %d\n",
+                    animation_id, sequence ? "sequence" : "event", i,
+                    state.animation_id, transitions[i].target);
+            assert(state.animation_id == transitions[i].target);
+        }
+    }
+}
+
+static void test_every_authored_transition(void) {
+    for (int i = 0; i < esheep_animation_count; i++) {
+        const EsheepAnimation *anim = &esheep_animations[i];
+        test_every_transition(anim->sequence_next, anim->sequence_next_count,
+                              anim->id, true);
+        test_every_transition(anim->border_next, anim->border_next_count,
+                              anim->id, false);
+        test_every_transition(anim->gravity_next, anim->gravity_next_count,
+                              anim->id, false);
+    }
+}
 
 int main() {
     EsheepState state;
@@ -158,6 +246,10 @@ int main() {
     esheep_init(&state, 25);
     assert(esheep_border_event(&state, "horizontal+", 0) == true);
     assert(state.animation_id == 36);
+
+    /* Tests 17-18: exhaustive coverage of the imported behavior table. */
+    test_every_animation_frame();
+    test_every_authored_transition();
 
     printf("All tests passed\n");
     return 0;
