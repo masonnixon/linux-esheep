@@ -22,8 +22,14 @@ Use the specified spritesheet.
 .BI --character\  NAME
 Select the bundled sheep or ice-blue penguin character.
 .TP
+.BI --config\  PATH
+Load settings from an INI config file.
+.TP
 .BI --spawn\  MODE
 Use \fBbottom\fR (default), \fBwindow\fR, or \fBrandom\fR startup placement.
+.TP
+.BI --count\  N
+Spawn 1 to 32 independent sheep.
 .TP
 .B --no-window-landing
 Disable X11 window and panel detection.
@@ -58,7 +64,13 @@ Set to 1 to select the X11 backend through XWayland when available.
 .TP
 .B ESHEEP_SPAWN
 Set to \fBwindow\fR to start on an application window.
+.TP
+.B ESHEEP_COUNT
+Set the number of sheep, from 1 to 32.
 .SH NOTES
 Window discovery and arbitrary popup positioning are available through the X11
 backend. Native Wayland sessions require compositor-specific protocols; when
 XWayland is available, use \fB--x11-fallback\fR.
+The optional default config file is \fB$XDG_CONFIG_HOME/esheep/config\fR and
+uses an \fB[esheep]\fR INI section. Configuration is overridden by environment
+variables and then command-line options.

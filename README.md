@@ -16,9 +16,11 @@ Command-line options are available with `./esheep --help`:
 ```text
 --sprite PATH       Use a different spritesheet.
 --character sheep    Use sheep or penguin sprites.
+--config PATH         Load settings from an INI config file.
 --spawn bottom      Start at the monitor bottom (default).
 --spawn window      Start on a visible application window.
 --spawn random      Use the authored weighted spawn points.
+--count N            Spawn N independent sheep (1-32).
 --no-window-landing Disable window and panel landing.
 --allow-conky       Allow Conky as a landing surface.
 --x11-fallback      Use XWayland when available.
@@ -35,6 +37,24 @@ ESHEEP_SPRITESHEET=/path/to/spritesheet.png ./esheep
 Use `--character penguin` or `ESHEEP_CHARACTER=penguin` to select the bundled
 ice-blue penguin. An explicit `--sprite` path takes precedence.
 
+The optional config file is `$XDG_CONFIG_HOME/esheep/config`, or another path
+given with `--config`. It uses an INI section named `[esheep]`:
+
+```ini
+[esheep]
+character=sheep
+spritesheet=/path/to/spritesheet.png
+count=2
+spawn=random
+tick_ms=33
+window_landing=true
+exclude_conky=true
+```
+
+Settings resolve in this order: config file, environment variables, then
+command-line options. Each sheep has its own animation, direction, position,
+drag state, and GTK window.
+
 Runtime settings can be overridden with environment variables:
 
 - `ESHEEP_TICK_MS`: update interval in milliseconds, from 10 to 1000.
@@ -44,6 +64,7 @@ Runtime settings can be overridden with environment variables:
   so application-window landing remains available.
 - `ESHEEP_SPAWN=window`: start on a visible application window instead of
   the default monitor bottom.
+- `ESHEEP_COUNT`: number of sheep to spawn, from 1 to 32.
 
 Left-click-drag picks the sheep up; right-click shows a Quit menu.
 
@@ -79,12 +100,17 @@ Installs the binary, spritesheet, and a `.desktop` entry.
   monitor workarea.
 - Screen-edge and detected-window-side climbing with top-surface traversal.
 - Mouse drag and a right-click quit menu.
+- Multiple independent sheep with per-sheep movement and drag state.
+- Optional INI configuration with environment and CLI overrides.
 
 ## Known limitations / not yet built
 
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
+- Sheep currently use the monitor workarea containing their center as their
+  walking bounds. They do not cross monitor seams as one continuous floor.
+- Multiple sheep do not collide with or land on one another.
 
 ## Planned Wayland migration path
 

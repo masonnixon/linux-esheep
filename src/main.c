@@ -24,6 +24,7 @@
 #define ANIM_DRAG 4
 #define ANIM_FALL 5
 #define MAX_OBJECTS 128
+#define MAX_SHEEP 32
 
 typedef struct {
     GdkRectangle rect;
@@ -31,7 +32,9 @@ typedef struct {
     int stack_order;
 } DesktopObject;
 
-typedef struct {
+typedef struct App App;
+
+struct App {
     GtkWidget *window;
     GdkPixbuf *sheet;
     EsheepState state;
@@ -50,7 +53,9 @@ typedef struct {
     gboolean random_spawn;
     int climb_target_y;
     int direction; /* -1 = left, +1 = right */
-} App;
+    App *siblings;
+    int sibling_count;
+};
 
 static gboolean env_bool(const char *name, gboolean fallback) {
     const char *value = getenv(name);
@@ -77,20 +82,24 @@ static void choose_random_spawn(App *app) {
     int roll = rand() % 106;
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
     if (roll < 20) {
+        app->direction = -1;
         app->pos_x = app->bounds.x + app->bounds.width + 10;
         app->pos_y = floor_y;
         esheep_init(&app->state, ANIM_WALK);
     } else if (roll < 100) {
+        app->direction = rand() % 2 ? 1 : -1;
         int usable_width = app->bounds.width - app->tile_size - 50;
         app->pos_x = app->bounds.x + 25 +
                      (usable_width > 0 ? rand() % usable_width : 0);
         app->pos_y = app->bounds.y - app->tile_size - 20;
         esheep_init(&app->state, ANIM_FALL);
     } else if (roll < 103) {
+        app->direction = -1;
         app->pos_x = app->bounds.x + app->bounds.width + 10;
         app->pos_y = app->bounds.y + app->bounds.height / 2 - app->tile_size;
         esheep_init(&app->state, 21);
     } else {
+        app->direction = -1;
         app->pos_x = app->bounds.x + app->bounds.width;
         app->pos_y = floor_y;
         esheep_init(&app->state, 28);
@@ -104,7 +113,9 @@ static void print_usage(const char *program) {
     g_print("  --version              Show the version.\n");
     g_print("  --sprite PATH          Use a spritesheet.\n");
     g_print("  --character NAME       Use sheep or penguin sprites.\n");
+    g_print("  --config PATH          Load settings from an INI config file.\n");
     g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
+    g_print("  --count N              Spawn N sheep (1-32).\n");
     g_print("  --no-window-landing    Disable window and panel landing.\n");
     g_print("  --allow-conky          Allow landing on Conky.\n");
     g_print("  --x11-fallback         Use XWayland when available.\n");
@@ -236,7 +247,11 @@ static void refresh_objects(App *app) {
     }
 
     for (unsigned long i = 0; i < count && app->object_count < MAX_OBJECTS; i++) {
-        if (windows[i] == app->xwindow) continue;
+        gboolean own_window = windows[i] == app->xwindow;
+        for (int sibling = 0; !own_window && sibling < app->sibling_count;
+             sibling++)
+            own_window = windows[i] == app->siblings[sibling].xwindow;
+        if (own_window) continue;
         if (window_has_type(display, windows[i], window_type, desktop_type)) continue;
         if (app->exclude_conky && is_conky_window(display, windows[i])) continue;
         XWindowAttributes attributes;
@@ -684,14 +699,63 @@ static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer use
     return TRUE;
 }
 
+static void setup_sheep_window(App *app, GdkDisplay *display,
+                               GdkMonitor *monitor) {
+    GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
+    app->window = window;
+
+    GdkScreen *screen = gtk_widget_get_screen(window);
+    GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
+    if (visual && gdk_screen_is_composited(screen))
+        gtk_widget_set_visual(window, visual);
+
+    gtk_widget_set_app_paintable(window, TRUE);
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    gtk_widget_set_double_buffered(window, FALSE);
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    gtk_window_set_default_size(GTK_WINDOW(window), app->tile_size, app->tile_size);
+    gtk_widget_set_size_request(window, app->tile_size, app->tile_size);
+    gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
+    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+    gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
+    gtk_window_stick(GTK_WINDOW(window));
+
+    gdk_monitor_get_workarea(monitor, &app->bounds);
+    esheep_set_environment(&app->state, app->bounds.width, app->bounds.height,
+                           app->tile_size, app->tile_size);
+    app->pos_x = app->bounds.x + app->bounds.width / 2;
+    app->pos_y = app->bounds.y + app->bounds.height - app->tile_size;
+    gtk_window_move(GTK_WINDOW(window), app->pos_x, app->pos_y);
+
+    gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK |
+                                       GDK_POINTER_MOTION_MASK);
+    g_signal_connect(window, "draw", G_CALLBACK(on_draw), app);
+    g_signal_connect(window, "button-press-event", G_CALLBACK(on_button_press), app);
+    g_signal_connect(window, "button-release-event", G_CALLBACK(on_button_release), app);
+    g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_motion), app);
+    gtk_widget_show_all(window);
+
+    if (GDK_IS_X11_DISPLAY(display))
+        app->xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
+}
+
 int main(int argc, char **argv) {
     const char *sprite_override = NULL;
     const char *character_override = NULL;
     const char *spawn_override = NULL;
+    const char *config_override = NULL;
     guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
+    guint count = env_uint("ESHEEP_COUNT", 1, 1, MAX_SHEEP);
     gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
     gboolean exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
     gboolean x11_fallback = env_bool("ESHEEP_X11_FALLBACK", FALSE);
+    gboolean tick_cli = FALSE;
+    gboolean count_cli = FALSE;
+    gboolean spawn_cli = FALSE;
+    gboolean window_landing_cli = FALSE;
+    gboolean exclude_conky_cli = FALSE;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -711,14 +775,32 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "--spawn") == 0 && i + 1 < argc) {
             spawn_override = argv[++i];
+            spawn_cli = TRUE;
+            continue;
+        }
+        if (strcmp(argv[i], "--count") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            unsigned long parsed = strtoul(argv[++i], &end, 10);
+            if (*end || parsed < 1 || parsed > MAX_SHEEP) {
+                g_printerr("invalid --count value (use 1-%d)\n", MAX_SHEEP);
+                return 2;
+            }
+            count = (guint)parsed;
+            count_cli = TRUE;
+            continue;
+        }
+        if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
+            config_override = argv[++i];
             continue;
         }
         if (strcmp(argv[i], "--no-window-landing") == 0) {
             window_landing = FALSE;
+            window_landing_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--allow-conky") == 0) {
             exclude_conky = FALSE;
+            exclude_conky_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--x11-fallback") == 0) {
@@ -733,6 +815,7 @@ int main(int argc, char **argv) {
                 return 2;
             }
             tick_ms = (guint)value;
+            tick_cli = TRUE;
             continue;
         }
         g_printerr("unknown or incomplete option: %s\n", argv[i]);
@@ -746,6 +829,51 @@ int main(int argc, char **argv) {
     }
     gtk_init(&argc, &argv);
     srand((unsigned)time(NULL));
+
+    GKeyFile *config = g_key_file_new();
+    gchar *default_config_path = NULL;
+    gchar *config_character = NULL;
+    gchar *config_sprite = NULL;
+    gchar *config_spawn = NULL;
+    if (!config_override) {
+        default_config_path = g_build_filename(g_get_user_config_dir(),
+                                                "esheep", "config", NULL);
+        config_override = default_config_path;
+    }
+    if (g_key_file_load_from_file(config, config_override, G_KEY_FILE_NONE, NULL)) {
+        if (!character_override && !getenv("ESHEEP_CHARACTER")) {
+            config_character = g_key_file_get_string(config, "esheep",
+                                                      "character", NULL);
+            character_override = config_character;
+        }
+        if (!sprite_override && !getenv("ESHEEP_SPRITESHEET")) {
+            config_sprite = g_key_file_get_string(config, "esheep",
+                                                   "spritesheet", NULL);
+            sprite_override = config_sprite;
+        }
+        if (!spawn_cli && !getenv("ESHEEP_SPAWN")) {
+            config_spawn = g_key_file_get_string(config, "esheep", "spawn", NULL);
+            spawn_override = config_spawn;
+        }
+        if (!tick_cli && !getenv("ESHEEP_TICK_MS") &&
+            g_key_file_has_key(config, "esheep", "tick_ms", NULL)) {
+            gint64 value = g_key_file_get_int64(config, "esheep", "tick_ms", NULL);
+            if (value >= 10 && value <= 1000) tick_ms = (guint)value;
+        }
+        if (!count_cli && !getenv("ESHEEP_COUNT") &&
+            g_key_file_has_key(config, "esheep", "count", NULL)) {
+            gint64 value = g_key_file_get_int64(config, "esheep", "count", NULL);
+            if (value >= 1 && value <= MAX_SHEEP) count = (guint)value;
+        }
+        if (!window_landing_cli && !getenv("ESHEEP_WINDOW_LANDING") &&
+            g_key_file_has_key(config, "esheep", "window_landing", NULL))
+            window_landing = g_key_file_get_boolean(config, "esheep",
+                                                     "window_landing", NULL);
+        if (!exclude_conky_cli && !getenv("ESHEEP_EXCLUDE_CONKY") &&
+            g_key_file_has_key(config, "esheep", "exclude_conky", NULL))
+            exclude_conky = g_key_file_get_boolean(config, "esheep",
+                                                    "exclude_conky", NULL);
+    }
 
     const char *character = character_override ? character_override :
                             getenv("ESHEEP_CHARACTER");
@@ -775,46 +903,6 @@ int main(int argc, char **argv) {
 
     int tile_size = gdk_pixbuf_get_width(sheet) / esheep_tiles_x;
 
-    App app = {0};
-    app.sheet = sheet;
-    app.tile_size = tile_size;
-    app.direction = -1;
-    app.tick_ms = tick_ms;
-    app.window_landing = window_landing;
-    app.exclude_conky = exclude_conky;
-    app.spawn_on_window = spawn_override ?
-                          strcasecmp(spawn_override, "window") == 0 :
-                          env_equals("ESHEEP_SPAWN", "window");
-    app.random_spawn = spawn_override ?
-                       strcasecmp(spawn_override, "random") == 0 :
-                       env_equals("ESHEEP_SPAWN", "random");
-    esheep_init(&app.state, ANIM_WALK);
-
-    GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
-    app.window = window;
-
-    GdkScreen *screen = gtk_widget_get_screen(window);
-    GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
-    if (visual && gdk_screen_is_composited(screen)) {
-        gtk_widget_set_visual(window, visual);
-    }
-
-    gtk_widget_set_app_paintable(window, TRUE);
-    /* GTK's intermediate backing buffer can retain rectangular fragments
-     * when an RGBA popup is moved.  Let the compositor use the surface we
-     * paint directly instead. */
-    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    gtk_widget_set_double_buffered(window, FALSE);
-    G_GNUC_END_IGNORE_DEPRECATIONS
-    gtk_window_set_default_size(GTK_WINDOW(window), tile_size, tile_size);
-    gtk_widget_set_size_request(window, tile_size, tile_size);
-    gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
-    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-    gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
-    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
-    gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
-    gtk_window_stick(GTK_WINDOW(window));
-
     GdkDisplay *display = gdk_display_get_default();
     /* Spawn on whichever monitor the pointer is actually on, not GDK's
      * notion of "primary" -- on a multi-monitor setup those can easily
@@ -837,45 +925,56 @@ int main(int argc, char **argv) {
      * would let the sheep spawn flush with the physical bottom edge of the
      * screen, which on most desktops means directly underneath (and fully
      * hidden by) a bottom panel. */
-    gdk_monitor_get_workarea(monitor, &app.bounds);
-    esheep_set_environment(&app.state, app.bounds.width, app.bounds.height,
-                           tile_size, tile_size);
-    app.pos_x = app.bounds.x + app.bounds.width / 2;
-    app.pos_y = app.bounds.y + app.bounds.height - tile_size;
-    gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
-
-    gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK |
-                                       GDK_POINTER_MOTION_MASK);
-
-    g_signal_connect(window, "draw", G_CALLBACK(on_draw), &app);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-    g_signal_connect(window, "button-press-event", G_CALLBACK(on_button_press), &app);
-    g_signal_connect(window, "button-release-event", G_CALLBACK(on_button_release), &app);
-    g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_motion), &app);
-
-    gtk_widget_show_all(window);
-
-    if (GDK_IS_X11_DISPLAY(display)) {
-        app.xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
-        refresh_objects(&app);
-        if (app.spawn_on_window) {
-            for (int i = app.object_count - 1; i >= 0; i--) {
-                DesktopObject *object = &app.objects[i];
-                if (object->taskbar || object->rect.width < app.tile_size ||
-                    object->rect.y - app.tile_size < app.bounds.y) continue;
-                app.pos_x = object->rect.x +
-                            (object->rect.width - app.tile_size) / 2;
-                app.pos_y = object->rect.y - app.tile_size;
-                break;
-            }
-        } else if (app.random_spawn) {
-            choose_random_spawn(&app);
+    App sheep[MAX_SHEEP] = {0};
+    for (guint i = 0; i < count; i++) {
+        App *app = &sheep[i];
+        app->sheet = sheet;
+        app->tile_size = tile_size;
+        app->direction = (i % 2 == 0) ? -1 : 1;
+        app->tick_ms = tick_ms;
+        app->window_landing = window_landing;
+        app->exclude_conky = exclude_conky;
+        app->spawn_on_window = spawn_override ?
+                              strcasecmp(spawn_override, "window") == 0 :
+                              env_equals("ESHEEP_SPAWN", "window");
+        app->random_spawn = spawn_override ?
+                           strcasecmp(spawn_override, "random") == 0 :
+                           env_equals("ESHEEP_SPAWN", "random");
+        app->siblings = sheep;
+        app->sibling_count = (int)count;
+        esheep_init(&app->state, ANIM_WALK);
+        setup_sheep_window(app, display, monitor);
+        if (!app->random_spawn && !app->spawn_on_window && count > 1) {
+            int offset = (int)i * app->tile_size * 2;
+            int max_x = app->bounds.x + app->bounds.width - app->tile_size;
+            app->pos_x = app->bounds.x + app->bounds.width / 2 + offset;
+            if (app->pos_x > max_x) app->pos_x = max_x;
+            gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
         }
-        gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
     }
-    set_sprite_input_region(&app);
 
-    g_timeout_add(app.tick_ms, on_tick, &app);
+    for (guint i = 0; i < count; i++) {
+        App *app = &sheep[i];
+        if (GDK_IS_X11_DISPLAY(display)) {
+            refresh_objects(app);
+            if (app->spawn_on_window) {
+                for (int j = app->object_count - 1; j >= 0; j--) {
+                    DesktopObject *object = &app->objects[j];
+                    if (object->taskbar || object->rect.width < app->tile_size ||
+                        object->rect.y - app->tile_size < app->bounds.y) continue;
+                    app->pos_x = object->rect.x +
+                                (object->rect.width - app->tile_size) / 2;
+                    app->pos_y = object->rect.y - app->tile_size;
+                    break;
+                }
+            } else if (app->random_spawn) {
+                choose_random_spawn(app);
+            }
+            gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
+        }
+        set_sprite_input_region(app);
+        g_timeout_add(app->tick_ms, on_tick, app);
+    }
 
     const char *autoquit = getenv("ESHEEP_AUTOQUIT_MS");
     if (autoquit) {
@@ -884,6 +983,11 @@ int main(int argc, char **argv) {
 
     gtk_main();
 
+    g_free(config_character);
+    g_free(config_sprite);
+    g_free(config_spawn);
+    g_free(default_config_path);
+    g_key_file_free(config);
     g_object_unref(sheet);
     return 0;
 }
