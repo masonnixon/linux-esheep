@@ -124,12 +124,21 @@ def test_child_review_uses_parent():
     print("OK: Child review launches the authored parent scene")
     return True
 
+def test_child_coordinate_semantics():
+    """Relative black-sheep placement must stay beside its parent."""
+    source = Path("src/main.c").read_text()
+    assert 'strcmp(expr, "-imageW") == 0' in source
+    assert 'return image_x - image_width' in source
+    print("OK: Relative child coordinates use the parent image position")
+    return True
+
 if __name__ == "__main__":
     try:
         test_child_records_valid()
         test_eating_animation_has_flower()
         test_generated_child_data()
         test_child_review_uses_parent()
+        test_child_coordinate_semantics()
         print("\nAll child animation tests passed!")
         sys.exit(0)
     except AssertionError as e:

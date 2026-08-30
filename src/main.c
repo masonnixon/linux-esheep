@@ -129,8 +129,8 @@ static int eval_child_expression(const char *expr, int area_width, int area_heig
     long value = strtol(expr, &end, 10);
     if (end != expr && *end == '\0') return (int)value;
 
-    /* Simple cases like "-imageW" */
-    if (strcmp(expr, "-imageW") == 0) return -image_width;
+    /* A negative image width is relative to the parent image. */
+    if (strcmp(expr, "-imageW") == 0) return image_x - image_width;
     if (strcmp(expr, "imageY") == 0) return image_y;
     if (strcmp(expr, "imageX") == 0) return image_x;
 
