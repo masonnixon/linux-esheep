@@ -37,6 +37,7 @@ typedef struct App App;
 
 struct App {
     GtkWidget *window;
+    GtkWidget *child_window;
     GdkPixbuf *sheet;
     EsheepState state;
     int tile_size;
@@ -715,48 +716,42 @@ static void draw_current_tile(cairo_t *cr, App *app) {
     cairo_paint_with_alpha(cr, pose_opacity(anim, app->state.frame_index));
     g_object_unref(subtile);
 
-    /* Render child animation if active. */
-    if (app->child_animation_id > 0 && app->child_animation_id <= esheep_animation_count) {
-        const EsheepAnimation *child_anim = &esheep_animations[app->child_animation_id - 1];
-        int child_tile = child_anim->frames[app->child_frame_index];
-        int child_sx = (child_tile % esheep_tiles_x) * tile_size;
-        int child_sy = (child_tile / esheep_tiles_x) * tile_size;
-
-        /* Find the child record to get offset expressions. */
-        const EsheepChild *child_record = find_child_for_animation(app->state.animation_id);
-        if (child_record) {
-            int child_offset_x = eval_child_expression(child_record->x, app->bounds.width,
-                                                        app->bounds.height, app->tile_size,
-                                                        app->tile_size, 0, 0, rand() % 100);
-            int child_offset_y = eval_child_expression(child_record->y, app->bounds.width,
-                                                        app->bounds.height, app->tile_size,
-                                                        app->tile_size, 0, 0, rand() % 100);
-
-            /* A child is authored as a separate image window. The current
-             * sprite window is only one tile wide, so keep an off-window
-             * child visible until the renderer grows a separate child window.
-             */
-            if (child_offset_x < 0) child_offset_x = 0;
-            if (child_offset_x > app->tile_size) child_offset_x = app->tile_size;
-
-            cairo_save(cr);
-            cairo_translate(cr, child_offset_x, child_offset_y);
-            GdkPixbuf *child_subtile = gdk_pixbuf_new_subpixbuf(app->sheet, child_sx, child_sy,
-                                                                 tile_size, tile_size);
-            gdk_cairo_set_source_pixbuf(cr, child_subtile, 0, 0);
-            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-            cairo_paint_with_alpha(cr, pose_opacity(child_anim, app->child_frame_index));
-            g_object_unref(child_subtile);
-            cairo_restore(cr);
-        }
-    }
-
     cairo_restore(cr);
+}
+
+static void draw_child_tile(cairo_t *cr, App *app) {
+    if (app->child_animation_id <= 0 ||
+        app->child_animation_id > esheep_animation_count)
+        return;
+
+    const EsheepAnimation *anim =
+        &esheep_animations[app->child_animation_id - 1];
+    int tile_size = gdk_pixbuf_get_width(app->sheet) / esheep_tiles_x;
+    int tile = anim->frames[app->child_frame_index];
+    int sx = (tile % esheep_tiles_x) * tile_size;
+    int sy = (tile / esheep_tiles_x) * tile_size;
+
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    GdkPixbuf *subtile = gdk_pixbuf_new_subpixbuf(app->sheet, sx, sy,
+                                                   tile_size, tile_size);
+    gdk_cairo_set_source_pixbuf(cr, subtile, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint_with_alpha(cr, pose_opacity(anim, app->child_frame_index));
+    g_object_unref(subtile);
 }
 
 static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
     (void)widget;
     draw_current_tile(cr, (App *)user_data);
+    return FALSE;
+}
+
+static gboolean on_child_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
+    (void)widget;
+    draw_child_tile(cr, (App *)user_data);
     return FALSE;
 }
 
@@ -781,11 +776,21 @@ static void update_child_animation(App *app) {
             app->child_frame_index = 0;
             app->child_elapsed_ms = 0;
         }
+        int offset_x = eval_child_expression(child_record->x, app->bounds.width,
+                                             app->bounds.height, app->tile_size,
+                                             app->tile_size, app->pos_x, app->pos_y, 0);
+        int offset_y = eval_child_expression(child_record->y, app->bounds.width,
+                                             app->bounds.height, app->tile_size,
+                                             app->tile_size, app->pos_x, app->pos_y, 0);
+        gtk_window_move(GTK_WINDOW(app->child_window), offset_x, offset_y);
+        gtk_widget_show(app->child_window);
+        gtk_widget_queue_draw(app->child_window);
     } else {
         /* Parent animation has no child. Deactivate if active. */
         app->child_animation_id = 0;
         app->child_frame_index = 0;
         app->child_elapsed_ms = 0;
+        gtk_widget_hide(app->child_window);
     }
 }
 
@@ -1033,6 +1038,29 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     g_signal_connect(window, "button-release-event", G_CALLBACK(on_button_release), app);
     g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_motion), app);
     gtk_widget_show_all(window);
+
+    GtkWidget *child_window = gtk_window_new(GTK_WINDOW_POPUP);
+    app->child_window = child_window;
+    if (visual && gdk_screen_is_composited(screen))
+        gtk_widget_set_visual(child_window, visual);
+    gtk_widget_set_app_paintable(child_window, TRUE);
+    gtk_window_set_default_size(GTK_WINDOW(child_window), app->tile_size, app->tile_size);
+    gtk_widget_set_size_request(child_window, app->tile_size, app->tile_size);
+    gtk_window_set_resizable(GTK_WINDOW(child_window), FALSE);
+    gtk_window_set_decorated(GTK_WINDOW(child_window), FALSE);
+    gtk_window_set_keep_above(GTK_WINDOW(child_window), TRUE);
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(child_window), TRUE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(child_window), TRUE);
+    gtk_window_stick(GTK_WINDOW(child_window));
+    g_signal_connect(child_window, "draw", G_CALLBACK(on_child_draw), app);
+    gtk_widget_show(child_window);
+    GdkWindow *child_gdk_window = gtk_widget_get_window(child_window);
+    if (child_gdk_window) {
+        cairo_region_t *empty = cairo_region_create();
+        gdk_window_input_shape_combine_region(child_gdk_window, empty, 0, 0);
+        cairo_region_destroy(empty);
+    }
+    gtk_widget_hide(child_window);
 
     if (GDK_IS_X11_DISPLAY(display))
         app->xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
