@@ -311,6 +311,27 @@ static int pose_delta(const EsheepAnimation *anim, int frame_index, gboolean x_a
                  (progress >= 0.5 ? 0.5 : -0.5));
 }
 
+static double pose_progress(const EsheepAnimation *anim, int frame_index) {
+    if (anim->frame_count <= 1) return 0.0;
+    if (frame_index < 0) frame_index = 0;
+    if (frame_index >= anim->frame_count) frame_index = anim->frame_count - 1;
+    return (double)frame_index / (double)(anim->frame_count - 1);
+}
+
+static int pose_offset_y(const EsheepAnimation *anim, int frame_index) {
+    double progress = pose_progress(anim, frame_index);
+    double start = (double)atoi(anim->start.offsety);
+    double end = (double)atoi(anim->end.offsety);
+    return (int)(start + (end - start) * progress +
+                 (progress >= 0.5 ? 0.5 : -0.5));
+}
+
+static double pose_opacity(const EsheepAnimation *anim, int frame_index) {
+    double progress = pose_progress(anim, frame_index);
+    return anim->start.opacity +
+           (anim->end.opacity - anim->start.opacity) * progress;
+}
+
 static gboolean is_airborne_animation(int animation_id) {
     return animation_id == 25 || animation_id == 44 || animation_id == 45;
 }
@@ -341,7 +362,8 @@ static void set_sprite_input_region(App *app) {
             if (!opaque && run_start >= 0) {
                 int run_width = x - run_start;
                 int region_x = anim->flip ? app->tile_size - x : run_start;
-                cairo_rectangle_int_t rect = { region_x, y + atoi(anim->start.offsety),
+                cairo_rectangle_int_t rect = { region_x, y + pose_offset_y(anim,
+                                                                            app->state.frame_index),
                                                run_width, 1 };
                 cairo_region_union_rectangle(region, &rect);
                 run_start = -1;
@@ -416,14 +438,14 @@ static void draw_current_tile(cairo_t *cr, App *app) {
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-    int offset_y = atoi(anim->start.offsety);
+    int offset_y = pose_offset_y(anim, app->state.frame_index);
     cairo_translate(cr, anim->flip ? tile_size : 0, offset_y);
     cairo_scale(cr, anim->flip ? -1 : 1, 1);
 
     GdkPixbuf *subtile = gdk_pixbuf_new_subpixbuf(app->sheet, sx, sy, tile_size, tile_size);
     gdk_cairo_set_source_pixbuf(cr, subtile, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-    cairo_paint_with_alpha(cr, anim->start.opacity);
+    cairo_paint_with_alpha(cr, pose_opacity(anim, app->state.frame_index));
     g_object_unref(subtile);
     cairo_restore(cr);
 }
