@@ -47,6 +47,9 @@ make test-interpreter
 
 Runs the animation-interpreter unit tests (pure C, no GTK/X11 needed).
 
+Run `make test` to include the GTK/X11 smoke test. It uses Xvfb and exits
+automatically after startup.
+
 ## Install
 
 ```sh
