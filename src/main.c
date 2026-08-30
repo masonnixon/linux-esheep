@@ -306,9 +306,16 @@ static int pose_delta(const EsheepAnimation *anim, int frame_index, gboolean x_a
     int start_value = atoi(start);
     int end_value = atoi(end);
     if (anim->frame_count <= 1) return start_value;
+    if (frame_index <= 0) return start_value;
+
     double progress = (double)frame_index / (double)(anim->frame_count - 1);
-    return (int)(start_value + (end_value - start_value) * progress +
-                 (progress >= 0.5 ? 0.5 : -0.5));
+    double previous_progress = (double)(frame_index - 1) /
+                               (double)(anim->frame_count - 1);
+    double current = start_value + (end_value - start_value) * progress;
+    double previous = start_value +
+                      (end_value - start_value) * previous_progress;
+    double delta = current - previous;
+    return (int)(delta + (delta >= 0.0 ? 0.5 : -0.5));
 }
 
 static double pose_progress(const EsheepAnimation *anim, int frame_index) {
