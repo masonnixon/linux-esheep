@@ -1,6 +1,8 @@
-/* Phase 2: transparent always-on-top window rendering the current sprite
- * frame from the interpreter, driven by a fixed-rate timer. No movement or
- * collision yet (context is always "none") -- that's Phase 3.
+/* Transparent, always-on-top GTK window rendering the interpreter's current
+ * sprite frame, with real x/y movement driven by each animation's pose
+ * deltas and screen-edge collision against the primary monitor's bounds.
+ * No per-window docking yet (context is only ever "none" or "vertical") --
+ * that's a later phase.
  */
 #include <gtk/gtk.h>
 #include <stdlib.h>
@@ -13,7 +15,36 @@ typedef struct {
     GtkWidget *window;
     GdkPixbuf *sheet;
     EsheepState state;
+    int tile_size;
+    GdkRectangle bounds; /* primary monitor geometry, the whole "world" for now */
+    int pos_x, pos_y;    /* top-left of the sprite window, in screen coords */
 } App;
+
+/* Apply the pose x/y deltas (constant per animation in this dataset -- start
+ * and end always match for every animation currently in scope) for one
+ * frame step of `anim`, then clamp to the monitor bounds. Returns a context
+ * string ("none" or "vertical") describing which edge, if any, was hit
+ * this step, for the caller to feed into esheep_border_event. */
+static const char *step_position(App *app, const EsheepAnimation *anim) {
+    int dx = atoi(anim->start.x);
+    int dy = atoi(anim->start.y);
+    app->pos_x += dx;
+    app->pos_y += dy;
+
+    int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
+    if (app->pos_y > floor_y) app->pos_y = floor_y;
+    if (app->pos_y < app->bounds.y) app->pos_y = app->bounds.y;
+
+    const char *context = "none";
+    if (app->pos_x <= app->bounds.x) {
+        app->pos_x = app->bounds.x;
+        context = "vertical";
+    } else if (app->pos_x + app->tile_size >= app->bounds.x + app->bounds.width) {
+        app->pos_x = app->bounds.x + app->bounds.width - app->tile_size;
+        context = "vertical";
+    }
+    return context;
+}
 
 static void draw_current_tile(cairo_t *cr, App *app) {
     const EsheepAnimation *anim = &esheep_animations[app->state.animation_id - 1];
@@ -45,10 +76,33 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
 
 static gboolean on_tick(gpointer user_data) {
     App *app = user_data;
+
+    int prev_anim = app->state.animation_id;
+    int prev_frame = app->state.frame_index;
+    /* Movement/collision context is decided by the CURRENT position, before
+     * this tick's frame step -- e.g. if we're already pinned against the
+     * right edge, this tick's context is "vertical" regardless of which
+     * direction the current animation is trying to move. */
+    const char *pretick_context =
+        (app->pos_x <= app->bounds.x ||
+         app->pos_x + app->tile_size >= app->bounds.x + app->bounds.width)
+        ? "vertical" : "none";
+
     int roll = rand() % 100;
-    if (esheep_tick(&app->state, TICK_MS, "none", roll)) {
-        /* transitioned to a new animation this tick */
+    esheep_tick(&app->state, TICK_MS, pretick_context, roll);
+
+    if (app->state.animation_id != prev_anim || app->state.frame_index != prev_frame) {
+        /* A frame boundary was crossed this tick -- apply the animation that
+         * was PLAYING during that step's own pose delta, not the new one. */
+        const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];
+        const char *hit = step_position(app, stepped_anim);
+        if (hit[0] != 'n') { /* "vertical", not "none" */
+            int border_roll = rand() % 100;
+            esheep_border_event(&app->state, hit, border_roll);
+        }
     }
+
+    gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
     gtk_widget_queue_draw(app->window);
     return G_SOURCE_CONTINUE;
 }
@@ -78,6 +132,7 @@ int main(int argc, char **argv) {
 
     App app = {0};
     app.sheet = sheet;
+    app.tile_size = tile_size;
     esheep_init(&app.state, 1); /* start on animation 1, "walk" */
 
     GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
@@ -100,11 +155,11 @@ int main(int argc, char **argv) {
 
     GdkDisplay *display = gdk_display_get_default();
     GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
-    GdkRectangle geom;
-    gdk_monitor_get_geometry(monitor, &geom);
-    int start_x = geom.x + geom.width / 2;
-    int start_y = geom.y + geom.height - tile_size;
-    gtk_window_move(GTK_WINDOW(window), start_x, start_y);
+    if (!monitor) monitor = gdk_display_get_monitor(display, 0);
+    gdk_monitor_get_geometry(monitor, &app.bounds);
+    app.pos_x = app.bounds.x + app.bounds.width / 2;
+    app.pos_y = app.bounds.y + app.bounds.height - tile_size;
+    gtk_window_move(GTK_WINDOW(window), app.pos_x, app.pos_y);
 
     g_signal_connect(window, "draw", G_CALLBACK(on_draw), &app);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
