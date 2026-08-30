@@ -1,5 +1,6 @@
 #include "interpreter.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -8,9 +9,24 @@ static const EsheepAnimation* get_animation(int id) {
     return &esheep_animations[id-1];
 }
 
-static int repeat_value(const char *repeat_str) {
+static int repeat_value(const char *repeat_str, int roll_0_99) {
     if (!repeat_str) return 0;
-    return atoi(repeat_str);
+    char *end = NULL;
+    long value = strtol(repeat_str, &end, 10);
+    if (end != repeat_str && *end == '\0') return (int)value;
+
+    /* The source data uses a small expression vocabulary for random repeat
+     * counts.  Keep the evaluator deterministic by deriving random from the
+     * tick's supplied 0..99 roll. */
+    int divisor = 0;
+    int addend = 0;
+    if (sscanf(repeat_str, "random/%d+%d", &divisor, &addend) == 2 &&
+        divisor > 0)
+        return roll_0_99 / divisor + addend;
+    if (sscanf(repeat_str, "%d+random/%d", &addend, &divisor) == 2 &&
+        divisor > 0)
+        return addend + roll_0_99 / divisor;
+    return 1;
 }
 
 void esheep_init(EsheepState *state, int animation_id) {
@@ -55,12 +71,12 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
         return false;
     }
 
-    state->elapsed_ms = 0;
+    state->elapsed_ms -= anim->start.interval_ms;
     state->frame_index++;
 
     if (state->frame_index >= anim->frame_count) {
-        state->frame_index = repeat_value(anim->repeat_from);
-        int repeat_count = repeat_value(anim->repeat);
+        state->frame_index = repeat_value(anim->repeat_from, roll_0_99);
+        int repeat_count = repeat_value(anim->repeat, roll_0_99);
         if (repeat_count == 0) {
             return true;
         }
