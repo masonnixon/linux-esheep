@@ -331,7 +331,20 @@ static gboolean on_tick(gpointer user_data) {
          * was PLAYING during that step's own pose delta, not the new one. */
         const EsheepAnimation *stepped_anim = &esheep_animations[prev_anim - 1];
         const char *hit = step_position(app, stepped_anim);
-        if (hit[0] != 'n') { /* a screen edge, window, or taskbar */
+        gboolean edge_animation_finished = FALSE;
+        int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
+        if (prev_anim == 37 && app->pos_y <= app->bounds.y) {
+            esheep_init(&app->state, 38); /* vertical up -> top walk */
+            edge_animation_finished = TRUE;
+        } else if (prev_anim == 39 && app->pos_x <= app->bounds.x) {
+            esheep_init(&app->state, 41); /* top walk -> vertical down */
+            edge_animation_finished = TRUE;
+        } else if (prev_anim == 41 && app->pos_y >= floor_y) {
+            esheep_init(&app->state, 42); /* vertical down -> edge crossing */
+            edge_animation_finished = TRUE;
+        }
+        if (!edge_animation_finished && hit[0] != 'n') {
+            /* a screen edge, window, or taskbar */
             if (hit[0] == 'w' || hit[0] == 't') {
                 /* The source animation graph only has a "none" transition
                  * out of falling.  A detected desktop object is a valid
