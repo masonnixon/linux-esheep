@@ -49,15 +49,19 @@ struct App {
     int drag_grab_x, drag_grab_y; /* pointer offset from window origin at grab time */
     Window xwindow;
     DesktopObject objects[MAX_OBJECTS];
+    EsheepSurfaceObject surfaces[MAX_OBJECTS];
     int object_count;
     guint tick_ms;
+    guint tick_source_id;
     gboolean window_landing;
     gboolean exclude_conky;
     gboolean spawn_on_window;
     gboolean random_spawn;
     int climb_target_y;
     int direction; /* -1 = left, +1 = right */
+    int ordinal;
     bool edge_dispatched;
+    gboolean cleaned_up;
     App *siblings;
     int sibling_count;
     int child_animation_id;  /* active child animation id, or 0 if none */
@@ -84,6 +88,12 @@ static guint env_uint(const char *name, guint fallback, guint minimum, guint max
 static gboolean env_equals(const char *name, const char *expected) {
     const char *value = getenv(name);
     return value && strcasecmp(value, expected) == 0;
+}
+
+static guint clamp_sheep_count(guint requested) {
+    if (requested < 1) return 1;
+    if (requested > MAX_SHEEP) return MAX_SHEEP;
+    return requested;
 }
 
 static int eval_spawn_expression(const char *expr, int area_width, int area_height,
@@ -244,6 +254,228 @@ static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b
     return left_a < left_b + width_b && left_a + width_a > left_b;
 }
 
+static gboolean is_airborne_animation(int animation_id);
+static gboolean child_tiles_use_parent_input(const App *app);
+
+static gboolean rects_overlap(const GdkRectangle *a, const GdkRectangle *b) {
+    return a->x < b->x + b->width && a->x + a->width > b->x &&
+           a->y < b->y + b->height && a->y + a->height > b->y;
+}
+
+static GdkRectangle sheep_rect_at(const App *app, int pos_x, int pos_y) {
+    return (GdkRectangle){ pos_x, pos_y, app->tile_size, app->tile_size };
+}
+
+static gboolean object_on_monitor(const App *app, const DesktopObject *object) {
+    GdkRectangle bounds = app->bounds;
+    return rects_overlap(&bounds, &object->rect);
+}
+
+static int clamp_pos_x(const App *app, int pos_x) {
+    int right = app->bounds.x + app->bounds.width - app->tile_size;
+    if (pos_x < app->bounds.x) return app->bounds.x;
+    if (pos_x > right) return right;
+    return pos_x;
+}
+
+static int floor_pos_y(const App *app) {
+    return app->bounds.y + app->bounds.height - app->tile_size;
+}
+
+static void sync_surface_objects(App *app) {
+    for (int i = 0; i < app->object_count; i++) {
+        const DesktopObject *src = &app->objects[i];
+        app->surfaces[i].x = src->rect.x;
+        app->surfaces[i].y = src->rect.y;
+        app->surfaces[i].width = src->rect.width;
+        app->surfaces[i].height = src->rect.height;
+        app->surfaces[i].stack_order = src->stack_order;
+        app->surfaces[i].taskbar = src->taskbar;
+    }
+}
+
+static gboolean spawn_hits_object(const App *app, int pos_x, int pos_y) {
+    GdkRectangle rect = sheep_rect_at(app, pos_x, pos_y);
+    for (int i = 0; i < app->object_count; i++) {
+        const DesktopObject *object = &app->objects[i];
+        if (!object_on_monitor(app, object)) continue;
+        if (rects_overlap(&rect, &object->rect)) return TRUE;
+    }
+    return FALSE;
+}
+
+static gboolean spawn_hits_previous_sibling(const App *app, int pos_x, int pos_y) {
+    GdkRectangle rect = sheep_rect_at(app, pos_x, pos_y);
+    for (int i = 0; i < app->ordinal; i++) {
+        const App *other = &app->siblings[i];
+        GdkRectangle other_rect;
+        if (other == app || other->cleaned_up || other->tile_size <= 0) continue;
+        other_rect = sheep_rect_at(other, other->pos_x, other->pos_y);
+        if (rects_overlap(&rect, &other_rect)) return TRUE;
+    }
+    return FALSE;
+}
+
+static void place_spawn_near(App *app, int base_x, int base_y,
+                             gboolean clamp_to_bounds) {
+    int step = MAX(app->tile_size + 8,
+                   app->sibling_count > 0 ?
+                   app->bounds.width / app->sibling_count : app->tile_size + 8);
+    int candidate_y = base_y;
+    int attempts = MAX(8, app->sibling_count * 3);
+
+    if (clamp_to_bounds) {
+        base_x = clamp_pos_x(app, base_x);
+        if (candidate_y < app->bounds.y) candidate_y = app->bounds.y;
+        if (candidate_y > floor_pos_y(app)) candidate_y = floor_pos_y(app);
+    }
+
+    for (int attempt = 0; attempt < attempts; attempt++) {
+        int candidate_x = base_x;
+        if (attempt > 0) {
+            int distance = ((attempt + 1) / 2) * step;
+            int direction = attempt % 2 ? 1 : -1;
+            candidate_x = base_x + direction * distance;
+        }
+        if (clamp_to_bounds) candidate_x = clamp_pos_x(app, candidate_x);
+        if (spawn_hits_object(app, candidate_x, candidate_y)) continue;
+        if (spawn_hits_previous_sibling(app, candidate_x, candidate_y)) continue;
+        app->pos_x = candidate_x;
+        app->pos_y = candidate_y;
+        return;
+    }
+
+    app->pos_x = clamp_to_bounds ? clamp_pos_x(app, base_x) : base_x;
+    app->pos_y = candidate_y;
+}
+
+static int spawn_slot_center_x(const App *app) {
+    int usable = app->bounds.width - app->tile_size;
+    if (usable <= 0 || app->sibling_count <= 1)
+        return app->bounds.x + usable / 2;
+
+    double fraction = ((double)app->ordinal + 0.5) / (double)app->sibling_count;
+    return app->bounds.x + (int)(fraction * usable + 0.5);
+}
+
+static const DesktopObject *select_spawn_window(const App *app) {
+    int match_count = 0;
+    for (int i = app->object_count - 1; i >= 0; i--) {
+        const DesktopObject *object = &app->objects[i];
+        if (object->taskbar || object->rect.width < app->tile_size ||
+            object->rect.y - app->tile_size < app->bounds.y ||
+            !object_on_monitor(app, object))
+            continue;
+        match_count++;
+    }
+    if (match_count == 0) return NULL;
+
+    int selected_rank = app->ordinal % match_count;
+    int rank = 0;
+    for (int i = app->object_count - 1; i >= 0; i--) {
+        const DesktopObject *object = &app->objects[i];
+        if (object->taskbar || object->rect.width < app->tile_size ||
+            object->rect.y - app->tile_size < app->bounds.y ||
+            !object_on_monitor(app, object))
+            continue;
+        if (rank++ == selected_rank) return object;
+    }
+    return NULL;
+}
+
+static void configure_initial_spawn(App *app) {
+    int floor_y = floor_pos_y(app);
+    int base_x = spawn_slot_center_x(app);
+    int base_y = floor_y;
+    gboolean clamp_to_bounds = TRUE;
+
+    if (app->spawn_on_window) {
+        const DesktopObject *object = select_spawn_window(app);
+        if (object) {
+            base_x = object->rect.x + (object->rect.width - app->tile_size) / 2;
+            base_y = object->rect.y - app->tile_size;
+        }
+    } else if (app->random_spawn) {
+        choose_random_spawn(app);
+        base_x = app->pos_x;
+        base_y = app->pos_y;
+        clamp_to_bounds = base_y >= app->bounds.y &&
+                          base_x >= app->bounds.x &&
+                          base_x <= app->bounds.x + app->bounds.width -
+                                    app->tile_size;
+    }
+
+    place_spawn_near(app, base_x, base_y, clamp_to_bounds);
+}
+
+static gboolean apps_overlap(const App *a, const App *b) {
+    GdkRectangle rect_a = sheep_rect_at(a, a->pos_x, a->pos_y);
+    GdkRectangle rect_b = sheep_rect_at(b, b->pos_x, b->pos_y);
+    return rects_overlap(&rect_a, &rect_b);
+}
+
+static void resolve_sheep_collisions(App *app) {
+    if (app->dragging || app->sibling_count <= 1) return;
+
+    for (int i = 0; i < app->sibling_count; i++) {
+        App *other = &app->siblings[i];
+        if (other == app || other->cleaned_up || other->tile_size <= 0) continue;
+        if (!apps_overlap(app, other)) continue;
+
+        GdkRectangle rect_a = sheep_rect_at(app, app->pos_x, app->pos_y);
+        GdkRectangle rect_b = sheep_rect_at(other, other->pos_x, other->pos_y);
+        int overlap_x = MIN(rect_a.x + rect_a.width, rect_b.x + rect_b.width) -
+                        MAX(rect_a.x, rect_b.x);
+        if (overlap_x <= 0) continue;
+
+        int move_dir = -1;
+        if (rect_a.x > rect_b.x) move_dir = 1;
+        else if (rect_a.x == rect_b.x && app->ordinal > other->ordinal) move_dir = 1;
+
+        app->pos_x = clamp_pos_x(app, app->pos_x + move_dir * (overlap_x + 1));
+        if (apps_overlap(app, other)) {
+            int right_of_other = clamp_pos_x(app, other->pos_x + app->tile_size + 1);
+            int left_of_other = clamp_pos_x(app, other->pos_x - app->tile_size - 1);
+            int right_gap = abs(right_of_other - app->pos_x);
+            int left_gap = abs(left_of_other - app->pos_x);
+            app->pos_x = left_gap <= right_gap ? left_of_other : right_of_other;
+        }
+
+        if (app->state.animation_id == ANIM_WALK) {
+            app->direction = app->pos_x < other->pos_x ? -1 : 1;
+            esheep_init(&app->state, 2);
+        } else if (is_airborne_animation(app->state.animation_id)) {
+            app->direction = app->pos_x < other->pos_x ? -1 : 1;
+        }
+    }
+}
+
+static gboolean child_tiles_use_parent_input(const App *app) {
+    return app != NULL;
+}
+
+static void cleanup_app(App *app) {
+    if (!app || app->cleaned_up) return;
+    if (app->tick_source_id != 0 &&
+        g_main_context_find_source_by_id(NULL, app->tick_source_id)) {
+        g_source_remove(app->tick_source_id);
+    }
+    app->tick_source_id = 0;
+    if (app->window) {
+        gtk_widget_destroy(app->window);
+        app->window = NULL;
+    }
+    app->xwindow = 0;
+    app->object_count = 0;
+    app->dragging = FALSE;
+    app->edge_dispatched = FALSE;
+    app->child_animation_id = 0;
+    app->child_frame_index = 0;
+    app->child_elapsed_ms = 0;
+    esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
+    app->cleaned_up = TRUE;
+}
+
 static gboolean has_horizontal_movement(const EsheepAnimation *anim) {
     /* Animations with authored horizontal movement should reverse based on
      * walk direction. Check if either start or end x pose is non-zero. */
@@ -299,23 +531,6 @@ static void keep_walk_inside_bounds(App *app) {
         nudge_walk_inside_bounds(app);
         esheep_init(&app->state, 2);
     }
-}
-
-static void prepare_edge_walk(App *app) {
-    if (app->state.animation_id != ANIM_WALK) return;
-    const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
-    int dx = horizontal_delta(app, walk, pose_delta(app, walk, 0, TRUE));
-    gboolean at_left = app->pos_x <= app->bounds.x;
-    gboolean at_right = app->pos_x + app->tile_size >=
-                        app->bounds.x + app->bounds.width;
-    if ((!at_left || dx >= 0) && (!at_right || dx <= 0)) return;
-
-    /* Preserve the authored small chance of climbing a screen edge. If it
-     * does not select climbing, turn before advancing another walk frame. */
-    if (esheep_border_event(&app->state, "vertical", rand() % 100)) return;
-    app->direction = -app->direction;
-    nudge_walk_inside_bounds(app);
-    esheep_init(&app->state, 2);
 }
 
 static gboolean sprite_is_flipped(const App *app, const EsheepAnimation *anim) {
@@ -451,20 +666,9 @@ static void refresh_objects(App *app) {
     if (stacking) XFree(stacking);
 }
 
-static gboolean is_airborne_animation(int animation_id);
 static void build_context(App *app, EsheepContext *ctx) {
     memset(ctx, 0, sizeof(*ctx));
-    /* Initialize surface objects from the app's desktop objects array */
-    static EsheepSurfaceObject surface_objects[MAX_OBJECTS];
-    for (int i = 0; i < app->object_count; i++) {
-        const DesktopObject *src = &app->objects[i];
-        surface_objects[i].x = src->rect.x;
-        surface_objects[i].y = src->rect.y;
-        surface_objects[i].width = src->rect.width;
-        surface_objects[i].height = src->rect.height;
-        surface_objects[i].stack_order = src->stack_order;
-        surface_objects[i].taskbar = src->taskbar;
-    }
+    sync_surface_objects(app);
     ctx->pos_x = app->pos_x;
     ctx->pos_y = app->pos_y;
     ctx->image_width = app->tile_size;
@@ -474,7 +678,7 @@ static void build_context(App *app, EsheepContext *ctx) {
     ctx->bounds_width = app->bounds.width;
     ctx->bounds_height = app->bounds.height;
     ctx->object_count = app->object_count;
-    ctx->objects = surface_objects;
+    ctx->objects = app->surfaces;
     ctx->window_landing_enabled = app->window_landing;
     ctx->landing_allowed = TRUE;
     if (app->state.animation_id == ANIM_WALK ||
@@ -499,19 +703,6 @@ static const char *object_underfoot(const App *app) {
             best = object;
     }
     return best ? (best->taskbar ? "taskbar" : "window") : NULL;
-}
-
-static void snap_to_surface(App *app) {
-    int bottom = app->pos_y + app->tile_size;
-    for (int i = 0; i < app->object_count; i++) {
-        const DesktopObject *object = &app->objects[i];
-        if (abs(bottom - object->rect.y) <= 2 &&
-            rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
-                            object->rect.width)) {
-            app->pos_y = object->rect.y - app->tile_size;
-            return;
-        }
-    }
 }
 
 static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
@@ -607,12 +798,6 @@ static int pose_offset_y(const EsheepAnimation *anim, int frame_index) {
                  (progress >= 0.5 ? 0.5 : -0.5));
 }
 
-static double pose_opacity(const EsheepAnimation *anim, int frame_index) {
-    double progress = pose_progress(anim, frame_index);
-    return anim->start.opacity +
-           (anim->end.opacity - anim->start.opacity) * progress;
-}
-
 static gboolean is_airborne_animation(int animation_id) {
     switch (animation_id) {
     case 5: case 6: case 9: case 10:
@@ -629,6 +814,7 @@ static gboolean is_landing_animation(int animation_id) {
 }
 
 static void set_sprite_input_region(App *app) {
+    if (!child_tiles_use_parent_input(app)) return;
     GdkWindow *window = gtk_widget_get_window(app->window);
     if (!window) return;
 
@@ -675,7 +861,6 @@ static void set_sprite_input_region(App *app) {
  * to the monitor bounds. Returns the surface context hit by the step. */
 static const char *step_position(App *app, const EsheepAnimation *anim,
                                  int frame_index) {
-    int old_y = app->pos_y;
     int dx = pose_delta(app, anim, frame_index, TRUE);
     int dy = pose_delta(app, anim, frame_index, FALSE);
     app->pos_x += dx;
@@ -687,16 +872,7 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
         /* Use the platform-independent context helper to detect
          * landing on a window or taskbar during a fall. */
         EsheepContext ctx;
-        EsheepSurfaceObject surface_objects[MAX_OBJECTS];
-        for (int i = 0; i < app->object_count; i++) {
-            const DesktopObject *src = &app->objects[i];
-            surface_objects[i].x = src->rect.x;
-            surface_objects[i].y = src->rect.y;
-            surface_objects[i].width = src->rect.width;
-            surface_objects[i].height = src->rect.height;
-            surface_objects[i].stack_order = src->stack_order;
-            surface_objects[i].taskbar = src->taskbar;
-        }
+        sync_surface_objects(app);
         memset(&ctx, 0, sizeof(ctx));
         ctx.pos_x = app->pos_x;
         ctx.pos_y = app->pos_y;
@@ -707,7 +883,7 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
         ctx.bounds_width = app->bounds.width;
         ctx.bounds_height = app->bounds.height;
         ctx.object_count = app->object_count;
-        ctx.objects = surface_objects;
+        ctx.objects = app->surfaces;
         ctx.window_landing_enabled = app->window_landing;
         ctx.move = ESHEEP_MOVE_FALLING;
         esheep_classify_context(&ctx);
@@ -746,35 +922,6 @@ static const EsheepChild* find_child_for_animation(int parent_anim_id) {
         }
     }
     return NULL;
-}
-
-static void draw_current_tile(cairo_t *cr, App *app) {
-    const EsheepAnimation *anim = &esheep_animations[app->state.animation_id - 1];
-    int tile = esheep_current_tile(&app->state);
-    int tile_size = gdk_pixbuf_get_width(app->sheet) / esheep_tiles_x;
-    int sx = (tile % esheep_tiles_x) * tile_size;
-    int sy = (tile / esheep_tiles_x) * tile_size;
-
-    cairo_save(cr);
-    /* This is a transparent toplevel that moves frequently.  CLEAR removes
-     * both the pixel data and its alpha from the complete invalidated area,
-     * including pixels left behind by the previous frame. */
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-    cairo_paint(cr);
-    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
-    int offset_y = pose_offset_y(anim, app->state.frame_index);
-    gboolean flipped = sprite_is_flipped(app, anim);
-    cairo_translate(cr, flipped ? tile_size : 0, offset_y);
-    cairo_scale(cr, flipped ? -1 : 1, 1);
-
-    GdkPixbuf *subtile = gdk_pixbuf_new_subpixbuf(app->sheet, sx, sy, tile_size, tile_size);
-    gdk_cairo_set_source_pixbuf(cr, subtile, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-    cairo_paint_with_alpha(cr, pose_opacity(anim, app->state.frame_index));
-    g_object_unref(subtile);
-
-    cairo_restore(cr);
 }
 
 static void draw_scene_tile(cairo_t *cr, App *app, const EsheepRenderTile *tile) {
@@ -1035,6 +1182,8 @@ static gboolean on_tick(gpointer user_data) {
         }
     }
 
+    resolve_sheep_collisions(app);
+
     /* A completed turn can leave the sprite on the same boundary for one
      * more tick. Make the next walk direction agree with the actual pose
      * delta so it cannot repeatedly turn into the same edge. */
@@ -1134,6 +1283,7 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     G_GNUC_END_IGNORE_DEPRECATIONS
     gtk_window_set_default_size(GTK_WINDOW(window), app->tile_size, app->tile_size);
     gtk_widget_set_size_request(window, app->tile_size, app->tile_size);
+    esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
     gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
     gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
@@ -1155,30 +1305,6 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     g_signal_connect(window, "button-release-event", G_CALLBACK(on_button_release), app);
     g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_motion), app);
     gtk_widget_show_all(window);
-
-    GtkWidget *child_window = gtk_window_new(GTK_WINDOW_POPUP);
-    app->child_window = child_window;
-    if (visual && gdk_screen_is_composited(screen))
-        gtk_widget_set_visual(child_window, visual);
-    gtk_widget_set_app_paintable(child_window, TRUE);
-    gtk_window_set_default_size(GTK_WINDOW(child_window), app->tile_size, app->tile_size);
-    gtk_widget_set_size_request(child_window, app->tile_size, app->tile_size);
-    gtk_window_set_resizable(GTK_WINDOW(child_window), FALSE);
-    gtk_window_set_decorated(GTK_WINDOW(child_window), FALSE);
-    gtk_window_set_keep_above(GTK_WINDOW(child_window), TRUE);
-    gtk_window_set_transient_for(GTK_WINDOW(child_window), GTK_WINDOW(window));
-    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(child_window), TRUE);
-    gtk_window_set_skip_pager_hint(GTK_WINDOW(child_window), TRUE);
-    gtk_window_stick(GTK_WINDOW(child_window));
-    g_signal_connect(child_window, "draw", G_CALLBACK(on_child_draw), app);
-    gtk_widget_show(child_window);
-    GdkWindow *child_gdk_window = gtk_widget_get_window(child_window);
-    if (child_gdk_window) {
-        cairo_region_t *empty = cairo_region_create();
-        gdk_window_input_shape_combine_region(child_gdk_window, empty, 0, 0);
-        cairo_region_destroy(empty);
-    }
-    gtk_widget_hide(child_window);
 
     if (GDK_IS_X11_DISPLAY(display))
         app->xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
@@ -1361,6 +1487,7 @@ int main(int argc, char **argv) {
             exclude_conky = g_key_file_get_boolean(config, "esheep",
                                                     "exclude_conky", NULL);
     }
+    count = clamp_sheep_count(count);
 
     const char *character = character_override ? character_override :
                             getenv("ESHEEP_CHARACTER");
@@ -1427,6 +1554,7 @@ int main(int argc, char **argv) {
         app->random_spawn = spawn_override ?
                            strcasecmp(spawn_override, "random") == 0 :
                            env_equals("ESHEEP_SPAWN", "random");
+        app->ordinal = (int)i;
         app->siblings = sheep;
         app->sibling_count = (int)count;
         esheep_init(&app->state, ANIM_WALK);
@@ -1437,36 +1565,17 @@ int main(int argc, char **argv) {
             esheep_init(&app->state, review_parent);
         else if (review_animation > 0)
             esheep_init(&app->state, review_animation);
-        if (!app->random_spawn && !app->spawn_on_window && count > 1) {
-            int offset = (int)i * app->tile_size * 2;
-            int max_x = app->bounds.x + app->bounds.width - app->tile_size;
-            app->pos_x = app->bounds.x + app->bounds.width / 2 + offset;
-            if (app->pos_x > max_x) app->pos_x = max_x;
-            gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
-        }
     }
 
     for (guint i = 0; i < count; i++) {
         App *app = &sheep[i];
         if (GDK_IS_X11_DISPLAY(display)) {
             refresh_objects(app);
-            if (app->spawn_on_window) {
-                for (int j = app->object_count - 1; j >= 0; j--) {
-                    DesktopObject *object = &app->objects[j];
-                    if (object->taskbar || object->rect.width < app->tile_size ||
-                        object->rect.y - app->tile_size < app->bounds.y) continue;
-                    app->pos_x = object->rect.x +
-                                (object->rect.width - app->tile_size) / 2;
-                    app->pos_y = object->rect.y - app->tile_size;
-                    break;
-                }
-            } else if (app->random_spawn) {
-                choose_random_spawn(app);
-            }
-            gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
         }
+        configure_initial_spawn(app);
+        gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
         set_sprite_input_region(app);
-        g_timeout_add(app->tick_ms, on_tick, app);
+        app->tick_source_id = g_timeout_add(app->tick_ms, on_tick, app);
     }
 
     const char *autoquit = getenv("ESHEEP_AUTOQUIT_MS");
@@ -1475,6 +1584,9 @@ int main(int argc, char **argv) {
     }
 
     gtk_main();
+
+    for (guint i = 0; i < count; i++)
+        cleanup_app(&sheep[i]);
 
     g_free(config_character);
     g_free(config_sprite);

@@ -26,6 +26,10 @@ test-runtime:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_runtime tests/test_runtime.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_runtime
 
+test-multisheep:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c $(GTK_LIBS) $(X11_LIBS)
+	/tmp/esheep_test_multisheep
+
 test-gui: esheep
 	command -v xvfb-run >/dev/null
 	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --no-window-landing
@@ -48,14 +52,14 @@ test-context:
 	/tmp/esheep_test_context
 
 
-test: test-renderer test-actor test-interpreter test-runtime test-context test-animation-data test-assets test-child-animations test-gui
+test: test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui
 
-esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c
-	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c src/context.c $(GTK_LIBS) $(X11_LIBS)
+esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c
+	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c $(GTK_LIBS) $(X11_LIBS)
 
-install: src/main.c src/interpreter.c src/animations_data.c src/context.c
+install: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
-		-o /tmp/esheep-install-build src/main.c src/interpreter.c src/animations_data.c src/context.c $(GTK_LIBS) $(X11_LIBS)
+		-o /tmp/esheep-install-build src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c $(GTK_LIBS) $(X11_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
 	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
 	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
@@ -71,6 +75,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-renderer test-actor test-interpreter test-runtime test-context test-animation-data test-assets test-gui esheep install uninstall clean
+.PHONY: all test test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-gui esheep install uninstall clean
 clean:
-	rm -f esheep /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep-install-build
+	rm -f esheep /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_multisheep /tmp/esheep-install-build
