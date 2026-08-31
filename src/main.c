@@ -13,6 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "interpreter.h"
+#include "renderer.h"
 
 #define TICK_MS 33
 #define ESHEEP_VERSION "0.1.0"
@@ -37,7 +38,7 @@ typedef struct App App;
 
 struct App {
     GtkWidget *window;
-    GtkWidget *child_window;
+    EsheepRenderer scene; /* composited parent + children */
     GdkPixbuf *sheet;
     EsheepState state;
     int tile_size;
@@ -720,39 +721,37 @@ static void draw_current_tile(cairo_t *cr, App *app) {
     cairo_restore(cr);
 }
 
-static void draw_child_tile(cairo_t *cr, App *app) {
-    if (app->child_animation_id <= 0 ||
-        app->child_animation_id > esheep_animation_count)
-        return;
-
-    const EsheepAnimation *anim =
-        &esheep_animations[app->child_animation_id - 1];
-    int tile_size = gdk_pixbuf_get_width(app->sheet) / esheep_tiles_x;
-    int tile = anim->frames[app->child_frame_index];
-    int sx = (tile % esheep_tiles_x) * tile_size;
-    int sy = (tile / esheep_tiles_x) * tile_size;
-
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-    cairo_paint(cr);
-    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
+static void draw_scene_tile(cairo_t *cr, App *app, const EsheepRenderTile *tile) {
+    cairo_save(cr);
+    cairo_translate(cr, tile->x, tile->y);
+    if (tile->flipped) {
+        cairo_translate(cr, tile->width, 0);
+        cairo_scale(cr, -1, 1);
+    }
+    int sx = (tile->tile_id % esheep_tiles_x) * tile->width;
+    int sy = (tile->tile_id / esheep_tiles_x) * tile->height;
     GdkPixbuf *subtile = gdk_pixbuf_new_subpixbuf(app->sheet, sx, sy,
-                                                   tile_size, tile_size);
+                                                  tile->width, tile->height);
     gdk_cairo_set_source_pixbuf(cr, subtile, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-    cairo_paint_with_alpha(cr, pose_opacity(anim, app->child_frame_index));
+    cairo_paint_with_alpha(cr, tile->opacity);
     g_object_unref(subtile);
+    cairo_restore(cr);
 }
 
 static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
     (void)widget;
-    draw_current_tile(cr, (App *)user_data);
-    return FALSE;
-}
-
-static gboolean on_child_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    (void)widget;
-    draw_child_tile(cr, (App *)user_data);
+    App *app = user_data;
+    /* CLEAR the whole frame once, then draw parent first and every visible
+     * child on top so no stale child pixels or opaque backgrounds remain. */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    for (int i = 0; i < app->scene.count; i++) {
+        const EsheepRenderTile *tile = &app->scene.tiles[i];
+        if (!tile->visible) continue;
+        draw_scene_tile(cr, app, tile);
+    }
     return FALSE;
 }
 
@@ -766,34 +765,54 @@ static int frame_interval(const EsheepAnimation *anim, int frame_index) {
 }
 
 static void update_child_animation(App *app) {
-    /* Check if current animation has a child record. If transitioning to a new
-     * animation with a child, activate it. If the child is already active and
-     * the parent animation changed to something without a child, deactivate it. */
-    const EsheepChild *child_record = find_child_for_animation(app->state.animation_id);
+    /* Build the composed scene into app->scene. Parent tile 0 is drawn first;
+     * the child slot uses the authored child record offset. No child window
+     * is created -- the scene is rendered in the parent draw path. */
+    const EsheepChild *child_record =
+        find_child_for_animation(app->state.animation_id);
+    int child_tile_ids[ESHEEP_RENDER_MAX_CHILDREN];
+    int child_x[ESHEEP_RENDER_MAX_CHILDREN];
+    int child_y[ESHEEP_RENDER_MAX_CHILDREN];
+    int child_flipped[ESHEEP_RENDER_MAX_CHILDREN];
+    double child_opacity[ESHEEP_RENDER_MAX_CHILDREN];
+    bool child_visible[ESHEEP_RENDER_MAX_CHILDREN];
+    int child_count = 0;
+
     if (child_record && child_record->next > 0) {
-        /* Parent animation has a child. Activate if not already. */
-        if (app->child_animation_id != child_record->next) {
-            app->child_animation_id = child_record->next;
-            app->child_frame_index = 0;
-            app->child_elapsed_ms = 0;
+        int cid = child_record->next;
+        if (cid >= 1 && cid <= esheep_animation_count) {
+            const EsheepAnimation *canim = &esheep_animations[cid - 1];
+            app->child_animation_id = cid;
+            int frame = app->child_frame_index;
+            if (frame < 0 || frame >= canim->frame_count) frame = 0;
+            child_tile_ids[0] = canim->frames[frame];
+            child_x[0] = eval_child_expression(child_record->x,
+                                               app->bounds.width,
+                                               app->bounds.height,
+                                               app->tile_size, app->tile_size,
+                                               app->pos_x, app->pos_y, 0);
+            child_y[0] = eval_child_expression(child_record->y,
+                                               app->bounds.width,
+                                               app->bounds.height,
+                                               app->tile_size, app->tile_size,
+                                               app->pos_x, app->pos_y, 0);
+            child_flipped[0] = 0;
+            child_opacity[0] = 1.0;
+            child_visible[0] = true;
+            child_count = 1;
         }
-        int offset_x = eval_child_expression(child_record->x, app->bounds.width,
-                                             app->bounds.height, app->tile_size,
-                                             app->tile_size, app->pos_x, app->pos_y, 0);
-        int offset_y = eval_child_expression(child_record->y, app->bounds.width,
-                                             app->bounds.height, app->tile_size,
-                                             app->tile_size, app->pos_x, app->pos_y, 0);
-        gtk_window_move(GTK_WINDOW(app->child_window), offset_x, offset_y);
-        gtk_widget_show(app->child_window);
-        gdk_window_raise(gtk_widget_get_window(app->child_window));
-        gtk_widget_queue_draw(app->child_window);
-    } else {
-        /* Parent animation has no child. Deactivate if active. */
+    } else if (app->child_animation_id > 0) {
         app->child_animation_id = 0;
         app->child_frame_index = 0;
         app->child_elapsed_ms = 0;
-        gtk_widget_hide(app->child_window);
     }
+
+    esheep_renderer_compose(&app->scene,
+        esheep_current_tile(&app->state),
+        0, 1.0, true,
+        child_count,
+        child_tile_ids, child_x, child_y,
+        child_flipped, child_opacity, child_visible);
 }
 
 static void advance_child_animation(App *app, int dt_ms) {
