@@ -12,6 +12,7 @@
 #include <strings.h>
 #include <time.h>
 #include <unistd.h>
+#include "context.h"
 #include "interpreter.h"
 #include "renderer.h"
 
@@ -56,6 +57,7 @@ struct App {
     gboolean random_spawn;
     int climb_target_y;
     int direction; /* -1 = left, +1 = right */
+    bool edge_dispatched;
     App *siblings;
     int sibling_count;
     int child_animation_id;  /* active child animation id, or 0 if none */
@@ -449,6 +451,42 @@ static void refresh_objects(App *app) {
     if (stacking) XFree(stacking);
 }
 
+static gboolean is_airborne_animation(int animation_id);
+static void build_context(App *app, EsheepContext *ctx) {
+    memset(ctx, 0, sizeof(*ctx));
+    /* Initialize surface objects from the app's desktop objects array */
+    static EsheepSurfaceObject surface_objects[MAX_OBJECTS];
+    for (int i = 0; i < app->object_count; i++) {
+        const DesktopObject *src = &app->objects[i];
+        surface_objects[i].x = src->rect.x;
+        surface_objects[i].y = src->rect.y;
+        surface_objects[i].width = src->rect.width;
+        surface_objects[i].height = src->rect.height;
+        surface_objects[i].stack_order = src->stack_order;
+        surface_objects[i].taskbar = src->taskbar;
+    }
+    ctx->pos_x = app->pos_x;
+    ctx->pos_y = app->pos_y;
+    ctx->image_width = app->tile_size;
+    ctx->image_height = app->tile_size;
+    ctx->bounds_x = app->bounds.x;
+    ctx->bounds_y = app->bounds.y;
+    ctx->bounds_width = app->bounds.width;
+    ctx->bounds_height = app->bounds.height;
+    ctx->object_count = app->object_count;
+    ctx->objects = surface_objects;
+    ctx->window_landing_enabled = app->window_landing;
+    ctx->landing_allowed = TRUE;
+    if (app->state.animation_id == ANIM_WALK ||
+        is_airborne_animation(app->state.animation_id)) {
+        ctx->move = ESHEEP_MOVE_FALLING; /* treat airborne as falling for context */
+    } else if (app->state.animation_id == 37) {
+        ctx->move = ESHEEP_MOVE_CLIMBING;
+    } else {
+        ctx->move = ESHEEP_MOVE_WALKING;
+    }
+}
+
 static const char *object_underfoot(const App *app) {
     int bottom = app->pos_y + app->tile_size;
     const DesktopObject *best = NULL;
@@ -646,20 +684,38 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
     const char *context = "none";
     gboolean hit_floor = FALSE;
     if (dy > 0) {
-        int old_bottom = old_y + app->tile_size;
-        int new_bottom = app->pos_y + app->tile_size;
-        const DesktopObject *best = NULL;
+        /* Use the platform-independent context helper to detect
+         * landing on a window or taskbar during a fall. */
+        EsheepContext ctx;
+        EsheepSurfaceObject surface_objects[MAX_OBJECTS];
         for (int i = 0; i < app->object_count; i++) {
-            const DesktopObject *object = &app->objects[i];
-            if (old_bottom <= object->rect.y && new_bottom >= object->rect.y &&
-                rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
-                                object->rect.width) &&
-                (!best || object->stack_order > best->stack_order))
-                best = object;
+            const DesktopObject *src = &app->objects[i];
+            surface_objects[i].x = src->rect.x;
+            surface_objects[i].y = src->rect.y;
+            surface_objects[i].width = src->rect.width;
+            surface_objects[i].height = src->rect.height;
+            surface_objects[i].stack_order = src->stack_order;
+            surface_objects[i].taskbar = src->taskbar;
         }
-        if (best) {
-            app->pos_y = best->rect.y - app->tile_size;
-            context = best->taskbar ? "taskbar" : "window";
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.pos_x = app->pos_x;
+        ctx.pos_y = app->pos_y;
+        ctx.image_width = app->tile_size;
+        ctx.image_height = app->tile_size;
+        ctx.bounds_x = app->bounds.x;
+        ctx.bounds_y = app->bounds.y;
+        ctx.bounds_width = app->bounds.width;
+        ctx.bounds_height = app->bounds.height;
+        ctx.object_count = app->object_count;
+        ctx.objects = surface_objects;
+        ctx.window_landing_enabled = app->window_landing;
+        ctx.move = ESHEEP_MOVE_FALLING;
+        esheep_classify_context(&ctx);
+
+        if (ctx.surface == ESHEEP_SURFACE_WINDOW ||
+            ctx.surface == ESHEEP_SURFACE_TASKBAR) {
+            app->pos_y = ctx.surface_y - app->tile_size;
+            context = ctx.surface == ESHEEP_SURFACE_WINDOW ? "window" : "taskbar";
         }
     }
 
@@ -855,30 +911,70 @@ static gboolean on_tick(gpointer user_data) {
 
     update_monitor_bounds(app);
     refresh_objects(app);
+
+    /* Build context and classify surfaces using the platform-independent helper */
+    EsheepContext ctx;
+    build_context(app, &ctx);
+    esheep_classify_context(&ctx);
+
+    /* Apply landing: if falling and found a surface, land on it */
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-    const char *surface = object_underfoot(app);
-    if (surface) snap_to_surface(app);
+    if (ctx.move == ESHEEP_MOVE_FALLING && ctx.surface != ESHEEP_SURFACE_FLOOR &&
+        ctx.surface != ESHEEP_SURFACE_LEFT_EDGE && ctx.surface != ESHEEP_SURFACE_RIGHT_EDGE) {
+        app->pos_y = ctx.surface_y - app->tile_size;
+    } else if (ctx.move == ESHEEP_MOVE_FALLING && ctx.surface == ESHEEP_SURFACE_FLOOR) {
+        app->pos_y = floor_y;
+    }
+
     gboolean climbing = FALSE;
-    if (!surface && app->state.animation_id == ANIM_WALK)
+    if (!climbing && app->state.animation_id == ANIM_WALK)
         climbing = start_window_climb(app, &esheep_animations[ANIM_WALK - 1]);
-    if (!surface && !climbing) prepare_edge_walk(app);
-    if (!surface && !climbing && !is_airborne_animation(app->state.animation_id) &&
+
+    /* Handle edge transitions: only trigger once per edge encounter */
+    if (!climbing) {
+        if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE ||
+            ctx.surface == ESHEEP_SURFACE_RIGHT_EDGE) {
+            int next_dir = app->direction;
+            if (esheep_authored_edge_reversal(&ctx, &next_dir, &app->edge_dispatched)) {
+                app->direction = next_dir;
+                /* Nudge inside bounds to avoid repeated edge hits */
+                if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE && app->pos_x < app->bounds.x)
+                    app->pos_x = app->bounds.x;
+                if (ctx.surface == ESHEEP_SURFACE_RIGHT_EDGE) {
+                    int right = app->bounds.x + app->bounds.width - app->tile_size;
+                    if (app->pos_x > right) app->pos_x = right;
+                }
+                /* Transition to edge turn animation (animation 2) */
+                esheep_init(&app->state, 2);
+            }
+        }
+    }
+
+    if (!climbing && ctx.move != ESHEEP_MOVE_FALLING &&
+        !is_airborne_animation(app->state.animation_id) &&
         app->pos_y < floor_y &&
         app->state.animation_id != ANIM_FALL) {
         esheep_gravity_event(&app->state, "none", rand() % 100);
         if (app->state.animation_id != ANIM_FALL)
             esheep_init(&app->state, ANIM_FALL);
     }
+
     /* Movement/collision context is decided by the CURRENT position, before
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
      * direction the current animation is trying to move. */
-    const char *pretick_context = surface;
-    if (!pretick_context &&
-        (app->pos_x <= app->bounds.x ||
-         app->pos_x + app->tile_size >= app->bounds.x + app->bounds.width))
+    const char *pretick_context = "none";
+    if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE || ctx.surface == ESHEEP_SURFACE_RIGHT_EDGE)
         pretick_context = "vertical";
-    if (!pretick_context) pretick_context = "none";
+    else if (ctx.surface == ESHEEP_SURFACE_WINDOW || ctx.surface == ESHEEP_SURFACE_TASKBAR)
+        pretick_context = ctx.surface == ESHEEP_SURFACE_WINDOW ? "window" : "taskbar";
+
+    /* Reset edge dispatch flag when no longer at the edge so the next edge
+     * encounter can trigger a fresh reversal. */
+    if (ctx.surface != ESHEEP_SURFACE_LEFT_EDGE &&
+        ctx.surface != ESHEEP_SURFACE_RIGHT_EDGE) {
+        app->edge_dispatched = FALSE;
+    }
 
     int roll = rand() % 100;
     gboolean stepped = esheep_tick(&app->state, (int)app->tick_ms,

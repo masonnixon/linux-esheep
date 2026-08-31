@@ -43,14 +43,19 @@ test-animation-data:
 test-child-animations:
 	python3 tests/test_child_animations.py
 
-test: test-renderer test-actor test-interpreter test-runtime test-animation-data test-assets test-child-animations test-gui
+test-context:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
+	/tmp/esheep_test_context
 
-esheep: src/main.c src/interpreter.c src/animations_data.c
-	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c $(GTK_LIBS) $(X11_LIBS)
 
-install: src/main.c src/interpreter.c src/animations_data.c
+test: test-renderer test-actor test-interpreter test-runtime test-context test-animation-data test-assets test-child-animations test-gui
+
+esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c
+	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c src/context.c $(GTK_LIBS) $(X11_LIBS)
+
+install: src/main.c src/interpreter.c src/animations_data.c src/context.c
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
-		-o /tmp/esheep-install-build src/main.c src/interpreter.c src/animations_data.c $(GTK_LIBS) $(X11_LIBS)
+		-o /tmp/esheep-install-build src/main.c src/interpreter.c src/animations_data.c src/context.c $(GTK_LIBS) $(X11_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
 	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
 	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
@@ -66,6 +71,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-renderer test-actor test-interpreter test-runtime test-animation-data test-assets test-gui esheep install uninstall clean
+.PHONY: all test test-renderer test-actor test-interpreter test-runtime test-context test-animation-data test-assets test-gui esheep install uninstall clean
 clean:
 	rm -f esheep /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep-install-build
