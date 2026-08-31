@@ -26,6 +26,10 @@ test-runtime:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_runtime tests/test_runtime.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_runtime
 
+test-desktop:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c $(GTK_LIBS) $(X11_LIBS)
+	/tmp/esheep_test_desktop
+
 test-multisheep:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c $(GTK_LIBS) $(X11_LIBS)
 	/tmp/esheep_test_multisheep
@@ -52,7 +56,7 @@ test-context:
 	/tmp/esheep_test_context
 
 
-test: test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui
+test: test-desktop test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui
 
 esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c $(GTK_LIBS) $(X11_LIBS)
@@ -75,6 +79,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-gui esheep install uninstall clean
+.PHONY: all test test-desktop test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-gui esheep install uninstall clean
 clean:
-	rm -f esheep /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_multisheep /tmp/esheep-install-build
+	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_multisheep /tmp/esheep-install-build

@@ -35,6 +35,27 @@ typedef struct {
     int stack_order;
 } DesktopObject;
 
+typedef enum {
+    DESKTOP_BACKEND_X11 = 0,
+    DESKTOP_BACKEND_X11_FALLBACK,
+    DESKTOP_BACKEND_WAYLAND_UNSUPPORTED,
+    DESKTOP_BACKEND_OTHER_UNSUPPORTED
+} DesktopBackendMode;
+
+typedef struct {
+    DesktopBackendMode mode;
+    gboolean should_force_x11_backend;
+    gboolean can_position_globally;
+    gboolean can_query_desktop_surfaces;
+} DesktopBackendCapabilities;
+
+typedef struct {
+    gboolean desktop_surface;
+    gboolean panel_surface;
+    gboolean fullscreen_surface;
+    gboolean conky_surface;
+} DesktopSurfaceTraits;
+
 typedef struct App App;
 
 struct App {
@@ -88,6 +109,231 @@ static guint env_uint(const char *name, guint fallback, guint minimum, guint max
 static gboolean env_equals(const char *name, const char *expected) {
     const char *value = getenv(name);
     return value && strcasecmp(value, expected) == 0;
+}
+
+static int eval_child_expression(const char *expr, int area_width, int area_height,
+                                 int image_width, int image_height, int image_x, int image_y,
+                                 int roll_0_99);
+static int floor_pos_y(const App *app);
+
+static int monitor_right(const GdkRectangle *monitor) {
+    return monitor->x + monitor->width;
+}
+
+static int monitor_bottom(const GdkRectangle *monitor) {
+    return monitor->y + monitor->height;
+}
+
+static int monitor_global_x(const GdkRectangle *monitor, int local_x) {
+    return monitor->x + local_x;
+}
+
+static int monitor_global_y(const GdkRectangle *monitor, int local_y) {
+    return monitor->y + local_y;
+}
+
+static gboolean monitor_contains_global_point(const GdkRectangle *monitor,
+                                              int x, int y) {
+    return x >= monitor->x && x < monitor_right(monitor) &&
+           y >= monitor->y && y < monitor_bottom(monitor);
+}
+
+static gboolean rect_overlaps_monitor(const GdkRectangle *monitor,
+                                      const GdkRectangle *rect) {
+    return rect->x < monitor_right(monitor) &&
+           rect->x + rect->width > monitor->x &&
+           rect->y < monitor_bottom(monitor) &&
+           rect->y + rect->height > monitor->y;
+}
+
+static int monitor_axis_gap(int point, int start, int end) {
+    if (point < start) return start - point;
+    if (point >= end) return point - (end - 1);
+    return 0;
+}
+
+static gint64 monitor_distance_sq(const GdkRectangle *monitor, int x, int y) {
+    gint64 dx = monitor_axis_gap(x, monitor->x, monitor_right(monitor));
+    gint64 dy = monitor_axis_gap(y, monitor->y, monitor_bottom(monitor));
+    return dx * dx + dy * dy;
+}
+
+static gboolean monitors_share_vertical_seam(const GdkRectangle *left,
+                                             const GdkRectangle *right) {
+    gboolean touching = monitor_right(left) == right->x ||
+                        monitor_right(right) == left->x;
+    return touching &&
+           left->y < monitor_bottom(right) &&
+           monitor_bottom(left) > right->y;
+}
+
+static gboolean monitors_overlap_vertically(const GdkRectangle *a,
+                                            const GdkRectangle *b) {
+    return a->y < monitor_bottom(b) && monitor_bottom(a) > b->y;
+}
+
+static gboolean seam_direction_matches(const GdkRectangle *current,
+                                       const GdkRectangle *candidate,
+                                       int direction) {
+    if (!current || direction == 0 ||
+        memcmp(current, candidate, sizeof(*current)) == 0 ||
+        !monitors_overlap_vertically(current, candidate))
+        return FALSE;
+    if (direction > 0)
+        return candidate->x >= current->x ||
+               monitors_share_vertical_seam(current, candidate);
+    return monitor_right(candidate) <= monitor_right(current) ||
+           monitors_share_vertical_seam(current, candidate);
+}
+
+static int select_monitor_index(const GdkRectangle *monitors, int monitor_count,
+                                const GdkRectangle *current, int x, int y,
+                                int direction) {
+    int best_index = -1;
+    gint64 best_distance = G_MAXINT64;
+
+    if (current && monitor_contains_global_point(current, x, y)) {
+        for (int i = 0; i < monitor_count; i++) {
+            if (memcmp(&monitors[i], current, sizeof(*current)) == 0)
+                return i;
+        }
+    }
+
+    for (int i = 0; i < monitor_count; i++) {
+        if (monitor_contains_global_point(&monitors[i], x, y))
+            return i;
+    }
+
+    for (int i = 0; i < monitor_count; i++) {
+        gint64 distance = monitor_distance_sq(&monitors[i], x, y);
+        if (best_index < 0 || distance < best_distance) {
+            best_index = i;
+            best_distance = distance;
+            continue;
+        }
+        if (distance > best_distance) continue;
+
+        if (current) {
+            gboolean best_matches =
+                seam_direction_matches(current, &monitors[best_index], direction);
+            gboolean candidate_matches =
+                seam_direction_matches(current, &monitors[i], direction);
+            if (candidate_matches != best_matches) {
+                if (candidate_matches) best_index = i;
+                continue;
+            }
+            if (memcmp(&monitors[best_index], current, sizeof(*current)) != 0 &&
+                memcmp(&monitors[i], current, sizeof(*current)) == 0) {
+                best_index = i;
+                continue;
+            }
+        }
+
+        if (monitors[i].x < monitors[best_index].x ||
+            (monitors[i].x == monitors[best_index].x &&
+             monitors[i].y < monitors[best_index].y))
+            best_index = i;
+    }
+    return best_index;
+}
+
+static gboolean select_monitor_workarea(GdkDisplay *display,
+                                        const GdkRectangle *current,
+                                        int x, int y, int direction,
+                                        GdkRectangle *out) {
+    int monitor_count = gdk_display_get_n_monitors(display);
+    GdkRectangle monitors[32];
+
+    if (!display || !out || monitor_count <= 0) return FALSE;
+    if (monitor_count > (int)G_N_ELEMENTS(monitors))
+        monitor_count = (int)G_N_ELEMENTS(monitors);
+
+    for (int i = 0; i < monitor_count; i++) {
+        GdkMonitor *monitor = gdk_display_get_monitor(display, i);
+        if (!monitor) return FALSE;
+        gdk_monitor_get_workarea(monitor, &monitors[i]);
+    }
+
+    int selected = select_monitor_index(monitors, monitor_count, current, x, y,
+                                        direction);
+    if (selected < 0) return FALSE;
+    *out = monitors[selected];
+    return TRUE;
+}
+
+
+/* Evaluate a child animation offset expression. Child positions are local
+ * to the parent's composited surface (a single tile_size x tile_size
+ * window), so the result is always returned in local coordinates -- the
+ * monitor origin is intentionally NOT applied here, even for expressions
+ * that look screen-relative (e.g. "areaH-imageH"). The "area" in those
+ * expressions is the local composited surface area, not the full monitor. */
+static int child_local_coordinate(const App *app, const char *expr,
+                                  int roll_0_99) {
+    return eval_child_expression(expr, app->bounds.width,
+                               app->bounds.height, app->tile_size,
+                               app->tile_size, app->pos_x, app->pos_y, roll_0_99);
+}
+
+static DesktopBackendCapabilities detect_backend_capabilities(
+    gboolean x11_fallback_requested, const char *wayland_display,
+    const char *x11_display, const char *gdk_backend, gboolean actual_x11) {
+    DesktopBackendCapabilities caps = {
+        .mode = DESKTOP_BACKEND_OTHER_UNSUPPORTED,
+        .should_force_x11_backend = FALSE,
+        .can_position_globally = FALSE,
+        .can_query_desktop_surfaces = FALSE,
+    };
+    gboolean wayland_session = wayland_display && wayland_display[0];
+    gboolean x11_available = x11_display && x11_display[0];
+    gboolean backend_pinned = gdk_backend && gdk_backend[0];
+
+    if (!actual_x11 && x11_fallback_requested && wayland_session &&
+        x11_available && !backend_pinned) {
+        caps.mode = DESKTOP_BACKEND_X11_FALLBACK;
+        caps.should_force_x11_backend = TRUE;
+        caps.can_position_globally = TRUE;
+        caps.can_query_desktop_surfaces = TRUE;
+        return caps;
+    }
+
+    if (actual_x11) {
+        caps.mode = wayland_session ? DESKTOP_BACKEND_X11_FALLBACK :
+                                      DESKTOP_BACKEND_X11;
+        caps.can_position_globally = TRUE;
+        caps.can_query_desktop_surfaces = TRUE;
+        return caps;
+    }
+
+    if (wayland_session) {
+        caps.mode = DESKTOP_BACKEND_WAYLAND_UNSUPPORTED;
+        return caps;
+    }
+
+    return caps;
+}
+
+static const char *backend_mode_name(DesktopBackendMode mode) {
+    switch (mode) {
+    case DESKTOP_BACKEND_X11:
+        return "x11";
+    case DESKTOP_BACKEND_X11_FALLBACK:
+        return "x11-fallback";
+    case DESKTOP_BACKEND_WAYLAND_UNSUPPORTED:
+        return "wayland-unsupported";
+    case DESKTOP_BACKEND_OTHER_UNSUPPORTED:
+    default:
+        return "unsupported";
+    }
+}
+
+static gboolean x11_surface_is_landing_candidate(
+    const DesktopSurfaceTraits *traits) {
+    return traits &&
+           !traits->desktop_surface &&
+           !traits->panel_surface &&
+           !traits->fullscreen_surface &&
+           !traits->conky_surface;
 }
 
 static guint clamp_sheep_count(guint requested) {
@@ -196,20 +442,28 @@ static void choose_random_spawn(App *app) {
     if (!selected) {
         /* Fallback if no spawns defined */
         app->direction = -1;
-        app->pos_x = app->bounds.x + app->bounds.width + 10;
-        app->pos_y = app->bounds.y + app->bounds.height - app->tile_size;
+        app->pos_x = monitor_global_x(&app->bounds, app->bounds.width + 10);
+        app->pos_y = floor_pos_y(app);
         esheep_init(&app->state, ANIM_WALK);
         return;
     }
 
     /* Evaluate spawn position expressions */
     int spawn_roll = rand() % 100;
-    app->pos_x = app->bounds.x + eval_spawn_expression(selected->x, app->bounds.width,
-                                                       app->bounds.height, app->tile_size,
-                                                       app->tile_size, spawn_roll);
-    app->pos_y = app->bounds.y + eval_spawn_expression(selected->y, app->bounds.width,
-                                                       app->bounds.height, app->tile_size,
-                                                       app->tile_size, spawn_roll);
+    app->pos_x = monitor_global_x(&app->bounds,
+                                  eval_spawn_expression(selected->x,
+                                                        app->bounds.width,
+                                                        app->bounds.height,
+                                                        app->tile_size,
+                                                        app->tile_size,
+                                                        spawn_roll));
+    app->pos_y = monitor_global_y(&app->bounds,
+                                  eval_spawn_expression(selected->y,
+                                                        app->bounds.width,
+                                                        app->bounds.height,
+                                                        app->tile_size,
+                                                        app->tile_size,
+                                                        spawn_roll));
 
     /* Set direction and animation based on spawn position */
     app->direction = app->pos_x < app->bounds.x + app->bounds.width / 2 ? 1 : -1;
@@ -240,12 +494,10 @@ static void update_monitor_bounds(App *app) {
     GdkDisplay *display = gtk_widget_get_display(app->window);
     int center_x = app->pos_x + app->tile_size / 2;
     int center_y = app->pos_y + app->tile_size / 2;
-    GdkMonitor *monitor = gdk_display_get_monitor_at_point(display, center_x,
-                                                             center_y);
-    if (!monitor) return;
-
     GdkRectangle workarea;
-    gdk_monitor_get_workarea(monitor, &workarea);
+    if (!select_monitor_workarea(display, &app->bounds, center_x, center_y,
+                                 app->direction, &workarea))
+        return;
     if (memcmp(&app->bounds, &workarea, sizeof(workarea)) != 0)
         app->bounds = workarea;
 }
@@ -267,31 +519,34 @@ static GdkRectangle sheep_rect_at(const App *app, int pos_x, int pos_y) {
 }
 
 static gboolean object_on_monitor(const App *app, const DesktopObject *object) {
-    GdkRectangle bounds = app->bounds;
-    return rects_overlap(&bounds, &object->rect);
+    return rect_overlaps_monitor(&app->bounds, &object->rect);
 }
 
 static int clamp_pos_x(const App *app, int pos_x) {
-    int right = app->bounds.x + app->bounds.width - app->tile_size;
+    int right = monitor_right(&app->bounds) - app->tile_size;
     if (pos_x < app->bounds.x) return app->bounds.x;
     if (pos_x > right) return right;
     return pos_x;
 }
 
 static int floor_pos_y(const App *app) {
-    return app->bounds.y + app->bounds.height - app->tile_size;
+    return monitor_bottom(&app->bounds) - app->tile_size;
 }
 
-static void sync_surface_objects(App *app) {
+static int sync_surface_objects(App *app) {
+    int surface_count = 0;
     for (int i = 0; i < app->object_count; i++) {
         const DesktopObject *src = &app->objects[i];
-        app->surfaces[i].x = src->rect.x;
-        app->surfaces[i].y = src->rect.y;
-        app->surfaces[i].width = src->rect.width;
-        app->surfaces[i].height = src->rect.height;
-        app->surfaces[i].stack_order = src->stack_order;
-        app->surfaces[i].taskbar = src->taskbar;
+        if (!object_on_monitor(app, src)) continue;
+        app->surfaces[surface_count].x = src->rect.x;
+        app->surfaces[surface_count].y = src->rect.y;
+        app->surfaces[surface_count].width = src->rect.width;
+        app->surfaces[surface_count].height = src->rect.height;
+        app->surfaces[surface_count].stack_order = src->stack_order;
+        app->surfaces[surface_count].taskbar = src->taskbar;
+        surface_count++;
     }
+    return surface_count;
 }
 
 static gboolean spawn_hits_object(const App *app, int pos_x, int pos_y) {
@@ -504,14 +759,14 @@ static int pose_delta(const App *app, const EsheepAnimation *anim,
 static void nudge_walk_inside_bounds(App *app) {
     app->pos_x += app->direction * 2;
     if (app->pos_x < app->bounds.x) app->pos_x = app->bounds.x;
-    int right = app->bounds.x + app->bounds.width - app->tile_size;
+    int right = monitor_right(&app->bounds) - app->tile_size;
     if (app->pos_x > right) app->pos_x = right;
 }
 
 static void keep_walk_inside_bounds(App *app) {
     gboolean at_left = app->pos_x <= app->bounds.x;
     gboolean at_right = app->pos_x + app->tile_size >=
-                        app->bounds.x + app->bounds.width;
+                        monitor_right(&app->bounds);
     if (app->state.animation_id == 38 && at_right) {
         /* A climb from the right reaches the top while top_walk still has
          * its authored positive delta. Descend at this edge instead of
@@ -562,6 +817,45 @@ static gboolean window_has_type(Display *display, Window window, Atom type_atom,
     return get_window_type(display, window, type_atom, &type) && type == wanted;
 }
 
+static gboolean window_atom_list_contains(Display *display, Window window,
+                                          Atom property_atom, Atom wanted) {
+    Atom actual_type;
+    int format;
+    unsigned long count, bytes_after;
+    unsigned char *data = NULL;
+    int result = XGetWindowProperty(display, window, property_atom, 0,
+                                    MAX_OBJECTS, False, XA_ATOM, &actual_type,
+                                    &format, &count, &bytes_after, &data);
+    if (result != Success || !data || format != 32) {
+        if (data) XFree(data);
+        return FALSE;
+    }
+
+    gboolean found = FALSE;
+    Atom *atoms = (Atom *)data;
+    for (unsigned long i = 0; i < count; i++) {
+        if (atoms[i] == wanted) {
+            found = TRUE;
+            break;
+        }
+    }
+    XFree(data);
+    return found;
+}
+
+static gboolean window_has_property(Display *display, Window window,
+                                    Atom property_atom) {
+    Atom actual_type;
+    int format;
+    unsigned long count, bytes_after;
+    unsigned char *data = NULL;
+    int result = XGetWindowProperty(display, window, property_atom, 0, 1,
+                                    False, AnyPropertyType, &actual_type,
+                                    &format, &count, &bytes_after, &data);
+    if (data) XFree(data);
+    return result == Success && actual_type != None && format != 0;
+}
+
 static gboolean is_conky_window(Display *display, Window window) {
     XClassHint class_hint = {0};
     gboolean is_conky = FALSE;
@@ -574,6 +868,25 @@ static gboolean is_conky_window(Display *display, Window window) {
         if (class_hint.res_class) XFree(class_hint.res_class);
     }
     return is_conky;
+}
+
+static DesktopSurfaceTraits inspect_x11_surface_traits(
+    Display *display, Window window, Atom window_type, Atom dock_type,
+    Atom desktop_type, Atom state_atom, Atom fullscreen_state, Atom strut_atom,
+    Atom strut_partial_atom, gboolean exclude_conky) {
+    DesktopSurfaceTraits traits = {0};
+
+    traits.desktop_surface =
+        window_has_type(display, window, window_type, desktop_type);
+    traits.panel_surface =
+        window_has_type(display, window, window_type, dock_type) ||
+        window_has_property(display, window, strut_atom) ||
+        window_has_property(display, window, strut_partial_atom);
+    traits.fullscreen_surface =
+        window_atom_list_contains(display, window, state_atom, fullscreen_state);
+    traits.conky_surface =
+        exclude_conky && is_conky_window(display, window);
+    return traits;
 }
 
 static int stacking_order(const Window *stacking, unsigned long count, Window window) {
@@ -594,6 +907,10 @@ static void refresh_objects(App *app) {
     Atom window_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
     Atom dock_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK", False);
     Atom desktop_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DESKTOP", False);
+    Atom state_atom = XInternAtom(display, "_NET_WM_STATE", False);
+    Atom fullscreen_state = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
+    Atom strut_atom = XInternAtom(display, "_NET_WM_STRUT", False);
+    Atom strut_partial_atom = XInternAtom(display, "_NET_WM_STRUT_PARTIAL", False);
     Atom client_list_stacking = XInternAtom(display, "_NET_CLIENT_LIST_STACKING", False);
     Atom actual_type;
     int format;
@@ -626,8 +943,11 @@ static void refresh_objects(App *app) {
              sibling++)
             own_window = windows[i] == app->siblings[sibling].xwindow;
         if (own_window) continue;
-        if (window_has_type(display, windows[i], window_type, desktop_type)) continue;
-        if (app->exclude_conky && is_conky_window(display, windows[i])) continue;
+        DesktopSurfaceTraits traits = inspect_x11_surface_traits(
+            display, windows[i], window_type, dock_type, desktop_type,
+            state_atom, fullscreen_state, strut_atom, strut_partial_atom,
+            app->exclude_conky);
+        if (!x11_surface_is_landing_candidate(&traits)) continue;
         XWindowAttributes attributes;
         if (!XGetWindowAttributes(display, windows[i], &attributes) ||
             attributes.map_state != IsViewable || attributes.class != InputOutput ||
@@ -653,13 +973,10 @@ static void refresh_objects(App *app) {
         if (!XTranslateCoordinates(display, geometry_window, root, 0, 0, &root_x,
                                    &root_y, &child)) continue;
 
-        Atom type;
-        gboolean is_taskbar = get_window_type(display, windows[i], window_type, &type) &&
-                              type == dock_type;
         DesktopObject *object = &app->objects[app->object_count++];
         object->rect = (GdkRectangle){ root_x, root_y, geometry.width,
                                        geometry.height };
-        object->taskbar = is_taskbar;
+        object->taskbar = FALSE;
         object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
     }
     XFree(windows);
@@ -668,7 +985,7 @@ static void refresh_objects(App *app) {
 
 static void build_context(App *app, EsheepContext *ctx) {
     memset(ctx, 0, sizeof(*ctx));
-    sync_surface_objects(app);
+    int surface_count = sync_surface_objects(app);
     ctx->pos_x = app->pos_x;
     ctx->pos_y = app->pos_y;
     ctx->image_width = app->tile_size;
@@ -677,7 +994,7 @@ static void build_context(App *app, EsheepContext *ctx) {
     ctx->bounds_y = app->bounds.y;
     ctx->bounds_width = app->bounds.width;
     ctx->bounds_height = app->bounds.height;
-    ctx->object_count = app->object_count;
+    ctx->object_count = surface_count;
     ctx->objects = app->surfaces;
     ctx->window_landing_enabled = app->window_landing;
     ctx->landing_allowed = TRUE;
@@ -696,6 +1013,7 @@ static const char *object_underfoot(const App *app) {
     const DesktopObject *best = NULL;
     for (int i = 0; i < app->object_count; i++) {
         const DesktopObject *object = &app->objects[i];
+        if (!object_on_monitor(app, object)) continue;
         if (abs(bottom - object->rect.y) <= 2 &&
             rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
                             object->rect.width) &&
@@ -714,6 +1032,7 @@ static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
     int bottom = app->pos_y + app->tile_size;
     for (int i = 0; i < app->object_count; i++) {
         const DesktopObject *object = &app->objects[i];
+        if (!object_on_monitor(app, object)) continue;
         int object_bottom = object->rect.y + object->rect.height;
         if (bottom <= object->rect.y || app->pos_y >= object_bottom ||
             bottom == object->rect.y) continue;
@@ -872,7 +1191,7 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
         /* Use the platform-independent context helper to detect
          * landing on a window or taskbar during a fall. */
         EsheepContext ctx;
-        sync_surface_objects(app);
+        int surface_count = sync_surface_objects(app);
         memset(&ctx, 0, sizeof(ctx));
         ctx.pos_x = app->pos_x;
         ctx.pos_y = app->pos_y;
@@ -882,7 +1201,7 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
         ctx.bounds_y = app->bounds.y;
         ctx.bounds_width = app->bounds.width;
         ctx.bounds_height = app->bounds.height;
-        ctx.object_count = app->object_count;
+        ctx.object_count = surface_count;
         ctx.objects = app->surfaces;
         ctx.window_landing_enabled = app->window_landing;
         ctx.move = ESHEEP_MOVE_FALLING;
@@ -989,17 +1308,9 @@ static void update_child_animation(App *app) {
             int frame = app->child_frame_index;
             if (frame < 0 || frame >= canim->frame_count) frame = 0;
             child_tile_ids[0] = canim->frames[frame];
-            child_x[0] = eval_child_expression(child_record->x,
-                                               app->bounds.width,
-                                               app->bounds.height,
-                                               app->tile_size, app->tile_size,
-                                               app->pos_x, app->pos_y, 0);
-            child_y[0] = eval_child_expression(child_record->y,
-                                               app->bounds.width,
-                                               app->bounds.height,
-                                               app->tile_size, app->tile_size,
-                                               app->pos_x, app->pos_y, 0);
-            child_flipped[0] = 0;
+            child_x[0] = child_local_coordinate(app, child_record->x, 0);
+            child_y[0] = child_local_coordinate(app, child_record->y, 0);
+            child_flipped[0] = sprite_is_flipped(app, &esheep_animations[app->state.animation_id - 1]);
             child_opacity[0] = 1.0;
             child_visible[0] = true;
             child_count = 1;
@@ -1012,7 +1323,7 @@ static void update_child_animation(App *app) {
 
     esheep_renderer_compose(&app->scene,
         esheep_current_tile(&app->state),
-        0, 1.0, true,
+        sprite_is_flipped(app, &esheep_animations[app->state.animation_id - 1]) ? 1 : 0, 1.0, true,
         child_count,
         child_tile_ids, child_x, child_y,
         child_flipped, child_opacity, child_visible);
@@ -1291,7 +1602,7 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
     gtk_window_stick(GTK_WINDOW(window));
 
-    gdk_monitor_get_workarea(monitor, &app->bounds);
+    if (monitor) gdk_monitor_get_workarea(monitor, &app->bounds);
     esheep_set_environment(&app->state, app->bounds.width, app->bounds.height,
                            app->tile_size, app->tile_size);
     app->pos_x = app->bounds.x + app->bounds.width / 2;
@@ -1430,8 +1741,10 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    if (x11_fallback && getenv("WAYLAND_DISPLAY") && getenv("DISPLAY") &&
-        !getenv("GDK_BACKEND")) {
+    DesktopBackendCapabilities requested_backend = detect_backend_capabilities(
+        x11_fallback, getenv("WAYLAND_DISPLAY"), getenv("DISPLAY"),
+        getenv("GDK_BACKEND"), FALSE);
+    if (requested_backend.should_force_x11_backend) {
         g_setenv("GDK_BACKEND", "x11", FALSE);
     }
     gtk_init(&argc, &argv);
@@ -1518,11 +1831,33 @@ int main(int argc, char **argv) {
     int tile_size = gdk_pixbuf_get_width(sheet) / esheep_tiles_x;
 
     GdkDisplay *display = gdk_display_get_default();
+    DesktopBackendCapabilities runtime_backend = detect_backend_capabilities(
+        x11_fallback, getenv("WAYLAND_DISPLAY"), getenv("DISPLAY"),
+        getenv("GDK_BACKEND"), GDK_IS_X11_DISPLAY(display));
+    if (!runtime_backend.can_position_globally) {
+        g_printerr("unsupported desktop backend '%s'; native Wayland window "
+                   "placement is not implemented. Use --x11-fallback with "
+                   "XWayland.\n", backend_mode_name(runtime_backend.mode));
+        g_free(config_character);
+        g_free(config_sprite);
+        g_free(config_spawn);
+        g_free(default_config_path);
+        g_key_file_free(config);
+        g_object_unref(sheet);
+        return 2;
+    }
+    if (!runtime_backend.can_query_desktop_surfaces) {
+        window_landing = FALSE;
+        if (spawn_override && strcasecmp(spawn_override, "window") == 0)
+            spawn_override = "bottom";
+    }
+
     /* Spawn on whichever monitor the pointer is actually on, not GDK's
      * notion of "primary" -- on a multi-monitor setup those can easily
      * differ, and a sheep spawning on a monitor you're not looking at
      * just looks like the app did nothing. */
-    GdkMonitor *monitor = NULL;
+    GdkRectangle initial_bounds = {0};
+    gboolean have_initial_bounds = FALSE;
     GdkSeat *seat = gdk_display_get_default_seat(display);
     if (seat) {
         GdkDevice *pointer = gdk_seat_get_pointer(seat);
@@ -1530,11 +1865,27 @@ int main(int argc, char **argv) {
             GdkScreen *pointer_screen;
             int px, py;
             gdk_device_get_position(pointer, &pointer_screen, &px, &py);
-            monitor = gdk_display_get_monitor_at_point(display, px, py);
+            (void)pointer_screen;
+            have_initial_bounds = select_monitor_workarea(display, NULL, px, py,
+                                                          0, &initial_bounds);
         }
     }
-    if (!monitor) monitor = gdk_display_get_primary_monitor(display);
-    if (!monitor) monitor = gdk_display_get_monitor(display, 0);
+    if (!have_initial_bounds) {
+        GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+        if (!monitor) monitor = gdk_display_get_monitor(display, 0);
+        if (!monitor) {
+            g_printerr("failed to locate a monitor workarea\n");
+            g_free(config_character);
+            g_free(config_sprite);
+            g_free(config_spawn);
+            g_free(default_config_path);
+            g_key_file_free(config);
+            g_object_unref(sheet);
+            return 1;
+        }
+        gdk_monitor_get_workarea(monitor, &initial_bounds);
+        have_initial_bounds = TRUE;
+    }
     /* workarea excludes panels/docks/taskbars -- using raw geometry here
      * would let the sheep spawn flush with the physical bottom edge of the
      * screen, which on most desktops means directly underneath (and fully
@@ -1557,8 +1908,12 @@ int main(int argc, char **argv) {
         app->ordinal = (int)i;
         app->siblings = sheep;
         app->sibling_count = (int)count;
+        app->bounds = initial_bounds;
         esheep_init(&app->state, ANIM_WALK);
-        setup_sheep_window(app, display, monitor);
+        setup_sheep_window(app, display,
+                           gdk_display_get_monitor_at_point(display,
+                                                            initial_bounds.x + initial_bounds.width / 2,
+                                                            initial_bounds.y + initial_bounds.height / 2));
         esheep_set_walk_keep_probability(&app->state,
                                          (int)walk_keep_probability);
         if (review_parent > 0)
