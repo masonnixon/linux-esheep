@@ -270,9 +270,14 @@ static gboolean select_monitor_workarea(GdkDisplay *display,
  * expressions is the local composited surface area, not the full monitor. */
 static int child_local_coordinate(const App *app, const char *expr,
                                   int roll_0_99) {
+    /* image_x/image_y are local to the composited scene (parent tile
+     * origin), not screen coordinates. Passing pos_x/pos_y here would
+     * shift every child offset by the window's screen position and break
+     * authored local placement such as the black sheep at -imageW-8
+     * (i.e. -48 px from the parent) or the flower at -imageW*0.9. */
     return eval_child_expression(expr, app->bounds.width,
                                app->bounds.height, app->tile_size,
-                               app->tile_size, app->pos_x, app->pos_y, roll_0_99);
+                               app->tile_size, 0, 0, roll_0_99);
 }
 
 static DesktopBackendCapabilities detect_backend_capabilities(
