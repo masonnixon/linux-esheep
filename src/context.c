@@ -29,7 +29,8 @@ void esheep_classify_context(EsheepContext *ctx) {
              * the floor instead of teleporting onto it. */
             bool at_top = abs(bottom - obj->y) <= 2;
             bool overlapping = ctx->drop_landing_enabled &&
-                bottom >= obj->y && top < obj->y + obj->height;
+                top <= obj->y && bottom >= obj->y &&
+                top < obj->y + obj->height;
             if ((at_top || overlapping) &&
                 rects_overlap_x(ctx->pos_x, ctx->image_width, obj->x, obj->width)) {
                 int priority = obj->taskbar ? 0 : 1;
@@ -96,7 +97,8 @@ bool esheep_classify_fall(const EsheepContext *ctx, EsheepFallTarget *out) {
         const EsheepSurfaceObject *obj = &ctx->objects[i];
         bool at_top = abs(bottom - obj->y) <= 2;
         bool overlapping = ctx->drop_landing_enabled &&
-            bottom >= obj->y && top < obj->y + obj->height;
+            top <= obj->y && bottom >= obj->y &&
+            top < obj->y + obj->height;
         if ((at_top || overlapping) &&
             rects_overlap_x(ctx->pos_x, ctx->image_width, obj->x, obj->width)) {
             int priority = obj->taskbar ? 0 : 1;
