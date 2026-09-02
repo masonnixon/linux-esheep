@@ -59,7 +59,6 @@ test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
 	/tmp/esheep_test_context
 
-
 test: test-desktop test-behavior test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui
 
 esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c

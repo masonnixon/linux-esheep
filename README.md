@@ -73,7 +73,14 @@ Runtime settings can be overridden with environment variables:
   walking behavior. The original value is 90. Lower it to see other floor
   behaviors more often.
 
-Left-click-drag picks the sheep up; right-click shows a Quit menu.
+Left-click-drag picks the sheep up. Right-click opens a pet menu with
+Pause, Hide, Bring to Front, and Quit. Runtime settings can be overridden
+with environment variables:
+
+- `ESHEEP_PAUSED=1`: start with all sheep paused (animation stopped, drag
+  still works to pick the sheep up).
+- `ESHEEP_HIDDEN=1`: start with all sheep windows hidden (the right-click
+  Bring to Front action brings them back).
 
 ## Tests
 
@@ -127,18 +134,53 @@ Installs the binary, spritesheet, and a `.desktop` entry.
 - Real movement and collision with visible X11 windows, panels, and the
   monitor workarea.
 - Screen-edge and detected-window-side climbing with top-surface traversal.
-- Mouse drag and a right-click quit menu.
+- Mouse drag and a right-click pet menu with pause, hide, bring-to-front, and quit actions.
+- Optional start-paused and start-hidden via the `ESHEEP_PAUSED` and `ESHEEP_HIDDEN`
+  environment variables.
 - Multiple independent sheep with per-sheep movement and drag state.
 - Optional INI configuration with environment and CLI overrides.
 
 ## Known limitations / not yet built
 
+- No system-tray icon, sound effects, autostart hook, or full settings
+  dialog yet. The right-click pet menu covers the most common runtime
+  actions, but anything not on that menu (sound on/off, autostart at
+  login, advanced pet configuration) is still out of scope.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
 - Sheep currently use the monitor workarea containing their center as their
   walking bounds. They do not cross monitor seams as one continuous floor.
 - Multiple sheep do not collide with or land on one another.
+
+
+## Custom sprites and characters
+
+The `--sprite PATH` option accepts any valid PNG spritesheet, allowing
+third-party characters or re-skinned art to replace the built-in sheep and
+penguin. The `--character NAME` option selects a built-in character (`sheep`
+or `penguin`) and resolves its default spritesheet. An explicit `--sprite`
+path always takes priority.
+
+**Package boundary**: the runtime animation behaviour graph
+(`src/animations_data.c`) is hardcoded to the sheep/penguin 16×11 tile grid
+(176 tiles, 640×440 for sheep, 1280×880 for penguin). A custom spritesheet
+must use the same grid layout — same column count and tile size — and cover
+all frames referenced by the behaviour graph. Use `tests/test_spritesheet.py`
+as a reference for frame-coverage rules.
+
+Custom characters (any `--character` value other than `sheep` or `penguin`) are
+accepted at the CLI and env/config level, but the runtime will emit a warning
+indicating that only the built-in behaviour graph is active. Runtime XML
+behaviour loading from `tools/esheep_animations.xml` is not yet exposed as a
+safe external interface; custom behaviour authoring requires rebuilding
+`src/animations_data.c` from the XML source (`tools/gen_animations.py`).
+
+Exit codes from `esheep` relating to spritesheet loading:
+- `1` — spritesheet file could not be read (missing, unreadable, or not a
+  valid image).
+- `2` — spritesheet loaded but failed validation (wrong dimensions or invalid
+  character name).
 
 ## Planned Wayland migration path
 
