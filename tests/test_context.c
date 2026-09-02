@@ -265,6 +265,30 @@ static void test_walking_animation_not_falling(void) {
     assert(ctx.surface != ESHEEP_SURFACE_TASKBAR);
 }
 
+static void test_dropped_sprite_inside_window_does_not_snap_up(void) {
+    fprintf(stderr, "test: dropped sprite below window top is not pulled upward\n");
+    EsheepSurfaceObject object = {
+        .x = 100, .y = 100, .width = 300, .height = 300,
+        .stack_order = 1, .taskbar = false
+    };
+    EsheepContext ctx = {0};
+    ctx.pos_x = 160;
+    ctx.pos_y = 140; /* top is below the window top, already inside it */
+    ctx.image_width = 40;
+    ctx.image_height = 40;
+    ctx.bounds_width = 640;
+    ctx.bounds_height = 480;
+    ctx.object_count = 1;
+    ctx.objects = &object;
+    ctx.window_landing_enabled = true;
+    ctx.drop_landing_enabled = true;
+    ctx.move = ESHEEP_MOVE_FALLING;
+
+    esheep_classify_context(&ctx);
+    assert(ctx.surface == ESHEEP_SURFACE_FLOOR);
+    assert(ctx.surface_y == 480);
+}
+
 int main(void) {
     test_left_edge_reversal();
     test_right_edge_reversal();
@@ -276,6 +300,7 @@ int main(void) {
     test_window_on_monitor_edge();
     test_no_repeated_edge_dispatch();
     test_walking_animation_not_falling();
+    test_dropped_sprite_inside_window_does_not_snap_up();
     
     printf("All context tests passed.\n");
     return 0;

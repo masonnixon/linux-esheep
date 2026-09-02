@@ -521,6 +521,22 @@ static void test_excluded_surfaces_rejected(void) {
     assert(!x11_surface_is_landing_candidate(&traits));
 }
 
+/* A fall frame may move more than the classifier's contact tolerance. The
+ * runtime must still land when that frame crosses a window top. */
+static void test_swept_fall_lands_on_window(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 480, 40);
+    app.objects[0].rect = (GdkRectangle){ 100, 85, 300, 200 };
+    app.objects[0].stack_order = 1;
+    app.object_count = 1;
+    app.pos_x = 160;
+    app.pos_y = 40; /* bottom 80; the 10px fall step crosses y=85 */
+
+    const char *hit = step_position(&app, &esheep_animations[5], 0);
+    assert(strcmp(hit, "window") == 0);
+    assert(app.pos_y == 45);
+}
+
 int main(void) {
     printf("Running behavior regression tests...\n");
 
@@ -592,6 +608,9 @@ int main(void) {
     test_excluded_surfaces_rejected();
     printf("  test_excluded_surfaces_rejected: PASSED\n");
 
-    printf("\nAll 22 behavior regression tests PASSED\n");
+    test_swept_fall_lands_on_window();
+    printf("  test_swept_fall_lands_on_window: PASSED\n");
+
+    printf("\nAll 23 behavior regression tests PASSED\n");
     return 0;
 }
