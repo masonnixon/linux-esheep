@@ -44,6 +44,10 @@ typedef struct {
     const EsheepSurfaceObject *objects;
     bool window_landing_enabled;
     bool landing_allowed; /* true if window landing is enabled */
+    /* Snap a dropped (airborne) sprite that overlaps a surface up to that
+     * surface's top. Keep this false for walking sprites, or a sheep on the
+     * floor in front of a tall window or taskbar would be lifted onto it. */
+    bool drop_landing_enabled;
 } EsheepContext;
 
 typedef struct {

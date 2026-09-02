@@ -10,35 +10,27 @@ static inline bool rects_overlap_x(int x1, int w1, int x2, int w2) {
 void esheep_classify_context(EsheepContext *ctx) {
     if (!ctx) return;
 
-    /* Classify horizontal edges first. A sprite at the left edge has its
-     * left side (pos_x) flush with the monitor left edge (bounds_x). The
-     * right edge is when the sprite's right side reaches or passes the
-     * monitor's right edge. */
-    if (ctx->pos_x <= ctx->bounds_x) {
-        ctx->surface = ESHEEP_SURFACE_LEFT_EDGE;
-        ctx->move = ESHEEP_MOVE_WALKING;
-        return;
-    }
-    int right_edge = ctx->bounds_x + ctx->bounds_width - ctx->image_width;
-    if (ctx->pos_x >= right_edge) {
-        ctx->surface = ESHEEP_SURFACE_RIGHT_EDGE;
-        ctx->move = ESHEEP_MOVE_WALKING;
-        return;
-    }
-
-    /* When airborne, look for the top surface directly below the sprite. */
+    /* When airborne (falling), prioritize landing surfaces over edges.
+     * A falling sheep must continue falling until it hits a collision. */
     if (ctx->move == ESHEEP_MOVE_FALLING) {
         int bottom = ctx->pos_y + ctx->image_height;
+        int top = ctx->pos_y;
         int best_stack_order = -1;
         EsheepSurface best_surface = ESHEEP_SURFACE_NONE;
         int best_y = -1;
 
         for (int i = 0; i < ctx->object_count; i++) {
             const EsheepSurfaceObject *obj = &ctx->objects[i];
-            /* Use a 2-pixel tolerance to match the existing conky/panel logic.
-             * Only consider objects that are below the sprite and horizontally
-             * aligned. */
-            if (abs(bottom - obj->y) <= 2 &&
+            /* A surface supports the sprite when its top is within 2 pixels of
+             * the sprite bottom (the existing conky/panel tolerance), or, for
+             * a dropped sprite, when the sprite still overlaps the surface
+             * vertically and snaps up to its top. A sprite fully below the
+             * surface never matches, so a drop past a window keeps falling to
+             * the floor instead of teleporting onto it. */
+            bool at_top = abs(bottom - obj->y) <= 2;
+            bool overlapping = ctx->drop_landing_enabled &&
+                bottom >= obj->y && top < obj->y + obj->height;
+            if ((at_top || overlapping) &&
                 rects_overlap_x(ctx->pos_x, ctx->image_width, obj->x, obj->width)) {
                 int priority = obj->taskbar ? 0 : 1;
                 if (obj->stack_order > best_stack_order ||
@@ -64,6 +56,22 @@ void esheep_classify_context(EsheepContext *ctx) {
         return;
     }
 
+    /* Classify horizontal edges for non-falling sprites. A sprite at the left
+     * edge has its left side (pos_x) flush with the monitor left edge (bounds_x).
+     * The right edge is when the sprite's right side reaches or passes the
+     * monitor's right edge. */
+    if (ctx->pos_x <= ctx->bounds_x) {
+        ctx->surface = ESHEEP_SURFACE_LEFT_EDGE;
+        ctx->move = ESHEEP_MOVE_WALKING;
+        return;
+    }
+    int right_edge = ctx->bounds_x + ctx->bounds_width - ctx->image_width;
+    if (ctx->pos_x >= right_edge) {
+        ctx->surface = ESHEEP_SURFACE_RIGHT_EDGE;
+        ctx->move = ESHEEP_MOVE_WALKING;
+        return;
+    }
+
     /* Default: walking on the floor. */
     ctx->surface = ESHEEP_SURFACE_FLOOR;
     ctx->move = ESHEEP_MOVE_WALKING;
@@ -78,6 +86,7 @@ bool esheep_classify_fall(const EsheepContext *ctx, EsheepFallTarget *out) {
         return false;
 
     int bottom = ctx->pos_y + ctx->image_height;
+    int top = ctx->pos_y;
     int best_stack_order = -1;
     EsheepSurface best_surface = ESHEEP_SURFACE_NONE;
     int best_y = -1;
@@ -85,7 +94,10 @@ bool esheep_classify_fall(const EsheepContext *ctx, EsheepFallTarget *out) {
 
     for (int i = 0; i < ctx->object_count; i++) {
         const EsheepSurfaceObject *obj = &ctx->objects[i];
-        if (abs(bottom - obj->y) <= 2 &&
+        bool at_top = abs(bottom - obj->y) <= 2;
+        bool overlapping = ctx->drop_landing_enabled &&
+            bottom >= obj->y && top < obj->y + obj->height;
+        if ((at_top || overlapping) &&
             rects_overlap_x(ctx->pos_x, ctx->image_width, obj->x, obj->width)) {
             int priority = obj->taskbar ? 0 : 1;
             if (obj->stack_order > best_stack_order ||

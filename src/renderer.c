@@ -1,6 +1,24 @@
 #include "renderer.h"
 #include <stddef.h>
 
+static double clamp_opacity(double opacity) {
+    if (opacity < 0.0) return 0.0;
+    if (opacity > 1.0) return 1.0;
+    return opacity;
+}
+
+static void clear_tile(EsheepRenderTile *tile) {
+    if (!tile) return;
+    tile->tile_id = 0;
+    tile->x = 0;
+    tile->y = 0;
+    tile->width = 0;
+    tile->height = 0;
+    tile->opacity = 0.0;
+    tile->flipped = false;
+    tile->visible = false;
+}
+
 void esheep_renderer_init(EsheepRenderer *r, int surface_width, int surface_height) {
     if (!r) return;
     if (surface_width < 1) surface_width = 1;
@@ -9,14 +27,7 @@ void esheep_renderer_init(EsheepRenderer *r, int surface_width, int surface_heig
     r->surface_height = surface_height;
     r->count = 0;
     for (int i = 0; i < ESHEEP_RENDER_MAX_CHILDREN; i++) {
-        r->tiles[i].tile_id = 0;
-        r->tiles[i].x = 0;
-        r->tiles[i].y = 0;
-        r->tiles[i].width = 0;
-        r->tiles[i].height = 0;
-        r->tiles[i].opacity = 0.0;
-        r->tiles[i].flipped = false;
-        r->tiles[i].visible = false;
+        clear_tile(&r->tiles[i]);
     }
 }
 
@@ -33,9 +44,10 @@ int esheep_renderer_compose(EsheepRenderer *r,
                             const double child_opacity[],
                             const bool child_visible[]) {
     if (!r) return 0;
-    if (parent_opacity < 0.0) parent_opacity = 0.0;
-    if (parent_opacity > 1.0) parent_opacity = 1.0;
+    parent_opacity = clamp_opacity(parent_opacity);
     r->count = 0;
+    for (int i = 0; i < ESHEEP_RENDER_MAX_CHILDREN; i++)
+        clear_tile(&r->tiles[i]);
 
     EsheepRenderTile *parent_tile = &r->tiles[r->count++];
     parent_tile->tile_id = parent_tile_id;
@@ -48,8 +60,8 @@ int esheep_renderer_compose(EsheepRenderer *r,
     parent_tile->visible = parent_visible;
 
     if (child_count <= 0) return r->count;
-    if (child_count > ESHEEP_RENDER_MAX_CHILDREN)
-        child_count = ESHEEP_RENDER_MAX_CHILDREN;
+    if (child_count > ESHEEP_RENDER_MAX_CHILDREN - 1)
+        child_count = ESHEEP_RENDER_MAX_CHILDREN - 1;
     if (!child_tile_ids || !child_x || !child_y ||
         !child_flipped || !child_opacity || !child_visible) {
         return r->count;
@@ -62,9 +74,7 @@ int esheep_renderer_compose(EsheepRenderer *r,
         child_tile->y = child_y[i];
         child_tile->width = r->surface_width;
         child_tile->height = r->surface_height;
-        child_tile->opacity = child_opacity[i];
-        if (child_opacity[i] < 0.0) child_tile->opacity = 0.0;
-        if (child_opacity[i] > 1.0) child_tile->opacity = 1.0;
+        child_tile->opacity = clamp_opacity(child_opacity[i]);
         child_tile->flipped = child_flipped[i] ? true : false;
         child_tile->visible = child_visible[i];
     }
@@ -76,6 +86,7 @@ bool esheep_renderer_alpha_bounds(const EsheepRenderer *r,
                                   int *out_min_x, int *out_min_y,
                                   int *out_max_x, int *out_max_y) {
     if (!r) return false;
+    opacity_threshold = clamp_opacity(opacity_threshold);
     int min_x = 0, min_y = 0, max_x = -1, max_y = -1;
     bool any = false;
     for (int i = 0; i < r->count; i++) {
@@ -115,8 +126,9 @@ bool esheep_renderer_valid(const EsheepRenderer *r) {
     if (r->surface_width < 1 || r->surface_height < 1) return false;
     for (int i = 0; i < r->count; i++) {
         const EsheepRenderTile *tile = &r->tiles[i];
-        if (tile->x < 0 || tile->y < 0) return false;
         if (tile->tile_id < 0) return false;
+        if (tile->width != r->surface_width || tile->height != r->surface_height)
+            return false;
         if (tile->opacity < 0.0 || tile->opacity > 1.0) return false;
     }
     for (int i = r->count; i < ESHEEP_RENDER_MAX_CHILDREN; i++) {

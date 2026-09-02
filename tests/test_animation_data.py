@@ -541,6 +541,65 @@ def test_invalid_child_target():
 def test_empty_sequence():
     _expect_error(_fixture("<frame>3</frame>\n", ""), "sequence has no <frame> elements")
 
+def test_missing_sequence():
+    import re as _re
+    xml = _re.sub(r"<sequence[^>]*>.*?</sequence>", "", BASE_XML,
+                  flags=_re.DOTALL, count=1)
+    errors = validate_xml_text(xml, "<fixture>")
+    assert errors, str(errors)
+    assert any("missing <sequence>" in e for e in errors), errors
+
+
+def test_noninteger_transition_target():
+    _expect_error(_fixture('<next probability="50" only="none">1</next>',
+                           '<next probability="50" only="none">1a</next>'),
+                  "is not an integer")
+
+
+def test_noninteger_child_next_target():
+    _expect_error(_fixture("<next>2</next>", "<next>2a</next>"),
+                  "is not an integer")
+
+
+def test_noninteger_spawn_next_target():
+    _expect_error(_fixture('<next probability="100">1</next>',
+                           '<next probability="100">1a</next>'),
+                  "is not an integer")
+
+
+def test_noninteger_header_tilesx():
+    _expect_error(_fixture("<tilesx>4</tilesx>", "<tilesx>four</tilesx>"),
+                  "is not an integer")
+
+
+def test_missing_header_tiles():
+    xml = (BASE_XML
+           .replace("<tilesx>4</tilesx>", "<tilesx>nope</tilesx>", 1)
+           .replace("<tilesy>4</tilesy>", "<tilesy>also</tilesy>", 1))
+    errors = validate_xml_text(xml, "<fixture>")
+    assert errors, str(errors)
+    assert any("integer" in e for e in errors), errors
+
+
+def test_noninteger_interval():
+    _expect_error(_fixture("<interval>100</interval>",
+                           "<interval>slow</interval>"),
+                  "is not a int")
+
+
+def test_noninteger_offsety():
+    xml = _fixture("<start><x>-1</x><y>0</y><interval>100</interval></start>",
+                   "<start><x>-1</x><y>0</y><interval>100</interval><offsety>-2.5</offsety></start>")
+    _expect_error(xml, "is not an integer (atoi at runtime)")
+
+
+def test_nonfloat_opacity():
+    xml = _fixture("<start><x>-1</x><y>0</y><interval>100</interval></start>",
+                   "<start><x>-1</x><y>0</y><interval>100</interval><opacity>full</opacity></start>")
+    _expect_error(xml, "is not a float")
+
+
+
 
 TESTS = [
     test_authored_xml_is_valid,
@@ -563,6 +622,15 @@ TESTS = [
     test_invalid_child_parent,
     test_invalid_child_target,
     test_empty_sequence,
+    test_missing_sequence,
+    test_noninteger_transition_target,
+    test_noninteger_child_next_target,
+    test_noninteger_spawn_next_target,
+    test_noninteger_header_tilesx,
+    test_missing_header_tiles,
+    test_noninteger_interval,
+    test_noninteger_offsety,
+    test_nonfloat_opacity,
 ]
 
 

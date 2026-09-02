@@ -240,6 +240,31 @@ static void test_no_repeated_edge_dispatch(void) {
     assert(next_dir == 42);  /* Should be unchanged */
 }
 
+static void test_walking_animation_not_falling(void) {
+    fprintf(stderr, "test: walking animation is not falling\n");
+    /* Regression: build_context should NOT treat ANIM_WALK as falling.
+     * A walking sheep on the floor is grounded, not airborne. */
+    EsheepContext ctx = {0};
+    ctx.pos_x = 100;
+    ctx.pos_y = 500;
+    ctx.image_width = 40;
+    ctx.image_height = 40;
+    ctx.bounds_x = 0;
+    ctx.bounds_y = 0;
+    ctx.bounds_width = 1920;
+    ctx.bounds_height = 1080;
+    ctx.move = ESHEEP_MOVE_WALKING;  /* ANIM_WALK should produce WALKING, not FALLING */
+    ctx.object_count = 0;
+    ctx.window_landing_enabled = true;
+
+    esheep_classify_context(&ctx);
+    /* A walking (grounded) sheep should be on the floor or edge, NOT airborne */
+    assert(ctx.move == ESHEEP_MOVE_WALKING);
+    /* It should NOT be classified as falling to a surface below */
+    assert(ctx.surface != ESHEEP_SURFACE_WINDOW);
+    assert(ctx.surface != ESHEEP_SURFACE_TASKBAR);
+}
+
 int main(void) {
     test_left_edge_reversal();
     test_right_edge_reversal();
@@ -250,6 +275,7 @@ int main(void) {
     test_unsupported_surface();
     test_window_on_monitor_edge();
     test_no_repeated_edge_dispatch();
+    test_walking_animation_not_falling();
     
     printf("All context tests passed.\n");
     return 0;

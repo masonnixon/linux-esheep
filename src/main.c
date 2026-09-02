@@ -58,6 +58,23 @@ typedef struct {
 
 typedef struct App App;
 
+static int x11_bad_window;
+static XErrorHandler x11_previous_error_handler;
+
+static int x11_refresh_error_handler(Display *display, XErrorEvent *error) {
+    (void)display;
+    if (error->error_code == BadWindow) {
+        x11_bad_window = TRUE;
+        return 0;
+    }
+    return x11_previous_error_handler ?
+           x11_previous_error_handler(display, error) : 0;
+}
+
+static void x11_refresh_sync(Display *display) {
+    XSync(display, False);
+}
+
 struct App {
     GtkWidget *window;
     EsheepRenderer scene; /* composited parent + children */
@@ -78,16 +95,21 @@ struct App {
     gboolean exclude_conky;
     gboolean spawn_on_window;
     gboolean random_spawn;
+    gboolean drop_landing_enabled;
     int climb_target_y;
     int direction; /* -1 = left, +1 = right */
     int ordinal;
     bool edge_dispatched;
     gboolean cleaned_up;
+    gboolean paused;
+    gboolean hidden;
     App *siblings;
     int sibling_count;
     int child_animation_id;  /* active child animation id, or 0 if none */
     int child_frame_index;   /* current frame within child animation */
     int child_elapsed_ms;    /* elapsed time for child animation frame */
+    int scene_origin_x;
+    int scene_origin_y;
 };
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -807,7 +829,8 @@ static gboolean get_window_type(Display *display, Window window, Atom type_atom,
     int result = XGetWindowProperty(display, window, type_atom, 0, 1, False,
                                     XA_ATOM, &actual_type, &format, &count,
                                     &bytes_after, &data);
-    if (result != Success || !data || count == 0 || format != 32) {
+    x11_refresh_sync(display);
+    if (x11_bad_window || result != Success || !data || count == 0 || format != 32) {
         if (data) XFree(data);
         return FALSE;
     }
@@ -831,7 +854,8 @@ static gboolean window_atom_list_contains(Display *display, Window window,
     int result = XGetWindowProperty(display, window, property_atom, 0,
                                     MAX_OBJECTS, False, XA_ATOM, &actual_type,
                                     &format, &count, &bytes_after, &data);
-    if (result != Success || !data || format != 32) {
+    x11_refresh_sync(display);
+    if (x11_bad_window || result != Success || !data || format != 32) {
         if (data) XFree(data);
         return FALSE;
     }
@@ -857,14 +881,17 @@ static gboolean window_has_property(Display *display, Window window,
     int result = XGetWindowProperty(display, window, property_atom, 0, 1,
                                     False, AnyPropertyType, &actual_type,
                                     &format, &count, &bytes_after, &data);
+    x11_refresh_sync(display);
     if (data) XFree(data);
-    return result == Success && actual_type != None && format != 0;
+    return !x11_bad_window && result == Success && actual_type != None && format != 0;
 }
 
 static gboolean is_conky_window(Display *display, Window window) {
     XClassHint class_hint = {0};
     gboolean is_conky = FALSE;
-    if (XGetClassHint(display, window, &class_hint)) {
+    gboolean queried = XGetClassHint(display, window, &class_hint);
+    x11_refresh_sync(display);
+    if (queried && !x11_bad_window) {
         is_conky = (class_hint.res_name &&
                     strcasecmp(class_hint.res_name, "conky") == 0) ||
                    (class_hint.res_class &&
@@ -883,12 +910,15 @@ static DesktopSurfaceTraits inspect_x11_surface_traits(
 
     traits.desktop_surface =
         window_has_type(display, window, window_type, desktop_type);
+    if (x11_bad_window) return traits;
     traits.panel_surface =
         window_has_type(display, window, window_type, dock_type) ||
         window_has_property(display, window, strut_atom) ||
         window_has_property(display, window, strut_partial_atom);
+    if (x11_bad_window) return traits;
     traits.fullscreen_surface =
         window_atom_list_contains(display, window, state_atom, fullscreen_state);
+    if (x11_bad_window) return traits;
     traits.conky_surface =
         exclude_conky && is_conky_window(display, window);
     return traits;
@@ -936,13 +966,17 @@ static void refresh_objects(App *app) {
                                 MAX_OBJECTS, False, XA_WINDOW, &actual_type,
                                 &format, &stacking_count, &bytes_after,
                                 (unsigned char **)&stacking);
+    x11_refresh_sync(display);
     if (result != Success || !stacking || format != 32) {
         if (stacking) XFree(stacking);
         stacking = NULL;
         stacking_count = 0;
     }
 
+    x11_bad_window = FALSE;
+    x11_previous_error_handler = XSetErrorHandler(x11_refresh_error_handler);
     for (unsigned long i = 0; i < count && app->object_count < MAX_OBJECTS; i++) {
+        x11_bad_window = FALSE;
         gboolean own_window = windows[i] == app->xwindow;
         for (int sibling = 0; !own_window && sibling < app->sibling_count;
              sibling++)
@@ -952,9 +986,12 @@ static void refresh_objects(App *app) {
             display, windows[i], window_type, dock_type, desktop_type,
             state_atom, fullscreen_state, strut_atom, strut_partial_atom,
             app->exclude_conky);
+        if (x11_bad_window) continue;
         if (!x11_surface_is_landing_candidate(&traits)) continue;
         XWindowAttributes attributes;
-        if (!XGetWindowAttributes(display, windows[i], &attributes) ||
+        gboolean attributes_ok = XGetWindowAttributes(display, windows[i], &attributes);
+        x11_refresh_sync(display);
+        if (x11_bad_window || !attributes_ok ||
             attributes.map_state != IsViewable || attributes.class != InputOutput ||
             attributes.width <= 1 || attributes.height <= 1) continue;
 
@@ -964,19 +1001,31 @@ static void refresh_objects(App *app) {
         Window tree_root, parent, *children = NULL;
         unsigned int child_count = 0;
         Window geometry_window = windows[i];
-        if (XQueryTree(display, windows[i], &tree_root, &parent, &children,
-                       &child_count)) {
+        gboolean tree_ok = XQueryTree(display, windows[i], &tree_root, &parent,
+                                      &children, &child_count);
+        x11_refresh_sync(display);
+        if (x11_bad_window) {
+            if (children) XFree(children);
+            continue;
+        }
+        if (tree_ok) {
             if (parent != root) geometry_window = parent;
             if (children) XFree(children);
         }
 
         XWindowAttributes geometry;
-        if (!XGetWindowAttributes(display, geometry_window, &geometry) ||
+        gboolean geometry_ok = XGetWindowAttributes(display, geometry_window,
+                                                    &geometry);
+        x11_refresh_sync(display);
+        if (x11_bad_window || !geometry_ok ||
             geometry.width <= 1 || geometry.height <= 1) continue;
         int root_x, root_y;
         Window child;
-        if (!XTranslateCoordinates(display, geometry_window, root, 0, 0, &root_x,
-                                   &root_y, &child)) continue;
+        gboolean translated = XTranslateCoordinates(display, geometry_window,
+                                                     root, 0, 0, &root_x,
+                                                     &root_y, &child);
+        x11_refresh_sync(display);
+        if (x11_bad_window || !translated) continue;
 
         DesktopObject *object = &app->objects[app->object_count++];
         object->rect = (GdkRectangle){ root_x, root_y, geometry.width,
@@ -984,6 +1033,8 @@ static void refresh_objects(App *app) {
         object->taskbar = FALSE;
         object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
     }
+    x11_refresh_sync(display);
+    XSetErrorHandler(x11_previous_error_handler);
     XFree(windows);
     if (stacking) XFree(stacking);
 }
@@ -1003,8 +1054,8 @@ static void build_context(App *app, EsheepContext *ctx) {
     ctx->objects = app->surfaces;
     ctx->window_landing_enabled = app->window_landing;
     ctx->landing_allowed = TRUE;
-    if (app->state.animation_id == ANIM_WALK ||
-        is_airborne_animation(app->state.animation_id)) {
+    ctx->drop_landing_enabled = app->drop_landing_enabled;
+    if (is_airborne_animation(app->state.animation_id)) {
         ctx->move = ESHEEP_MOVE_FALLING; /* treat airborne as falling for context */
     } else if (app->state.animation_id == 37) {
         ctx->move = ESHEEP_MOVE_CLIMBING;
@@ -1137,6 +1188,40 @@ static gboolean is_landing_animation(int animation_id) {
     return is_airborne_animation(animation_id);
 }
 
+/* Custom-pet package boundary: validate that a loaded pixbuf matches the
+ * tile grid esheep_animations[] indexes into, and emit a clear diagnostic
+ * when a non-built-in character is selected. The runtime behaviour graph is
+ * hardcoded to the sheep/penguin 16x11 grid; custom sprites must follow the
+ * same grid, and we refuse to silently keep a wrong-size image. */
+static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet,
+                                           const char *sheet_path,
+                                           const char *character) {
+    int w = gdk_pixbuf_get_width(sheet);
+    int h = gdk_pixbuf_get_height(sheet);
+    int ts_x = w / esheep_tiles_x;
+    int ts_y = h / esheep_tiles_y;
+    if (ts_x < 8 || ts_y < 8 || ts_x != ts_y ||
+        w != esheep_tiles_x * ts_x || h != esheep_tiles_y * ts_y) {
+        g_printerr("spritesheet '%s' has dimensions %dx%d, which is not a "
+                   "%d-column x %d-row grid of square tiles. Built-in "
+                   "characters sheep and penguin use a %dx%d grid (640x440 "
+                   "or 1280x880).\n",
+                   sheet_path, w, h, esheep_tiles_x, esheep_tiles_y,
+                   esheep_tiles_x * 40, esheep_tiles_y * 40);
+        return FALSE;
+    }
+    if (character && strcasecmp(character, "sheep") != 0 &&
+        strcasecmp(character, "penguin") != 0) {
+        g_printerr("custom-pet package note: custom character '%s' accepted, "
+                   "but runtime animation behavior is fixed to the sheep/"
+                   "penguin graph (src/animations_data.c). Custom sprites must "
+                   "use the %dx%d tile grid and cover all referenced frames "
+                   "(see tests/test_spritesheet.py for coverage rules).\n",
+                   character, esheep_tiles_x, esheep_tiles_y);
+    }
+    return TRUE;
+}
+
 static void set_sprite_input_region(App *app) {
     if (!child_tiles_use_parent_input(app)) return;
     GdkWindow *window = gtk_widget_get_window(app->window);
@@ -1165,7 +1250,8 @@ static void set_sprite_input_region(App *app) {
                 int run_width = x - run_start;
                 int region_x = sprite_is_flipped(app, anim) ?
                                app->tile_size - x : run_start;
-                cairo_rectangle_int_t rect = { region_x, y + pose_offset_y(anim,
+                cairo_rectangle_int_t rect = { app->scene_origin_x + region_x,
+                                               app->scene_origin_y + y + pose_offset_y(anim,
                                                                             app->state.frame_index),
                                                run_width, 1 };
                 cairo_region_union_rectangle(region, &rect);
@@ -1185,6 +1271,7 @@ static void set_sprite_input_region(App *app) {
  * to the monitor bounds. Returns the surface context hit by the step. */
 static const char *step_position(App *app, const EsheepAnimation *anim,
                                  int frame_index) {
+    int previous_bottom = app->pos_y + app->tile_size;
     int dx = pose_delta(app, anim, frame_index, TRUE);
     int dy = pose_delta(app, anim, frame_index, FALSE);
     app->pos_x += dx;
@@ -1209,13 +1296,40 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
         ctx.object_count = surface_count;
         ctx.objects = app->surfaces;
         ctx.window_landing_enabled = app->window_landing;
+        ctx.drop_landing_enabled = app->drop_landing_enabled;
         ctx.move = ESHEEP_MOVE_FALLING;
         esheep_classify_context(&ctx);
 
         if (ctx.surface == ESHEEP_SURFACE_WINDOW ||
             ctx.surface == ESHEEP_SURFACE_TASKBAR) {
             app->pos_y = ctx.surface_y - app->tile_size;
+            app->drop_landing_enabled = FALSE;
             context = ctx.surface == ESHEEP_SURFACE_WINDOW ? "window" : "taskbar";
+        } else {
+            /* A large authored fall step can cross a window top without ever
+             * being within the classifier's small contact tolerance. Treat a
+             * descending crossing as a landing, choosing the highest stacked
+             * valid surface. */
+            int current_bottom = app->pos_y + app->tile_size;
+            int landing_y = -1;
+            int landing_stack = -1;
+            gboolean landing_taskbar = FALSE;
+            for (int i = 0; i < surface_count; i++) {
+                const EsheepSurfaceObject *surface = &app->surfaces[i];
+                if (previous_bottom > surface->y || current_bottom < surface->y ||
+                    !rects_overlap_x(app->pos_x, app->tile_size,
+                                     surface->x, surface->width)) continue;
+                if (surface->stack_order >= landing_stack) {
+                    landing_y = surface->y;
+                    landing_stack = surface->stack_order;
+                    landing_taskbar = surface->taskbar;
+                }
+            }
+            if (landing_y >= 0) {
+                app->pos_y = landing_y - app->tile_size;
+                app->drop_landing_enabled = FALSE;
+                context = landing_taskbar ? "taskbar" : "window";
+            }
         }
     }
 
@@ -1223,6 +1337,7 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
     if (app->pos_y > floor_y) {
         app->pos_y = floor_y;
         hit_floor = dy > 0;
+        if (hit_floor) app->drop_landing_enabled = FALSE;
     }
     if (app->pos_y < app->bounds.y) app->pos_y = app->bounds.y;
 
@@ -1250,7 +1365,8 @@ static const EsheepChild* find_child_for_animation(int parent_anim_id) {
 
 static void draw_scene_tile(cairo_t *cr, App *app, const EsheepRenderTile *tile) {
     cairo_save(cr);
-    cairo_translate(cr, tile->x, tile->y);
+    cairo_translate(cr, app->scene_origin_x + tile->x,
+                    app->scene_origin_y + tile->y);
     if (tile->flipped) {
         cairo_translate(cr, tile->width, 0);
         cairo_scale(cr, -1, 1);
@@ -1280,6 +1396,29 @@ static gboolean on_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
         draw_scene_tile(cr, app, tile);
     }
     return FALSE;
+}
+
+/* Keep the parent tile's screen position stable while exposing the full
+ * composed scene, including children with negative local offsets. */
+static void sync_scene_window(App *app) {
+    if (!app || !app->window || !gtk_widget_get_realized(app->window)) return;
+    int min_x, min_y, max_x, max_y;
+    if (!esheep_renderer_alpha_bounds(&app->scene, 0.5,
+                                      &min_x, &min_y, &max_x, &max_y)) {
+        min_x = 0;
+        min_y = 0;
+        max_x = app->tile_size - 1;
+        max_y = app->tile_size - 1;
+    }
+    int width = MAX(app->tile_size, max_x - min_x + 1);
+    int height = MAX(app->tile_size, max_y - min_y + 1);
+    app->scene_origin_x = -min_x;
+    app->scene_origin_y = -min_y;
+
+    GtkAllocation allocation;
+    gtk_widget_get_allocation(app->window, &allocation);
+    if (allocation.width != width || allocation.height != height)
+        gtk_window_resize(GTK_WINDOW(app->window), width, height);
 }
 
 static int frame_interval(const EsheepAnimation *anim, int frame_index) {
@@ -1359,6 +1498,7 @@ static void advance_child_animation(App *app, int dt_ms) {
 
 static gboolean on_tick(gpointer user_data) {
     App *app = user_data;
+    if (app->paused && !app->dragging) return G_SOURCE_CONTINUE;
 
     if (app->dragging) {
         /* Position is driven by the pointer while dragging; still let the
@@ -1367,6 +1507,7 @@ static gboolean on_tick(gpointer user_data) {
         esheep_tick(&app->state, (int)app->tick_ms, "none", roll);
         update_child_animation(app);
         advance_child_animation(app, (int)app->tick_ms);
+        sync_scene_window(app);
         gtk_widget_queue_draw(app->window);
         set_sprite_input_region(app);
         return G_SOURCE_CONTINUE;
@@ -1380,14 +1521,10 @@ static gboolean on_tick(gpointer user_data) {
     build_context(app, &ctx);
     esheep_classify_context(&ctx);
 
-    /* Apply landing: if falling and found a surface, land on it */
+    /* Landing is resolved by step_position() after the fall animation moves
+     * downward. Snapping from this pre-step context would teleport a sheep to
+     * the floor or to a window it is merely passing through. */
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-    if (ctx.move == ESHEEP_MOVE_FALLING && ctx.surface != ESHEEP_SURFACE_FLOOR &&
-        ctx.surface != ESHEEP_SURFACE_LEFT_EDGE && ctx.surface != ESHEEP_SURFACE_RIGHT_EDGE) {
-        app->pos_y = ctx.surface_y - app->tile_size;
-    } else if (ctx.move == ESHEEP_MOVE_FALLING && ctx.surface == ESHEEP_SURFACE_FLOOR) {
-        app->pos_y = floor_y;
-    }
 
     gboolean climbing = FALSE;
     if (!climbing && app->state.animation_id == ANIM_WALK)
@@ -1400,12 +1537,14 @@ static gboolean on_tick(gpointer user_data) {
             int next_dir = app->direction;
             if (esheep_authored_edge_reversal(&ctx, &next_dir, &app->edge_dispatched)) {
                 app->direction = next_dir;
-                /* Nudge inside bounds to avoid repeated edge hits */
-                if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE && app->pos_x < app->bounds.x)
-                    app->pos_x = app->bounds.x;
+                /* Move strictly inward so repeated ticks cannot re-dispatch a
+                 * turn at the same edge. */
+                if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE) {
+                    app->pos_x = app->bounds.x + 2;
+                }
                 if (ctx.surface == ESHEEP_SURFACE_RIGHT_EDGE) {
                     int right = app->bounds.x + app->bounds.width - app->tile_size;
-                    if (app->pos_x > right) app->pos_x = right;
+                    app->pos_x = right - 2;
                 }
                 /* Transition to edge turn animation (animation 2) */
                 esheep_init(&app->state, 2);
@@ -1416,6 +1555,7 @@ static gboolean on_tick(gpointer user_data) {
     if (!climbing && ctx.move != ESHEEP_MOVE_FALLING &&
         !is_airborne_animation(app->state.animation_id) &&
         app->pos_y < floor_y &&
+        !object_underfoot(app) &&
         app->state.animation_id != ANIM_FALL) {
         esheep_gravity_event(&app->state, "none", rand() % 100);
         if (app->state.animation_id != ANIM_FALL)
@@ -1429,7 +1569,9 @@ static gboolean on_tick(gpointer user_data) {
     const char *pretick_context = "none";
     if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE || ctx.surface == ESHEEP_SURFACE_RIGHT_EDGE)
         pretick_context = "vertical";
-    else if (ctx.surface == ESHEEP_SURFACE_WINDOW || ctx.surface == ESHEEP_SURFACE_TASKBAR)
+    else if (ctx.move == ESHEEP_MOVE_FALLING &&
+             (ctx.surface == ESHEEP_SURFACE_WINDOW ||
+              ctx.surface == ESHEEP_SURFACE_TASKBAR))
         pretick_context = ctx.surface == ESHEEP_SURFACE_WINDOW ? "window" : "taskbar";
 
     /* Reset edge dispatch flag when no longer at the edge so the next edge
@@ -1509,7 +1651,10 @@ static gboolean on_tick(gpointer user_data) {
     update_child_animation(app);
     advance_child_animation(app, (int)app->tick_ms);
 
-    gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
+    sync_scene_window(app);
+    gtk_window_move(GTK_WINDOW(app->window),
+                    app->pos_x - app->scene_origin_x,
+                    app->pos_y - app->scene_origin_y);
     gtk_widget_queue_draw(app->window);
     set_sprite_input_region(app);
     return G_SOURCE_CONTINUE;
@@ -1527,12 +1672,62 @@ static void on_quit_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_main_quit();
 }
 
-static void show_quit_menu(App *app, GdkEventButton *event) {
-    (void)app;
+static void on_pause_activate(GtkMenuItem *item, gpointer user_data) {
+    App *app = user_data;
+    (void)item;
+    app->paused = !app->paused;
+}
+
+static void on_hide_activate(GtkMenuItem *item, gpointer user_data) {
+    App *app = user_data;
+    (void)item;
+    app->hidden = !app->hidden;
+    if (app->hidden) {
+        gtk_widget_hide(app->window);
+    } else {
+        gtk_widget_show(app->window);
+    }
+}
+
+static void on_bring_to_front_activate(GtkMenuItem *item, gpointer user_data) {
+    App *app = user_data;
+    (void)item;
+    if (app->hidden) {
+        app->hidden = FALSE;
+        gtk_widget_show(app->window);
+    }
+    gtk_window_present(GTK_WINDOW(app->window));
+}
+
+static void show_pet_menu(App *app, GdkEventButton *event) {
     GtkWidget *menu = gtk_menu_new();
+    GtkWidget *pause_item = gtk_check_menu_item_new_with_label(
+        app->paused ? "Resume" : "Pause");
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(pause_item), app->paused);
+    g_signal_connect(pause_item, "activate",
+                     G_CALLBACK(on_pause_activate), app);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), pause_item);
+
+    GtkWidget *hide_item = gtk_check_menu_item_new_with_label(
+        app->hidden ? "Show" : "Hide");
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(hide_item), app->hidden);
+    g_signal_connect(hide_item, "activate",
+                     G_CALLBACK(on_hide_activate), app);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), hide_item);
+
+    GtkWidget *front_item = gtk_menu_item_new_with_label("Bring to Front");
+    g_signal_connect(front_item, "activate",
+                     G_CALLBACK(on_bring_to_front_activate), app);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), front_item);
+
+    GtkWidget *separator = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), separator);
+
     GtkWidget *quit_item = gtk_menu_item_new_with_label("Quit");
-    g_signal_connect(quit_item, "activate", G_CALLBACK(on_quit_activate), NULL);
+    g_signal_connect(quit_item, "activate",
+                     G_CALLBACK(on_quit_activate), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit_item);
+
     gtk_widget_show_all(menu);
     gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
 }
@@ -1550,7 +1745,7 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpoint
         esheep_init(&app->state, ANIM_DRAG);
         set_sprite_input_region(app);
     } else if (event->button == 3) {
-        show_quit_menu(app, event);
+        show_pet_menu(app, event);
     }
     return TRUE;
 }
@@ -1561,10 +1756,12 @@ static gboolean on_button_release(GtkWidget *widget, GdkEventButton *event, gpoi
 
     if (event->button == 1 && app->dragging) {
         app->dragging = FALSE;
-        gtk_window_get_position(GTK_WINDOW(app->window), &app->pos_x, &app->pos_y);
+        app->pos_x = (int)event->x_root - app->drag_grab_x;
+        app->pos_y = (int)event->y_root - app->drag_grab_y;
         update_monitor_bounds(app);
         int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
         esheep_init(&app->state, app->pos_y < floor_y ? ANIM_FALL : ANIM_WALK);
+        app->drop_landing_enabled = app->pos_y < floor_y;
         refresh_objects(app);
         set_sprite_input_region(app);
     }
@@ -1578,7 +1775,9 @@ static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer use
     if (app->dragging) {
         app->pos_x = (int)event->x_root - app->drag_grab_x;
         app->pos_y = (int)event->y_root - app->drag_grab_y;
-        gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
+        gtk_window_move(GTK_WINDOW(app->window),
+                        app->pos_x - app->scene_origin_x,
+                        app->pos_y - app->scene_origin_y);
     }
     return TRUE;
 }
@@ -1809,20 +2008,33 @@ int main(int argc, char **argv) {
 
     const char *character = character_override ? character_override :
                             getenv("ESHEEP_CHARACTER");
+    gboolean custom_sprite_selected = sprite_override ||
+                                      getenv("ESHEEP_SPRITESHEET") ||
+                                      config_sprite;
     if (character && strcasecmp(character, "sheep") != 0 &&
-        strcasecmp(character, "penguin") != 0) {
-        g_printerr("invalid character '%s' (use sheep or penguin)\n", character);
+        strcasecmp(character, "penguin") != 0 && !custom_sprite_selected) {
+        g_printerr("invalid character '%s' (use sheep or penguin, or provide "
+                   "a custom spritesheet)\n", character);
         return 2;
     }
-    const char *sheet_path = sprite_override ? sprite_override :
-                             getenv("ESHEEP_SPRITESHEET");
-    char default_sheet_path[4096];
-    if (!sheet_path) {
-        snprintf(default_sheet_path, sizeof(default_sheet_path),
-                 "%s/%s_spritesheet.png", ESHEEP_DATADIR,
-                 character && strcasecmp(character, "penguin") == 0 ?
-                 "penguin_ice_blue" : "sheep");
-        sheet_path = default_sheet_path;
+    /* Custom-pet package: resolve spritesheet path respecting precedence.
+     * An explicit --sprite takes absolute priority; then ESHEEP_SPRITESHEET
+     * env var; then the config file spritesheet key; finally the built-in
+     * default for the selected character. */
+    const char *sheet_path;
+    char default_sheet_path_buf[4096];
+    if (sprite_override) {
+        sheet_path = sprite_override;
+    } else {
+        const char *env_path = getenv("ESHEEP_SPRITESHEET");
+        sheet_path = env_path ? env_path : config_sprite;
+        if (!sheet_path) {
+            snprintf(default_sheet_path_buf, sizeof(default_sheet_path_buf),
+                     "%s/%s_spritesheet.png", ESHEEP_DATADIR,
+                     character && strcasecmp(character, "penguin") == 0 ?
+                     "penguin_ice_blue" : "sheep");
+            sheet_path = default_sheet_path_buf;
+        }
     }
 
     GError *error = NULL;
@@ -1830,10 +2042,30 @@ int main(int argc, char **argv) {
     if (!sheet) {
         g_printerr("failed to load spritesheet '%s': %s\n", sheet_path,
                    error ? error->message : "unknown error");
+        if (character && strcasecmp(character, "sheep") != 0 &&
+            strcasecmp(character, "penguin") != 0) {
+            g_printerr("custom-pet: character '%s' resolved to path '%s', which "
+                       "could not be read. Verify the path or use --sprite to "
+                       "select a valid spritesheet.\n", character, sheet_path);
+        }
+        g_free(config_character);
+        g_free(config_sprite);
+        g_free(config_spawn);
+        g_free(default_config_path);
+        g_key_file_free(config);
         return 1;
     }
 
     int tile_size = gdk_pixbuf_get_width(sheet) / esheep_tiles_x;
+    if (!validate_spritesheet_pixbuf(sheet, sheet_path, character)) {
+        g_object_unref(sheet);
+        g_free(config_character);
+        g_free(config_sprite);
+        g_free(config_spawn);
+        g_free(default_config_path);
+        g_key_file_free(config);
+        return 2;
+    }
 
     GdkDisplay *display = gdk_display_get_default();
     DesktopBackendCapabilities runtime_backend = detect_backend_capabilities(
@@ -1933,9 +2165,22 @@ int main(int argc, char **argv) {
             refresh_objects(app);
         }
         configure_initial_spawn(app);
-        gtk_window_move(GTK_WINDOW(app->window), app->pos_x, app->pos_y);
+        gtk_window_move(GTK_WINDOW(app->window),
+                        app->pos_x - app->scene_origin_x,
+                        app->pos_y - app->scene_origin_y);
         set_sprite_input_region(app);
         app->tick_source_id = g_timeout_add(app->tick_ms, on_tick, app);
+    }
+
+    if (env_bool("ESHEEP_PAUSED", FALSE)) {
+        for (guint i = 0; i < count; i++)
+            sheep[i].paused = TRUE;
+    }
+    if (env_bool("ESHEEP_HIDDEN", FALSE)) {
+        for (guint i = 0; i < count; i++) {
+            sheep[i].hidden = TRUE;
+            gtk_widget_hide(sheep[i].window);
+        }
     }
 
     const char *autoquit = getenv("ESHEEP_AUTOQUIT_MS");
