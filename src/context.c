@@ -7,6 +7,76 @@ static inline bool rects_overlap_x(int x1, int w1, int x2, int w2) {
     return x1 < x2 + w2 && x1 + w1 > x2;
 }
 
+const char *esheep_apply_motion(EsheepMotion *motion) {
+    if (!motion) return "none";
+    int previous_bottom = motion->pos_y + motion->image_height;
+    motion->pos_x += motion->delta_x;
+    motion->pos_y += motion->delta_y;
+    const char *result = "none";
+    bool landed = false;
+
+    if (motion->delta_y > 0 &&
+        (motion->window_landing_enabled || motion->drop_landing_enabled)) {
+        int current_bottom = motion->pos_y + motion->image_height;
+        int landing_y = -1;
+        int landing_stack = -1;
+        bool landing_taskbar = false;
+        for (int i = 0; i < motion->object_count; i++) {
+            const EsheepSurfaceObject *surface = &motion->objects[i];
+            bool at_top = abs(current_bottom - surface->y) <= 2;
+            bool crossing = previous_bottom <= surface->y &&
+                            current_bottom >= surface->y &&
+                            motion->pos_y < surface->y + surface->height;
+            if ((!at_top && !(crossing &&
+                              (motion->window_landing_enabled ||
+                               motion->drop_landing_enabled))) ||
+                !rects_overlap_x(motion->pos_x, motion->image_width,
+                                 surface->x, surface->width)) continue;
+            if (surface->stack_order >= landing_stack) {
+                landing_y = surface->y;
+                landing_stack = surface->stack_order;
+                landing_taskbar = surface->taskbar;
+            }
+        }
+        if (landing_y >= 0) {
+            motion->pos_y = landing_y - motion->image_height;
+            motion->drop_landing_enabled = false;
+            landed = true;
+            result = landing_taskbar ? "taskbar" : "window";
+        }
+    }
+
+    int floor_y = motion->bounds_y + motion->bounds_height -
+                  motion->image_height;
+    bool hit_floor = false;
+    if (motion->pos_y > floor_y) {
+        motion->pos_y = floor_y;
+        hit_floor = motion->delta_y > 0;
+        if (hit_floor) motion->drop_landing_enabled = false;
+    }
+    if (motion->pos_y < motion->bounds_y) motion->pos_y = motion->bounds_y;
+    if (landed) return result;
+    if (hit_floor) return "horizontal+";
+    if (motion->pos_x <= motion->bounds_x) {
+        motion->pos_x = motion->bounds_x;
+        return "vertical";
+    }
+    if (motion->pos_x + motion->image_width >=
+        motion->bounds_x + motion->bounds_width) {
+        motion->pos_x = motion->bounds_x + motion->bounds_width -
+                        motion->image_width;
+        return "vertical";
+    }
+    for (int i = 0; i < motion->object_count; i++) {
+        const EsheepSurfaceObject *surface = &motion->objects[i];
+        if (abs(motion->pos_y + motion->image_height - surface->y) <= 2 &&
+            rects_overlap_x(motion->pos_x, motion->image_width,
+                            surface->x, surface->width))
+            return surface->taskbar ? "taskbar" : "window";
+    }
+    return result;
+}
+
 void esheep_classify_context(EsheepContext *ctx) {
     if (!ctx) return;
 

@@ -214,6 +214,40 @@ static void test_transition_context_mapping(void) {
     assert(strcmp(esheep_transition_context(&ctx), "none") == 0);
 }
 
+static void test_apply_motion_swept_window_landing(void) {
+    EsheepSurfaceObject window = {
+        .x = 100, .y = 200, .width = 300, .height = 300,
+        .stack_order = 4, .taskbar = false
+    };
+    EsheepMotion motion = {
+        .pos_x = 120, .pos_y = 140, .delta_y = 80,
+        .image_width = 40, .image_height = 40,
+        .bounds_width = 800, .bounds_height = 600,
+        .object_count = 1, .objects = &window,
+        .window_landing_enabled = true,
+    };
+    assert(strcmp(esheep_apply_motion(&motion), "window") == 0);
+    assert(motion.pos_y == 160);
+}
+
+static void test_apply_motion_floor_and_edge(void) {
+    EsheepMotion motion = {
+        .pos_x = 10, .pos_y = 550, .delta_x = -20, .delta_y = 80,
+        .image_width = 40, .image_height = 40,
+        .bounds_width = 800, .bounds_height = 600,
+    };
+    assert(strcmp(esheep_apply_motion(&motion), "horizontal+") == 0);
+    assert(motion.pos_x == -10);
+    assert(motion.pos_y == 560);
+
+    motion.pos_x = 0;
+    motion.pos_y = 0;
+    motion.delta_x = -1;
+    motion.delta_y = 0;
+    assert(strcmp(esheep_apply_motion(&motion), "vertical") == 0);
+    assert(motion.pos_x == 0);
+}
+
 static void test_window_on_monitor_edge(void) {
     fprintf(stderr, "test: window landing on monitor edge\n");
     /* Window spanning the right side of the monitor */
@@ -328,6 +362,8 @@ int main(void) {
     test_taskbar_landing();
     test_unsupported_surface();
     test_transition_context_mapping();
+    test_apply_motion_swept_window_landing();
+    test_apply_motion_floor_and_edge();
     test_window_on_monitor_edge();
     test_no_repeated_edge_dispatch();
     test_walking_animation_not_falling();

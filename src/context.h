@@ -57,7 +57,29 @@ typedef struct {
     int object_index;
 } EsheepFallTarget;
 
+typedef struct {
+    int pos_x;
+    int pos_y;
+    int delta_x;
+    int delta_y;
+    int image_width;
+    int image_height;
+    int bounds_x;
+    int bounds_y;
+    int bounds_width;
+    int bounds_height;
+    int object_count;
+    const EsheepSurfaceObject *objects;
+    bool window_landing_enabled;
+    bool drop_landing_enabled;
+} EsheepMotion;
+
 void esheep_classify_context(EsheepContext *ctx);
+
+/* Apply one resolved pose delta and return the resulting authored context.
+ * This is the platform-independent movement/collision boundary; callers own
+ * the input/output position and may clear drop_landing_enabled after landing. */
+const char *esheep_apply_motion(EsheepMotion *motion);
 
 /* Convert a classified pre-step context into the transition context used by
  * the authored interpreter. The returned string is static and remains valid

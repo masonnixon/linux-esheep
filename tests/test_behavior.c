@@ -550,8 +550,9 @@ static void test_swept_fall_lands_on_window(void) {
     app.objects[0].rect = (GdkRectangle){ 100, 85, 300, 200 };
     app.objects[0].stack_order = 1;
     app.object_count = 1;
+    app.window_landing = TRUE;
     app.pos_x = 160;
-    app.pos_y = 40; /* bottom 80; the 10px fall step crosses y=85 */
+    app.pos_y = 44; /* bottom 84; the authored 1px fall step reaches y=85 */
 
     const char *hit = step_position(&app, &esheep_animations[5], 0);
     assert(strcmp(hit, "window") == 0);

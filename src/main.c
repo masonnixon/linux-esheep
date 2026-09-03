@@ -1501,87 +1501,28 @@ static void set_sprite_input_region(App *app) {
  * to the monitor bounds. Returns the surface context hit by the step. */
 static const char *step_position(App *app, const EsheepAnimation *anim,
                                  int frame_index) {
-    int previous_bottom = app->pos_y + app->tile_size;
-    int dx = pose_delta(app, anim, frame_index, TRUE);
-    int dy = pose_delta(app, anim, frame_index, FALSE);
-    app->pos_x += dx;
-    app->pos_y += dy;
-
-    const char *context = "none";
-    gboolean hit_floor = FALSE;
-    if (dy > 0) {
-        /* Use the platform-independent context helper to detect
-         * landing on a window or taskbar during a fall. */
-        EsheepContext ctx;
-        int surface_count = sync_surface_objects(app);
-        memset(&ctx, 0, sizeof(ctx));
-        ctx.pos_x = app->pos_x;
-        ctx.pos_y = app->pos_y;
-        ctx.image_width = app->tile_size;
-        ctx.image_height = app->tile_size;
-        ctx.bounds_x = app->bounds.x;
-        ctx.bounds_y = app->bounds.y;
-        ctx.bounds_width = app->bounds.width;
-        ctx.bounds_height = app->bounds.height;
-        ctx.object_count = surface_count;
-        ctx.objects = app->surfaces;
-        ctx.window_landing_enabled = app->window_landing;
-        ctx.drop_landing_enabled = app->drop_landing_enabled;
-        ctx.move = ESHEEP_MOVE_FALLING;
-        esheep_classify_context(&ctx);
-
-        if (ctx.surface == ESHEEP_SURFACE_WINDOW ||
-            ctx.surface == ESHEEP_SURFACE_TASKBAR) {
-            app->pos_y = ctx.surface_y - app->tile_size;
-            app->drop_landing_enabled = FALSE;
-            context = ctx.surface == ESHEEP_SURFACE_WINDOW ? "window" : "taskbar";
-        } else {
-            /* A large authored fall step can cross a window top without ever
-             * being within the classifier's small contact tolerance. Treat a
-             * descending crossing as a landing, choosing the highest stacked
-             * valid surface. */
-            int current_bottom = app->pos_y + app->tile_size;
-            int landing_y = -1;
-            int landing_stack = -1;
-            gboolean landing_taskbar = FALSE;
-            for (int i = 0; i < surface_count; i++) {
-                const EsheepSurfaceObject *surface = &app->surfaces[i];
-                if (previous_bottom > surface->y || current_bottom < surface->y ||
-                    !rects_overlap_x(app->pos_x, app->tile_size,
-                                     surface->x, surface->width)) continue;
-                if (surface->stack_order >= landing_stack) {
-                    landing_y = surface->y;
-                    landing_stack = surface->stack_order;
-                    landing_taskbar = surface->taskbar;
-                }
-            }
-            if (landing_y >= 0) {
-                app->pos_y = landing_y - app->tile_size;
-                app->drop_landing_enabled = FALSE;
-                context = landing_taskbar ? "taskbar" : "window";
-            }
-        }
-    }
-
-    int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-    if (app->pos_y > floor_y) {
-        app->pos_y = floor_y;
-        hit_floor = dy > 0;
-        if (hit_floor) app->drop_landing_enabled = FALSE;
-    }
-    if (app->pos_y < app->bounds.y) app->pos_y = app->bounds.y;
-
-    if (context[0] != 'n') return context;
-    if (hit_floor) return "horizontal+";
-    if (app->pos_x <= app->bounds.x) {
-        app->pos_x = app->bounds.x;
-        context = "vertical";
-    } else if (app->pos_x + app->tile_size >= app->bounds.x + app->bounds.width) {
-        app->pos_x = app->bounds.x + app->bounds.width - app->tile_size;
-        context = "vertical";
-    }
-    const char *surface = object_underfoot(app);
-    return surface ? surface : context;
+    int surface_count = sync_surface_objects(app);
+    EsheepMotion motion = {
+        .pos_x = app->pos_x,
+        .pos_y = app->pos_y,
+        .delta_x = pose_delta(app, anim, frame_index, TRUE),
+        .delta_y = pose_delta(app, anim, frame_index, FALSE),
+        .image_width = app->tile_size,
+        .image_height = app->tile_size,
+        .bounds_x = app->bounds.x,
+        .bounds_y = app->bounds.y,
+        .bounds_width = app->bounds.width,
+        .bounds_height = app->bounds.height,
+        .object_count = surface_count,
+        .objects = app->surfaces,
+        .window_landing_enabled = app->window_landing,
+        .drop_landing_enabled = app->drop_landing_enabled,
+    };
+    const char *context = esheep_apply_motion(&motion);
+    app->pos_x = motion.pos_x;
+    app->pos_y = motion.pos_y;
+    app->drop_landing_enabled = motion.drop_landing_enabled;
+    return context;
 }
 
 static const EsheepChild *find_child_for_animation(int parent_anim_id)
