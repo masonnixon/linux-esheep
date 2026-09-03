@@ -1,5 +1,6 @@
 #include "pet_package.h"
 #include "animations_data.h"
+#include "renderer.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,6 +166,21 @@ static gboolean valid_child_expression(const char *text) {
     if (valid_spawn_expression(text)) return TRUE;
     for (int i = 0; exact[i]; i++)
         if (strcmp(text, exact[i]) == 0) return TRUE;
+    return FALSE;
+}
+
+static gboolean child_graph_has_cycle(const EsheepPetPackage *package,
+                                      int animation_id, int path[],
+                                      int path_length) {
+    if (path_length > ESHEEP_RENDER_MAX_CHILDREN - 1) return TRUE;
+    for (int i = 0; i < path_length; i++)
+        if (path[i] == animation_id) return TRUE;
+    path[path_length++] = animation_id;
+    for (int i = 0; i < package->child_count; i++) {
+        if (package->childs[i].animation_id != animation_id) continue;
+        if (child_graph_has_cycle(package, package->childs[i].next, path,
+                                  path_length)) return TRUE;
+    }
     return FALSE;
 }
 
@@ -467,6 +483,8 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
         package->spawns[i].next_count = (int)build->next->len;
     }
     package->child_count = (int)package->child_builds->len;
+    if (package->child_count > ESHEEP_RENDER_MAX_CHILDREN - 1)
+        return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "package has more child records than the renderer can compose"), FALSE;
     package->childs = g_new0(EsheepChild, package->child_count);
     for (int i = 0; i < package->child_count; i++) {
         EsheepChild child = g_array_index(package->child_builds, EsheepChild, i);
@@ -476,30 +494,12 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid child definition"), FALSE;
         package->childs[i] = child;
     }
-    /* At most one authored child record may own a given parent animation in
-     * the current table format. Reject cycles so a package cannot create an
-     * unbounded child tree when the GTK host materializes it. */
+    /* Multiple child records may share a parent. Reject cycles so a package
+     * cannot create an unbounded child tree when the GTK host materializes it. */
     for (int i = 0; i < package->child_count; i++) {
         int parent = package->childs[i].animation_id;
-        for (int j = i + 1; j < package->child_count; j++)
-            if (package->childs[j].animation_id == parent)
-                return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "duplicate child parent animation"), FALSE;
-        int seen[ESHEEP_PACKAGE_MAX_CHILD_DEPTH + 1];
-        int seen_count = 0;
-        while (parent > 0 && seen_count <= ESHEEP_PACKAGE_MAX_CHILD_DEPTH) {
-            for (int j = 0; j < seen_count; j++)
-                if (seen[j] == parent)
-                    return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "child records contain a cycle"), FALSE;
-            seen[seen_count++] = parent;
-            int next_parent = 0;
-            for (int j = 0; j < package->child_count; j++)
-                if (package->childs[j].animation_id == parent) {
-                    next_parent = package->childs[j].next;
-                    break;
-                }
-            parent = next_parent;
-        }
-        if (seen_count > ESHEEP_PACKAGE_MAX_CHILD_DEPTH)
+        int path[ESHEEP_PACKAGE_MAX_CHILD_DEPTH + 1];
+        if (child_graph_has_cycle(package, parent, path, 0))
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "child nesting exceeds runtime depth"), FALSE;
     }
     return TRUE;

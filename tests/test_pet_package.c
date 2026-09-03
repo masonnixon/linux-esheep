@@ -22,7 +22,10 @@ static const char PACKAGE_XML[] =
     "<end><x>0</x><y>0</y><interval>100</interval><offsety>0</offsety>"
     "<opacity>1</opacity></end><sequence repeat=\"0\"><frame>3</frame>"
     "<next probability=\"100\">1</next></sequence></animation>"
-    "</animations></animations>";
+    "</animations>"
+    "<childs><child animationid=\"1\"><x>0</x><y>0</y><next>2</next></child>"
+    "<child animationid=\"1\"><x>1</x><y>0</y><next>2</next></child></childs>"
+    "</animations>";
 
 int main(void) {
     const char *path = "/tmp/esheep-test-package.xml";
@@ -43,6 +46,7 @@ int main(void) {
     assert(esheep_animations[0].sequence_next[0].target == 2);
     assert(esheep_animations[0].flip == 1);
     assert(esheep_spawn_count == 1 && esheep_spawns[0].x != NULL);
+    assert(esheep_child_count == 2);
 
     esheep_pet_package_free(package);
     assert(esheep_animation_count == esheep_default_animation_count);
