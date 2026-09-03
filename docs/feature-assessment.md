@@ -120,10 +120,13 @@ correct runtime context.
   integration coverage.
 - Richer sheep-to-sheep policy beyond grounded stacking, overlap resolution,
   and spawn spacing.
-- Complete handling for unusual panel placement and compositor stacking.
-- A full animation chooser and richer settings for character/package
-  selection. The runtime settings dialog, tray About view, and indexed review
-  tool are implemented.
+- Complete handling for unusual panel placement and compositor-specific
+  stacking. X11 foreground-client occlusion is implemented for normal and
+  reparented clients, with live compositor coverage still limited.
+- A full animation chooser remains incomplete. The runtime settings dialog
+  now persists character, spritesheet, package, count, monitor, spawn,
+  landing, Conky, tick, and walk-probability settings; the indexed review
+  tool remains available for animation selection.
 - Sound effects and authored sound playback.
 - Update and broader application-management behavior from the original
   desktop application.
@@ -159,8 +162,9 @@ are weak for the parts users see most:
   moves or that the scene remains correctly stacked.
 - No live test that child transitions complete and clean up.
 - No live multi-monitor integration test with actual GDK monitor topology.
-- Pure coverage now includes grounded sheep stacking; live simultaneous sheep
-  interaction and compositor stacking coverage remain absent.
+- Pure coverage now includes grounded sheep stacking. Live simultaneous sheep
+  interaction remains limited, while Xvfb verifies foreground-client
+  occlusion ordering.
 - No frame-by-frame visual comparison against expected screenshots.
 
 ## Overall status
