@@ -139,6 +139,9 @@ typedef struct {
     GdkDisplay *display;
     guint monitor_index;
     guint configured_count;
+    char character[64];
+    char spritesheet[4096];
+    char package[4096];
     GKeyFile *config;
     const char *config_path;
     guint tick_ms;
@@ -2224,6 +2227,21 @@ static void save_group_settings(SheepGroup *group) {
                            (gint)group->configured_count);
     g_key_file_set_integer(group->config, "esheep", "monitor",
                            (gint)group->monitor_index);
+    if (group->character[0] != '\0')
+        g_key_file_set_string(group->config, "esheep", "character",
+                              group->character);
+    else
+        g_key_file_remove_key(group->config, "esheep", "character", NULL);
+    if (group->spritesheet[0] != '\0')
+        g_key_file_set_string(group->config, "esheep", "spritesheet",
+                              group->spritesheet);
+    else
+        g_key_file_remove_key(group->config, "esheep", "spritesheet", NULL);
+    if (group->package[0] != '\0')
+        g_key_file_set_string(group->config, "esheep", "package",
+                              group->package);
+    else
+        g_key_file_remove_key(group->config, "esheep", "package", NULL);
     g_key_file_set_integer(group->config, "esheep", "walk_keep_probability",
                            (gint)group->walk_keep_probability);
     g_key_file_set_boolean(group->config, "esheep", "window_landing",
@@ -2255,6 +2273,9 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkSpinButton *monitor = g_object_get_data(G_OBJECT(dialog), "monitor");
         GtkSpinButton *count = g_object_get_data(G_OBJECT(dialog), "count");
         GtkComboBoxText *spawn = g_object_get_data(G_OBJECT(dialog), "spawn");
+        GtkEntry *character = g_object_get_data(G_OBJECT(dialog), "character");
+        GtkEntry *spritesheet = g_object_get_data(G_OBJECT(dialog), "spritesheet");
+        GtkEntry *package = g_object_get_data(G_OBJECT(dialog), "package");
         GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
         GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
         group_set_tick_ms(group, (guint)gtk_spin_button_get_value_as_int(tick));
@@ -2270,6 +2291,12 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                       sizeof(group->spawn_mode));
             g_free(spawn_mode);
         }
+        g_strlcpy(group->character, gtk_entry_get_text(character),
+                  sizeof(group->character));
+        g_strlcpy(group->spritesheet, gtk_entry_get_text(spritesheet),
+                  sizeof(group->spritesheet));
+        g_strlcpy(group->package, gtk_entry_get_text(package),
+                  sizeof(group->package));
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
         group_set_exclude_conky(group, gtk_toggle_button_get_active(conky));
         save_group_settings(group);
@@ -2298,7 +2325,10 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "bottom", "Bottom");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "window", "Window");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "random", "Random");
-    GtkWidget *note = gtk_label_new("Character, spritesheet, and count apply on restart.");
+    GtkWidget *character = gtk_entry_new();
+    GtkWidget *spritesheet = gtk_entry_new();
+    GtkWidget *package = gtk_entry_new();
+    GtkWidget *note = gtk_label_new("Character, asset paths, package, and count apply on restart.");
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tick interval (ms)"), 0, 0, 1, 1);
@@ -2311,14 +2341,23 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), count, 1, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spawn mode"), 0, 4, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), spawn, 1, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), landing, 0, 5, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), conky, 0, 6, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), note, 0, 7, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Character"), 0, 5, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), character, 1, 5, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spritesheet"), 0, 6, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), spritesheet, 1, 6, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Behavior package"), 0, 7, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), package, 1, 7, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), landing, 0, 8, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), conky, 0, 9, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 10, 2, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(count), group->configured_count);
     gtk_combo_box_set_active_id(GTK_COMBO_BOX(spawn), group->spawn_mode);
+    gtk_entry_set_text(GTK_ENTRY(character), group->character);
+    gtk_entry_set_text(GTK_ENTRY(spritesheet), group->spritesheet);
+    gtk_entry_set_text(GTK_ENTRY(package), group->package);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(landing), group->window_landing);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(conky), !group->exclude_conky);
     g_object_set_data(G_OBJECT(dialog), "tick-ms", tick);
@@ -2326,6 +2365,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     g_object_set_data(G_OBJECT(dialog), "monitor", monitor);
     g_object_set_data(G_OBJECT(dialog), "count", count);
     g_object_set_data(G_OBJECT(dialog), "spawn", spawn);
+    g_object_set_data(G_OBJECT(dialog), "character", character);
+    g_object_set_data(G_OBJECT(dialog), "spritesheet", spritesheet);
+    g_object_set_data(G_OBJECT(dialog), "package", package);
     g_object_set_data(G_OBJECT(dialog), "landing", landing);
     g_object_set_data(G_OBJECT(dialog), "conky", conky);
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
@@ -3068,6 +3110,11 @@ int main(int argc, char **argv) {
         .window_landing = window_landing,
         .exclude_conky = exclude_conky,
     };
+    g_strlcpy(group.character, character ? character : "sheep",
+              sizeof(group.character));
+    g_strlcpy(group.spritesheet, sheet_path, sizeof(group.spritesheet));
+    if (package_path)
+        g_strlcpy(group.package, package_path, sizeof(group.package));
     g_strlcpy(group.spawn_mode,
               spawn_override ? spawn_override :
               (getenv("ESHEEP_SPAWN") ? getenv("ESHEEP_SPAWN") : "bottom"),
