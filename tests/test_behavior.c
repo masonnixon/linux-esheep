@@ -259,6 +259,22 @@ static void test_child_restarts_when_parent_animation_changes(void) {
     esheep_child_count = old_count;
 }
 
+static void test_child_scene_is_removed_when_parent_leaves_record(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+
+    esheep_init(&app.state, 21);
+    update_child_animation(&app);
+    assert(app.scene.count == 2);
+    assert(app.child_animation_ids[0] == 23);
+
+    esheep_init(&app.state, 22);
+    update_child_animation(&app);
+    assert(app.scene.count == 1);
+    assert(app.child_animation_id == 0);
+    assert(app.child_animation_ids[0] == 0);
+}
+
 /* Test 10: Edge turn preserves direction orientation. */
 static void test_edge_turn_preserves_orientation(void) {
     App app;
@@ -676,6 +692,9 @@ int main(void) {
 
     test_child_restarts_when_parent_animation_changes();
     printf("  test_child_restarts_when_parent_animation_changes: PASSED\n");
+
+    test_child_scene_is_removed_when_parent_leaves_record();
+    printf("  test_child_scene_is_removed_when_parent_leaves_record: PASSED\n");
 
     test_edge_turn_preserves_orientation();
     printf("  test_edge_turn_preserves_orientation: PASSED\n");
