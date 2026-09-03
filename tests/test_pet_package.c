@@ -78,6 +78,22 @@ int main(void) {
     g_clear_error(&error);
     remove(invalid_path);
 
+    package = NULL;
+    const char *invalid_action_path = "/tmp/esheep-test-invalid-action.xml";
+    const char *invalid_action_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame><action>teleport</action></sequence>"
+        "</animation></animations></animations>";
+    assert(g_file_set_contents(invalid_action_path, invalid_action_xml, -1,
+                               &error));
+    assert(!esheep_pet_package_load(invalid_action_path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    assert(strstr(error->message, "unsupported animation action") != NULL);
+    g_clear_error(&error);
+    remove(invalid_action_path);
+
     puts("All pet package tests passed");
     return 0;
 }

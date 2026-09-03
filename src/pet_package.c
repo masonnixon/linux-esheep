@@ -371,6 +371,7 @@ static void finish_text(ParseState *state) {
         else if (state->field == FIELD_REPEAT) a->value.repeat = owned_string(state->package, value);
         else if (state->field == FIELD_REPEAT_FROM) a->value.repeat_from = owned_string(state->package, value);
         else if (state->field == FIELD_ACTION && strcmp(value, "flip") == 0) a->value.flip = 1;
+        else if (state->field == FIELD_ACTION) set_error(state, "unsupported animation action");
         else if (state->field == FIELD_FRAME && (!parse_int(value, &integer) || integer < 0)) set_error(state, "frame must be a non-negative integer");
         else if (state->field == FIELD_FRAME) g_array_append_val(a->frames, integer);
     } else if (state->spawn) {
