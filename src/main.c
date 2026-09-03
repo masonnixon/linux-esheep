@@ -1041,6 +1041,11 @@ static void refresh_objects(App *app) {
 
     Display *display = gdk_x11_display_get_xdisplay(gdk_display);
     Window root = DefaultRootWindow(display);
+    /* Xlib reports invalid or disappearing client windows asynchronously.
+     * Install the scoped handler before even querying the root properties so
+     * a stale client-list entry cannot escape into GTK's fatal handler. */
+    x11_bad_window = FALSE;
+    x11_previous_error_handler = XSetErrorHandler(x11_refresh_error_handler);
     Atom client_list = XInternAtom(display, "_NET_CLIENT_LIST", False);
     Atom window_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
     Atom dock_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK", False);
@@ -1059,11 +1064,14 @@ static void refresh_objects(App *app) {
                                     False, XA_WINDOW, &actual_type, &format,
                                     &count, &bytes_after,
                                     (unsigned char **)&windows);
-    if (result != Success || !windows || format != 32) {
+    x11_refresh_sync(display);
+    if (x11_bad_window || result != Success || !windows || format != 32) {
         if (windows) XFree(windows);
+        XSetErrorHandler(x11_previous_error_handler);
         return;
     }
 
+    x11_bad_window = FALSE;
     unsigned long stacking_count = 0;
     result = XGetWindowProperty(display, root, client_list_stacking, 0,
                                 MAX_OBJECTS, False, XA_WINDOW, &actual_type,
@@ -1076,8 +1084,6 @@ static void refresh_objects(App *app) {
         stacking_count = 0;
     }
 
-    x11_bad_window = FALSE;
-    x11_previous_error_handler = XSetErrorHandler(x11_refresh_error_handler);
     for (unsigned long i = 0; i < count && app->object_count < MAX_OBJECTS; i++) {
         x11_bad_window = FALSE;
         gboolean own_window = windows[i] == app->xwindow;
