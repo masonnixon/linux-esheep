@@ -165,8 +165,10 @@ at login; `make uninstall-autostart` removes that opt-in entry.
 
 ## Known limitations / not yet built
 
-- Sound effects are not yet implemented. The tray and right-click menus plus
-  the settings dialog cover the current runtime actions.
+- Sound effects are not yet implemented. The repository currently contains no
+  authored sound metadata or audio assets, and the build environment exposes
+  neither GStreamer nor libcanberra. The tray and right-click menus plus the
+  settings dialog cover the current runtime actions.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
