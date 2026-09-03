@@ -28,7 +28,7 @@ The current implementation has these working foundations:
 - Conky exclusion by default, with an option to allow it.
 - Multiple independent sheep at startup.
 - Configurable spritesheet, character selection, spawn mode, sheep count,
-  tick interval, window landing, and walking probability.
+  monitor selection, tick interval, window landing, and walking probability.
 - One optional status/tray icon with group-wide show/hide, pause/resume,
   bring-to-front, About, and Quit actions.
 - Explicit opt-in XDG autostart installation.
@@ -37,6 +37,8 @@ The current implementation has these working foundations:
 - Pure actor support for querying all authored child records, independent
   child clocks, bounded child trees, and recursive cleanup.
 - Sheep-to-sheep overlap resolution and spawn spacing.
+- Startup and runtime monitor selection, including negative-coordinate and
+  unequal-height monitor seam selection helpers.
 - Sheep and replacement penguin spritesheets sharing the same tile grid.
 - A transition review tool with indexed playback.
 - Unit tests for the pure interpreter, animation data, sprite references, and
@@ -148,7 +150,7 @@ are weak for the parts users see most:
 - No test that a child window follows its parent while the parent moves.
 - No test that child windows stack correctly.
 - No test that child transitions complete and clean up.
-- No multi-monitor integration test.
+- No live multi-monitor integration test with actual GDK monitor topology.
 - No test for simultaneous sheep interactions.
 - No frame-by-frame visual comparison against expected screenshots.
 
