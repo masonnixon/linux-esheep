@@ -203,6 +203,18 @@ static void test_child_frame_progression(void) {
     assert(app.child_frame_index < child_anim->frame_count);
 }
 
+static void test_child_authored_pose_progression(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+    app.direction = -1;
+    esheep_init(&app.state, 28);
+    update_child_animation(&app);
+    int initial_x = app.scene.tiles[1].x;
+    advance_child_animation(&app, 100);
+    update_child_animation(&app);
+    assert(app.scene.tiles[1].x != initial_x);
+}
+
 /* Test 10: Edge turn preserves direction orientation. */
 static void test_edge_turn_preserves_orientation(void) {
     App app;
@@ -611,6 +623,9 @@ int main(void) {
 
     test_child_frame_progression();
     printf("  test_child_frame_progression: PASSED\n");
+
+    test_child_authored_pose_progression();
+    printf("  test_child_authored_pose_progression: PASSED\n");
 
     test_edge_turn_preserves_orientation();
     printf("  test_edge_turn_preserves_orientation: PASSED\n");

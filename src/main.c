@@ -118,6 +118,8 @@ struct App {
     int child_animation_ids[MAX_RUNTIME_CHILDREN];
     int child_frame_indices[MAX_RUNTIME_CHILDREN];
     int child_elapsed_ms_values[MAX_RUNTIME_CHILDREN];
+    int child_pose_x[MAX_RUNTIME_CHILDREN];
+    int child_pose_y[MAX_RUNTIME_CHILDREN];
     EsheepState child_states[MAX_RUNTIME_CHILDREN];
     int scene_origin_x;
     int scene_origin_y;
@@ -939,6 +941,8 @@ static void cleanup_app(App *app) {
     memset(app->child_frame_indices, 0, sizeof(app->child_frame_indices));
     memset(app->child_elapsed_ms_values, 0,
            sizeof(app->child_elapsed_ms_values));
+    memset(app->child_pose_x, 0, sizeof(app->child_pose_x));
+    memset(app->child_pose_y, 0, sizeof(app->child_pose_y));
     memset(app->child_states, 0, sizeof(app->child_states));
     esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
     app->cleaned_up = TRUE;
@@ -1661,6 +1665,8 @@ static void update_child_animation(App *app) {
                 app->child_states[slot].frame_index = app->child_frame_index;
             }
             app->child_elapsed_ms_values[slot] = 0;
+            app->child_pose_x[slot] = 0;
+            app->child_pose_y[slot] = 0;
         }
         int cid = app->child_states[slot].animation_id;
         if (cid < 1 || cid > esheep_animation_count) cid = record->next;
@@ -1669,8 +1675,10 @@ static void update_child_animation(App *app) {
         int frame = app->child_states[slot].frame_index;
         if (frame < 0 || frame >= canim->frame_count) frame = 0;
         child_tile_ids[slot] = canim->frames[frame];
-        child_x[slot] = child_local_coordinate(app, record->x, 0);
-        child_y[slot] = child_local_coordinate(app, record->y, 0);
+        child_x[slot] = child_local_coordinate(app, record->x, 0) +
+                       app->child_pose_x[slot];
+        child_y[slot] = child_local_coordinate(app, record->y, 0) +
+                       app->child_pose_y[slot];
         child_flipped[slot] = sprite_is_flipped(app, canim);
         double opacity_progress = canim->frame_count <= 1 ? 0.0 :
             (double)frame / (double)(canim->frame_count - 1);
@@ -1710,6 +1718,19 @@ static void advance_child_animation(App *app, int dt_ms) {
             continue;
         esheep_tick(&app->child_states[slot], dt_ms, "none",
                     app_random_0_99(app));
+        for (int event_index = 0;
+             event_index < app->child_states[slot].event_count;
+             event_index++) {
+            EsheepFrameEvent event = app->child_states[slot].events[event_index];
+            if (event.animation_id < 1 ||
+                event.animation_id > esheep_animation_count) continue;
+            const EsheepAnimation *animation =
+                &esheep_animations[event.animation_id - 1];
+            app->child_pose_x[slot] += pose_delta(app, animation,
+                                                  event.frame_index, TRUE);
+            app->child_pose_y[slot] += pose_delta(app, animation,
+                                                  event.frame_index, FALSE);
+        }
         app->child_animation_ids[slot] = app->child_states[slot].animation_id;
         app->child_frame_indices[slot] = app->child_states[slot].frame_index;
         app->child_elapsed_ms_values[slot] = app->child_states[slot].elapsed_ms;
