@@ -76,11 +76,14 @@ test-man:
 	command -v groff >/dev/null
 	groff -T utf8 -man packaging/esheep.1 >/dev/null
 
+test-install:
+	set -eu; stage=$$(mktemp -d /tmp/esheep-install-test.XXXXXX); trap 'rm -rf "$$stage"' EXIT; $(MAKE) install-autostart DESTDIR="$$stage" PREFIX=/usr; test -x "$$stage/usr/bin/esheep"; test -f "$$stage/usr/share/esheep/sheep_spritesheet.png"; test -f "$$stage/usr/share/esheep/penguin_ice_blue_spritesheet.png"; test -f "$$stage/usr/share/applications/esheep.desktop"; test -f "$$stage/usr/share/xdg/autostart/esheep.desktop"; test -f "$$stage/usr/share/man/man1/esheep.1"
+
 test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
 	/tmp/esheep_test_context
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-man test-gui test-cli
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-man test-install test-gui test-cli
 
 esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
@@ -109,6 +112,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-man test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean
+.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
