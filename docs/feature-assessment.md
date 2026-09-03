@@ -43,6 +43,12 @@ The current implementation has these working foundations:
 - A transition review tool with indexed playback.
 - Unit tests for the pure interpreter, animation data, sprite references, and
   basic runtime startup behavior.
+- Generated-data validation covers IDs, transition targets, probabilities,
+  supported expressions, frame references, and child relationships, with
+  reproducibility checks against the XML source.
+- The default test suite stages an installation and verifies the executable,
+  sprite assets, desktop files, autostart file, and man page without writing to
+  the host installation.
 
 ## Partially implemented
 
@@ -91,6 +97,14 @@ The asset test verifies that referenced animation frames exist in both sheets.
 It does not verify visual alignment, child composition, transparency masks,
 animation readability, or that every authored frame is displayed in its
 correct runtime context.
+
+### Validation and packaging
+
+The authored-data validator and deterministic regeneration checks are now
+implemented and part of the normal test suite. Packaging layout is also tested
+through an isolated `DESTDIR` staging install. These gates do not imply that
+the GTK runtime has achieved full authored-graph parity; the remaining runtime
+gaps are listed below.
 
 ## Missing features
 
