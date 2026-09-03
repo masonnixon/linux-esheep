@@ -85,6 +85,33 @@ int main(int argc, char **argv) {
     refresh_objects(&app);
     assert(app.object_count == 0);
 
+    /* Most X11 WMs reparent clients into a frame. The client-list entry is
+     * still the inner window, but collision geometry and occlusion must use
+     * the frame that is actually a sibling of the sheep. */
+    Window frame = XCreateSimpleWindow(display, root, app.pos_x, app.pos_y,
+                                       420, 240, 0, 0, 0);
+    Window reparented_client = XCreateSimpleWindow(display, frame, 8, 24,
+                                                   400, 200, 0, 0, 0);
+    XMapWindow(display, reparented_client);
+    XMapWindow(display, frame);
+    set_client_list(display, root, client_list, reparented_client);
+    XRaiseWindow(display, frame);
+    XSync(display, False);
+    refresh_objects(&app);
+    assert(app.object_count == 1);
+    assert(app.objects[0].rect.x == app.pos_x);
+    assert(app.objects[0].rect.y == app.pos_y);
+    assert(app.objects[0].rect.width == 420);
+    assert(app.objects[0].rect.height == 240);
+    assert(root_child_index(display, root, app.xwindow) <
+           root_child_index(display, root, frame));
+
+    XDestroyWindow(display, frame);
+    XSync(display, False);
+    set_client_list(display, root, client_list, reparented_client);
+    refresh_objects(&app);
+    assert(app.object_count == 0);
+
     cleanup_app(&app);
     return 0;
 }
