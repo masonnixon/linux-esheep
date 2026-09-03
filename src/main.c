@@ -760,6 +760,25 @@ static int sync_surface_objects(App *app) {
         app->surfaces[surface_count].taskbar = src->taskbar;
         surface_count++;
     }
+    /* A grounded sheep can support another falling sheep. Child props are
+     * intentionally excluded because they are visual-only and do not own a
+     * desktop surface. Give root sheep a deterministic layer above ordinary
+     * client windows for tie-breaking; the window manager still controls
+     * their actual visual occlusion. */
+    for (int i = 0; i < app->sibling_count && surface_count < MAX_OBJECTS; i++) {
+        const App *other = &app->siblings[i];
+        if (other == app || other->cleaned_up || other->dragging ||
+            other->tile_size <= 0 ||
+            is_airborne_animation(other->state.animation_id)) continue;
+        app->surfaces[surface_count].x = other->pos_x;
+        app->surfaces[surface_count].y = other->pos_y;
+        app->surfaces[surface_count].width = other->tile_size;
+        app->surfaces[surface_count].height = other->tile_size;
+        app->surfaces[surface_count].stack_order = 100000 +
+                                                    (app->sibling_count - i);
+        app->surfaces[surface_count].taskbar = FALSE;
+        surface_count++;
+    }
     return surface_count;
 }
 
@@ -1311,15 +1330,16 @@ static void build_context(App *app, EsheepContext *ctx) {
 
 static const char *object_underfoot(const App *app) {
     int bottom = app->pos_y + app->tile_size;
-    const DesktopObject *best = NULL;
-    for (int i = 0; i < app->object_count; i++) {
-        const DesktopObject *object = &app->objects[i];
-        if (!object_on_monitor(app, object)) continue;
-        if (abs(bottom - object->rect.y) <= 2 &&
-            rects_overlap_x(app->pos_x, app->tile_size, object->rect.x,
-                            object->rect.width) &&
-            (!best || object->stack_order > best->stack_order))
-            best = object;
+    const EsheepSurfaceObject *best = NULL;
+    App *mutable_app = (App *)app;
+    int surface_count = sync_surface_objects(mutable_app);
+    for (int i = 0; i < surface_count; i++) {
+        const EsheepSurfaceObject *surface = &app->surfaces[i];
+        if (abs(bottom - surface->y) <= 2 &&
+            rects_overlap_x(app->pos_x, app->tile_size, surface->x,
+                            surface->width) &&
+            (!best || surface->stack_order > best->stack_order))
+            best = surface;
     }
     return best ? (best->taskbar ? "taskbar" : "window") : NULL;
 }

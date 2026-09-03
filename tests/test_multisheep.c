@@ -176,6 +176,23 @@ static void test_collision_breaks_deadlock(void) {
     assert(sheep[0].pos_x != start_x0 || sheep[1].pos_x != start_x1);
 }
 
+static void test_falling_sheep_can_land_on_grounded_sheep(void) {
+    App sheep[2];
+    init_stub_app(&sheep[0], sheep, 2, 0, 0, 0, 400, 300, 40);
+    init_stub_app(&sheep[1], sheep, 2, 1, 0, 0, 400, 300, 40);
+    sheep[0].pos_x = 100;
+    sheep[0].pos_y = 120;
+    sheep[1].pos_x = 100;
+    sheep[1].pos_y = 160;
+    esheep_init(&sheep[0].state, ANIM_FALL);
+    esheep_init(&sheep[1].state, ANIM_WALK);
+
+    const char *hit = step_position(&sheep[0], &esheep_animations[4], 0);
+    assert(strcmp(hit, "window") == 0);
+    assert(sheep[0].pos_y == 120);
+    assert(!apps_overlap(&sheep[0], &sheep[1]));
+}
+
 static void test_drag_and_fall_isolation(void) {
     App sheep[2];
     int dragged_x;
@@ -260,6 +277,7 @@ int main(void) {
     test_window_spawn_skips_taskbar_and_overlap();
     test_independent_child_instances();
     test_collision_breaks_deadlock();
+    test_falling_sheep_can_land_on_grounded_sheep();
     test_drag_and_fall_isolation();
     test_child_input_owner_is_parent_only();
     test_cleanup_is_per_instance();
