@@ -1154,6 +1154,86 @@ static int stacking_order(const Window *stacking, unsigned long count, Window wi
     return -1;
 }
 
+/* A normal toplevel participates in WM stacking, but moving it does not
+ * change its relative position.  If a client is raised over a sheep that is
+ * standing on a different (possibly covered) client, explicitly put the
+ * sheep immediately below the highest overlapping client.  This preserves
+ * the useful "pet on a window" case while making foreground occlusion real.
+ * The request is issued only while the refresh error handler is installed. */
+static void restack_below_occluding_window(App *app, Display *display,
+                                           const Window *windows,
+                                           unsigned long window_count,
+                                           const Window *stacking,
+                                           unsigned long stacking_count) {
+    if (!app || !display || !windows || !stacking || !app->xwindow ||
+        window_count == 0 || stacking_count == 0) return;
+
+    GdkRectangle sheep = { app->pos_x, app->pos_y,
+                           app->tile_size, app->tile_size };
+    int best_order = -1;
+    Window occluding = None;
+    for (unsigned long i = 0; i < window_count; i++) {
+        Window candidate = windows[i];
+        if (!candidate || candidate == app->xwindow) continue;
+        gboolean own_window = FALSE;
+        for (int sibling = 0; sibling < app->sibling_count; sibling++) {
+            if (candidate == app->siblings[sibling].xwindow) {
+                own_window = TRUE;
+                break;
+            }
+        }
+        if (own_window) continue;
+
+        XWindowAttributes attributes;
+        x11_bad_window = FALSE;
+        if (!XGetWindowAttributes(display, candidate, &attributes)) {
+            x11_refresh_sync(display);
+            continue;
+        }
+        Window root, parent, *children = NULL;
+        unsigned int child_count = 0;
+        gboolean tree_ok = XQueryTree(display, candidate, &root, &parent,
+                                      &children, &child_count);
+        x11_refresh_sync(display);
+        if (children) XFree(children);
+        if (x11_bad_window || !tree_ok || attributes.map_state != IsViewable)
+            continue;
+
+        Window geometry_window = parent != DefaultRootWindow(display) ? parent : candidate;
+        XWindowAttributes geometry;
+        if (!XGetWindowAttributes(display, geometry_window, &geometry)) {
+            x11_refresh_sync(display);
+            continue;
+        }
+        int x, y;
+        Window child;
+        gboolean translated = XTranslateCoordinates(display, geometry_window,
+                                                     DefaultRootWindow(display),
+                                                     0, 0, &x, &y, &child);
+        x11_refresh_sync(display);
+        if (x11_bad_window || !translated) continue;
+        GdkRectangle candidate_rect = { x, y, geometry.width, geometry.height };
+        if (!rects_overlap(&sheep, &candidate_rect)) continue;
+
+        int order = stacking_order(stacking, stacking_count, candidate);
+        if (order > best_order) {
+            best_order = order;
+            /* Reparented clients are not siblings of the sheep; the WM frame
+             * is.  For an un-reparented client geometry_window is the client
+             * itself and remains the correct sibling. */
+            occluding = geometry_window;
+        }
+    }
+    if (!occluding) return;
+
+    XWindowChanges changes = {0};
+    changes.sibling = occluding;
+    changes.stack_mode = Below;
+    x11_bad_window = FALSE;
+    XConfigureWindow(display, app->xwindow, CWSibling | CWStackMode, &changes);
+    x11_refresh_sync(display);
+}
+
 static void refresh_objects(App *app) {
     if (!app->window_landing) {
         app->object_count = 0;
@@ -1297,6 +1377,8 @@ static void refresh_objects(App *app) {
         object->taskbar = FALSE;
         object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
     }
+    restack_below_occluding_window(app, display, windows, count, stacking,
+                                   stacking_count);
     x11_refresh_sync(display);
     XSetErrorHandler(x11_previous_error_handler);
     XFree(windows);

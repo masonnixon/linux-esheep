@@ -19,6 +19,22 @@ static void set_client_list(Display *display, Window root, Atom property,
     XSync(display, False);
 }
 
+static int root_child_index(Display *display, Window root, Window needle) {
+    Window queried_root, parent, *children = NULL;
+    unsigned int count = 0;
+    int result = -1;
+    if (!XQueryTree(display, root, &queried_root, &parent, &children, &count))
+        return -1;
+    for (unsigned int i = 0; i < count; i++) {
+        if (children[i] == needle) {
+            result = (int)i;
+            break;
+        }
+    }
+    if (children) XFree(children);
+    return result;
+}
+
 int main(int argc, char **argv) {
     assert(gtk_init_check(&argc, &argv));
     GdkDisplay *gdk_display = gdk_display_get_default();
@@ -42,6 +58,15 @@ int main(int argc, char **argv) {
     set_client_list(display, root, client_list, client);
     refresh_objects(&app);
     assert(app.object_count == 1);
+
+    /* A foreground client overlapping the pet must be above the pet in the
+     * actual X11 tree, while the pet remains a normal managed window. */
+    XMoveWindow(display, client, app.pos_x, app.pos_y);
+    XRaiseWindow(display, client);
+    XSync(display, False);
+    refresh_objects(&app);
+    assert(root_child_index(display, root, app.xwindow) <
+           root_child_index(display, root, client));
 
     /* A malformed root property is an incomplete refresh, not an empty
      * desktop. Preserve the last complete surface snapshot. */
