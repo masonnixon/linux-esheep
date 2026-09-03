@@ -1793,8 +1793,18 @@ static void sync_scene_window(App *app) {
 
     GtkAllocation allocation;
     gtk_widget_get_allocation(app->window, &allocation);
-    if (allocation.width != width || allocation.height != height)
+    if (allocation.width != width || allocation.height != height) {
+        /* The window is created with gtk_widget_set_size_request() pinned to
+         * one tile and resizable=FALSE (deliberately, so the WM/user can't
+         * drag-resize this tiny sprite window). But that same size_request
+         * is exactly what fights gtk_window_resize() back down to one tile
+         * whenever a composited multi-sprite scene (an authored <child>,
+         * e.g. the eat->flower or blacksheep->UFO scenes) needs a wider or
+         * taller window -- the request has to move too, or only a sliver of
+         * whichever tile still fits inside the old bounds ever renders. */
+        gtk_widget_set_size_request(app->window, width, height);
         gtk_window_resize(GTK_WINDOW(app->window), width, height);
+    }
 }
 
 static int frame_interval(const EsheepAnimation *anim, int frame_index)
@@ -1914,6 +1924,43 @@ static void update_child_animation(App *app) {
         int child_base_y = eval_child_expression(
             record->y, app->bounds.width, app->bounds.height,
             app->tile_size, app->tile_size, parent_x, parent_y, 0);
+        /* An authored <child> x/y expression is almost always a small delta
+         * from the parent (eat's flower: "imageX-imageW*0.9"; blacksheepa's
+         * UFO: "-imageW-8" -- neither mentions the monitor's own scale, so
+         * a few tens of pixels is exactly the intended tight composition).
+         * batha's bathw prop is the one authored exception: its expression
+         * ("screenW+10-areaH/2-...") is written like a <spawn> point --
+         * screen/area-scale variables, no reference to the parent at all --
+         * because it's meant to enter from off the right edge of the
+         * screen independent of where the parent is. The renderer only
+         * understands offsets local to the parent's composited window, so
+         * that one has to be converted into "however far that absolute
+         * point currently is from the parent"; left as a raw monitor-local
+         * coordinate, it evaluates to something like literally screenW
+         * pixels away, and the window grows to contain that offset and
+         * clips everything else off the edge of the real desktop.
+         *
+         * Detect that case by whether the expression references the
+         * monitor's own scale (screenW/screenH/areaW/areaH) rather than by
+         * absence of imageX/imageY -- blacksheepa's UFO expression doesn't
+         * reference imageX either, but its small result is already a
+         * correct, deliberately tight offset, not a bug.
+         *
+         * parent_x/parent_y (and this conversion) are local-offset-from-root
+         * values, so this is only exact for a direct child of the root
+         * actor -- the only case any authored package currently uses. */
+        gboolean x_is_absolute = strstr(record->x, "screenW") ||
+                                 strstr(record->x, "screenH") ||
+                                 strstr(record->x, "areaW") ||
+                                 strstr(record->x, "areaH");
+        gboolean y_is_absolute = strstr(record->y, "screenW") ||
+                                 strstr(record->y, "screenH") ||
+                                 strstr(record->y, "areaW") ||
+                                 strstr(record->y, "areaH");
+        if (x_is_absolute)
+            child_base_x = child_base_x + app->bounds.x - app->pos_x;
+        if (y_is_absolute)
+            child_base_y = child_base_y + app->bounds.y - app->pos_y;
         child_x[slot] = child_base_x + app->child_pose_x[slot];
         child_y[slot] = child_base_y + app->child_pose_y[slot] +
                         pose_offset_y(canim, frame);
@@ -1952,6 +1999,17 @@ static void update_child_animation(App *app) {
     app->scene.tiles[0].y = pose_offset_y(
         &esheep_animations[app->state.animation_id - 1],
         app->state.frame_index);
+    if (getenv("ESHEEP_DEBUG_SCENE")) {
+        g_printerr("scene anim=%d frame=%d pos=(%d,%d) count=%d\n",
+                   app->state.animation_id, app->state.frame_index,
+                   app->pos_x, app->pos_y, app->scene.count);
+        for (int i = 0; i < app->scene.count; i++) {
+            const EsheepRenderTile *t = &app->scene.tiles[i];
+            g_printerr("  tile[%d] id=%d x=%d y=%d w=%d h=%d op=%.2f vis=%d flip=%d\n",
+                       i, t->tile_id, t->x, t->y, t->width, t->height,
+                       t->opacity, t->visible, t->flipped);
+        }
+    }
 }
 
 static void accumulate_child_events(App *app, EsheepActor *actor) {

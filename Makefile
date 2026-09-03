@@ -83,6 +83,10 @@ test-animation-data:
 test-child-animations:
 	python3 tests/test_child_animations.py
 
+test-child-scene-rendering: esheep
+	command -v xvfb-run >/dev/null || command -v Xvfb >/dev/null
+	python3 tests/test_child_scene_rendering.py
+
 test-man:
 	command -v groff >/dev/null
 	groff -T utf8 -man packaging/esheep.1 >/dev/null
@@ -94,7 +98,7 @@ test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
 	/tmp/esheep_test_context
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-man test-install test-gui test-cli
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering test-man test-install test-gui test-cli
 
 esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
