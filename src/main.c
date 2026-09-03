@@ -28,6 +28,7 @@
 #define ANIM_FALL 5
 #define MAX_OBJECTS 128
 #define MAX_SHEEP 32
+#define MAX_RUNTIME_CHILDREN (ESHEEP_RENDER_MAX_CHILDREN - 1)
 
 typedef struct {
     GdkRectangle rect;
@@ -108,6 +109,9 @@ struct App {
     int child_animation_id;  /* active child animation id, or 0 if none */
     int child_frame_index;   /* current frame within child animation */
     int child_elapsed_ms;    /* elapsed time for child animation frame */
+    int child_animation_ids[MAX_RUNTIME_CHILDREN];
+    int child_frame_indices[MAX_RUNTIME_CHILDREN];
+    int child_elapsed_ms_values[MAX_RUNTIME_CHILDREN];
     int scene_origin_x;
     int scene_origin_y;
 };
@@ -783,6 +787,10 @@ static void cleanup_app(App *app) {
     app->child_animation_id = 0;
     app->child_frame_index = 0;
     app->child_elapsed_ms = 0;
+    memset(app->child_animation_ids, 0, sizeof(app->child_animation_ids));
+    memset(app->child_frame_indices, 0, sizeof(app->child_frame_indices));
+    memset(app->child_elapsed_ms_values, 0,
+           sizeof(app->child_elapsed_ms_values));
     esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
     app->cleaned_up = TRUE;
 }
@@ -1383,11 +1391,12 @@ static const char *step_position(App *app, const EsheepAnimation *anim,
     return surface ? surface : context;
 }
 
-static const EsheepChild* find_child_for_animation(int parent_anim_id) {
+static const EsheepChild *find_child_for_animation(int parent_anim_id)
+    __attribute__((unused));
+static const EsheepChild *find_child_for_animation(int parent_anim_id) {
     for (int i = 0; i < esheep_child_count; i++) {
-        if (esheep_childs[i].animation_id == parent_anim_id) {
+        if (esheep_childs[i].animation_id == parent_anim_id)
             return &esheep_childs[i];
-        }
     }
     return NULL;
 }
@@ -1461,10 +1470,7 @@ static int frame_interval(const EsheepAnimation *anim, int frame_index) {
 
 static void update_child_animation(App *app) {
     /* Build the composed scene into app->scene. Parent tile 0 is drawn first;
-     * the child slot uses the authored child record offset. No child window
-     * is created -- the scene is rendered in the parent draw path. */
-    const EsheepChild *child_record =
-        find_child_for_animation(app->state.animation_id);
+     * every authored child record gets an independent renderer slot. */
     int child_tile_ids[ESHEEP_RENDER_MAX_CHILDREN];
     int child_x[ESHEEP_RENDER_MAX_CHILDREN];
     int child_y[ESHEEP_RENDER_MAX_CHILDREN];
@@ -1472,27 +1478,61 @@ static void update_child_animation(App *app) {
     double child_opacity[ESHEEP_RENDER_MAX_CHILDREN];
     bool child_visible[ESHEEP_RENDER_MAX_CHILDREN];
     int child_count = 0;
-
-    if (child_record && child_record->next > 0) {
-        int cid = child_record->next;
-        if (cid >= 1 && cid <= esheep_animation_count) {
-            const EsheepAnimation *canim = &esheep_animations[cid - 1];
-            app->child_animation_id = cid;
-            int frame = app->child_frame_index;
-            if (frame < 0 || frame >= canim->frame_count) frame = 0;
-            child_tile_ids[0] = canim->frames[frame];
-            child_x[0] = child_local_coordinate(app, child_record->x, 0);
-            child_y[0] = child_local_coordinate(app, child_record->y, 0);
-            child_flipped[0] = sprite_is_flipped(app, &esheep_animations[app->state.animation_id - 1]);
-            child_opacity[0] = 1.0;
-            child_visible[0] = true;
-            child_count = 1;
+    int previous_child_ids[MAX_RUNTIME_CHILDREN];
+    memcpy(previous_child_ids, app->child_animation_ids,
+           sizeof(previous_child_ids));
+    gboolean legacy_child_matches = FALSE;
+    if (app->child_animation_id == 0 &&
+        (app->child_frame_index != 0 || app->child_elapsed_ms != 0)) {
+        for (int i = 0; i < esheep_child_count; i++) {
+            if (esheep_childs[i].animation_id == app->state.animation_id) {
+                app->child_animation_id = esheep_childs[i].next;
+                break;
+            }
         }
-    } else if (app->child_animation_id > 0) {
-        app->child_animation_id = 0;
-        app->child_frame_index = 0;
-        app->child_elapsed_ms = 0;
     }
+    for (int i = 0; i < esheep_child_count; i++) {
+        if (esheep_childs[i].animation_id == app->state.animation_id &&
+            esheep_childs[i].next == app->child_animation_id) {
+            legacy_child_matches = TRUE;
+            break;
+        }
+    }
+    if (legacy_child_matches && app->child_animation_ids[0] == 0) {
+        app->child_animation_ids[0] = app->child_animation_id;
+        app->child_frame_indices[0] = app->child_frame_index;
+        app->child_elapsed_ms_values[0] = app->child_elapsed_ms;
+    } else if (!legacy_child_matches) {
+        memset(app->child_frame_indices, 0, sizeof(app->child_frame_indices));
+        memset(app->child_elapsed_ms_values, 0,
+               sizeof(app->child_elapsed_ms_values));
+    }
+    memset(app->child_animation_ids, 0, sizeof(app->child_animation_ids));
+    for (int i = 0; i < esheep_child_count &&
+                       child_count < MAX_RUNTIME_CHILDREN; i++) {
+        const EsheepChild *record = &esheep_childs[i];
+        if (record->animation_id != app->state.animation_id ||
+            record->next < 1 || record->next > esheep_animation_count)
+            continue;
+        int slot = child_count++;
+        const EsheepAnimation *canim = &esheep_animations[record->next - 1];
+        app->child_animation_ids[slot] = record->next;
+        int frame = previous_child_ids[slot] == record->next ?
+                    app->child_frame_indices[slot] : 0;
+        if (previous_child_ids[slot] != record->next)
+            app->child_elapsed_ms_values[slot] = 0;
+        if (frame < 0 || frame >= canim->frame_count) frame = 0;
+        child_tile_ids[slot] = canim->frames[frame];
+        child_x[slot] = child_local_coordinate(app, record->x, 0);
+        child_y[slot] = child_local_coordinate(app, record->y, 0);
+        child_flipped[slot] = sprite_is_flipped(
+            app, &esheep_animations[app->state.animation_id - 1]);
+        child_opacity[slot] = 1.0;
+        child_visible[slot] = TRUE;
+    }
+    app->child_animation_id = child_count > 0 ? app->child_animation_ids[0] : 0;
+    app->child_frame_index = child_count > 0 ? app->child_frame_indices[0] : 0;
+    app->child_elapsed_ms = child_count > 0 ? app->child_elapsed_ms_values[0] : 0;
 
     esheep_renderer_compose(&app->scene,
         esheep_current_tile(&app->state),
@@ -1503,26 +1543,36 @@ static void update_child_animation(App *app) {
 }
 
 static void advance_child_animation(App *app, int dt_ms) {
-    if (app->child_animation_id <= 0 || app->child_animation_id > esheep_animation_count)
-        return;
-
-    const EsheepAnimation *child_anim = &esheep_animations[app->child_animation_id - 1];
-    app->child_elapsed_ms += dt_ms;
-
-    while (app->child_elapsed_ms > 0 && app->child_frame_index < child_anim->frame_count) {
-        int interval = frame_interval(child_anim, app->child_frame_index);
-        if (interval <= 0 || app->child_elapsed_ms < interval)
-            break;
-
-        app->child_elapsed_ms -= interval;
-        app->child_frame_index++;
+    /* Keep the legacy first-child fields usable for callers that construct an
+     * App directly (including older integrations and regression fixtures). */
+    if (app->child_animation_ids[0] == 0 && app->child_animation_id > 0) {
+        app->child_animation_ids[0] = app->child_animation_id;
+        app->child_frame_indices[0] = app->child_frame_index;
+        app->child_elapsed_ms_values[0] = app->child_elapsed_ms;
     }
-
-    /* If child animation finished, reset (don't cycle). */
-    if (app->child_frame_index >= child_anim->frame_count) {
-        app->child_frame_index = 0;
-        app->child_elapsed_ms = 0;
+    for (int slot = 0; slot < MAX_RUNTIME_CHILDREN; slot++) {
+        int animation_id = app->child_animation_ids[slot];
+        if (animation_id < 1 || animation_id > esheep_animation_count)
+            continue;
+        const EsheepAnimation *child_anim = &esheep_animations[animation_id - 1];
+        app->child_elapsed_ms_values[slot] += dt_ms;
+        while (app->child_elapsed_ms_values[slot] > 0 &&
+               app->child_frame_indices[slot] < child_anim->frame_count) {
+            int interval = frame_interval(child_anim,
+                                           app->child_frame_indices[slot]);
+            if (interval <= 0 || app->child_elapsed_ms_values[slot] < interval)
+                break;
+            app->child_elapsed_ms_values[slot] -= interval;
+            app->child_frame_indices[slot]++;
+        }
+        if (app->child_frame_indices[slot] >= child_anim->frame_count) {
+            app->child_frame_indices[slot] = 0;
+            app->child_elapsed_ms_values[slot] = 0;
+        }
     }
+    app->child_animation_id = app->child_animation_ids[0];
+    app->child_frame_index = app->child_frame_indices[0];
+    app->child_elapsed_ms = app->child_elapsed_ms_values[0];
 }
 
 static gboolean on_tick(gpointer user_data) {
