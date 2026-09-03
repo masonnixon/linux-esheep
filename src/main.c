@@ -112,6 +112,35 @@ struct App {
     int scene_origin_y;
 };
 
+typedef struct {
+    App *sheep;
+    guint count;
+} SheepGroup;
+
+static void group_set_paused(SheepGroup *group, gboolean paused) {
+    if (!group || !group->sheep) return;
+    for (guint i = 0; i < group->count; i++)
+        group->sheep[i].paused = paused;
+}
+
+static void group_set_hidden(SheepGroup *group, gboolean hidden) {
+    if (!group || !group->sheep) return;
+    for (guint i = 0; i < group->count; i++) {
+        group->sheep[i].hidden = hidden;
+        if (hidden)
+            gtk_widget_hide(group->sheep[i].window);
+        else
+            gtk_widget_show(group->sheep[i].window);
+    }
+}
+
+static void group_present(SheepGroup *group) {
+    if (!group || !group->sheep) return;
+    group_set_hidden(group, FALSE);
+    for (guint i = 0; i < group->count; i++)
+        gtk_window_present(GTK_WINDOW(group->sheep[i].window));
+}
+
 static gboolean env_bool(const char *name, gboolean fallback) {
     const char *value = getenv(name);
     if (!value) return fallback;
@@ -1699,6 +1728,85 @@ static void on_bring_to_front_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_window_present(GTK_WINDOW(app->window));
 }
 
+static void on_group_pause_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    SheepGroup *group = user_data;
+    gboolean paused = group && group->count > 0 && group->sheep[0].paused;
+    group_set_paused(group, !paused);
+}
+
+static void on_group_hide_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    SheepGroup *group = user_data;
+    gboolean hidden = group && group->count > 0 && group->sheep[0].hidden;
+    group_set_hidden(group, !hidden);
+}
+
+static void on_group_front_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    group_present(user_data);
+}
+
+static void on_about_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    (void)user_data;
+    gtk_show_about_dialog(NULL,
+                          "program-name", "linux-esheep",
+                          "version", ESHEEP_VERSION,
+                          "comments", "A sheep desktop pet for Linux",
+                          NULL);
+}
+
+static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time,
+                          gpointer user_data) {
+    (void)button;
+    (void)activate_time;
+    SheepGroup *group = user_data;
+    GtkWidget *menu = gtk_menu_new();
+    gboolean paused = group && group->count > 0 && group->sheep[0].paused;
+    gboolean hidden = group && group->count > 0 && group->sheep[0].hidden;
+    GtkWidget *pause = gtk_menu_item_new_with_label(paused ? "Resume All" : "Pause All");
+    GtkWidget *hide = gtk_menu_item_new_with_label(hidden ? "Show All" : "Hide All");
+    GtkWidget *front = gtk_menu_item_new_with_label("Bring All to Front");
+    GtkWidget *about = gtk_menu_item_new_with_label("About");
+    GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
+
+    g_signal_connect(pause, "activate", G_CALLBACK(on_group_pause_activate), group);
+    g_signal_connect(hide, "activate", G_CALLBACK(on_group_hide_activate), group);
+    g_signal_connect(front, "activate", G_CALLBACK(on_group_front_activate), group);
+    g_signal_connect(about, "activate", G_CALLBACK(on_about_activate), NULL);
+    g_signal_connect(quit, "activate", G_CALLBACK(on_quit_activate), NULL);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), pause);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), hide);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), front);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), about);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
+    gtk_widget_show_all(menu);
+    (void)icon;
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+}
+
+static void on_tray_activate(GtkStatusIcon *icon, gpointer user_data) {
+    (void)icon;
+    group_present(user_data);
+}
+
+static GtkStatusIcon *create_tray_icon(SheepGroup *group) {
+    GtkStatusIcon *icon;
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    icon = gtk_status_icon_new_from_icon_name("face-smile");
+    if (!icon) return NULL;
+    gtk_status_icon_set_title(icon, "linux-esheep");
+    gtk_status_icon_set_tooltip_text(icon, "linux-esheep");
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    g_signal_connect(icon, "popup-menu", G_CALLBACK(on_tray_popup), group);
+    g_signal_connect(icon, "activate", G_CALLBACK(on_tray_activate), group);
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    gtk_status_icon_set_visible(icon, TRUE);
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    return icon;
+}
+
 static void show_pet_menu(App *app, GdkEventButton *event) {
     GtkWidget *menu = gtk_menu_new();
     GtkWidget *pause_item = gtk_check_menu_item_new_with_label(
@@ -2209,7 +2317,17 @@ int main(int argc, char **argv) {
         g_timeout_add((guint)atoi(autoquit), on_autoquit, NULL);
     }
 
+    SheepGroup group = { sheep, count };
+    GtkStatusIcon *tray_icon = create_tray_icon(&group);
+
     gtk_main();
+
+    if (tray_icon) {
+        G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+        gtk_status_icon_set_visible(tray_icon, FALSE);
+        G_GNUC_END_IGNORE_DEPRECATIONS
+        g_object_unref(tray_icon);
+    }
 
     for (guint i = 0; i < count; i++)
         cleanup_app(&sheep[i]);

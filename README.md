@@ -77,6 +77,10 @@ Left-click-drag picks the sheep up. Right-click opens a pet menu with
 Pause, Hide, Bring to Front, and Quit. Runtime settings can be overridden
 with environment variables:
 
+When the desktop provides a legacy status area, one linux-esheep tray icon
+offers group-wide show/hide, pause/resume, bring-to-front, About, and Quit
+actions. The sheep continues to work without a tray area.
+
 - `ESHEEP_PAUSED=1`: start with all sheep paused (animation stopped, drag
   still works to pick the sheep up).
 - `ESHEEP_HIDDEN=1`: start with all sheep windows hidden (the right-click
@@ -142,10 +146,9 @@ Installs the binary, spritesheet, and a `.desktop` entry.
 
 ## Known limitations / not yet built
 
-- No system-tray icon, sound effects, autostart hook, or full settings
-  dialog yet. The right-click pet menu covers the most common runtime
-  actions, but anything not on that menu (sound on/off, autostart at
-  login, advanced pet configuration) is still out of scope.
+- Sound effects, an autostart hook, and a full settings dialog are not yet
+  implemented. The tray and right-click menus cover the current runtime
+  actions.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.

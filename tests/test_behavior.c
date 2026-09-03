@@ -535,6 +535,15 @@ static void test_stacking_policy_allows_occlusion(void) {
     assert(sheep_window_type_hint() == GDK_WINDOW_TYPE_HINT_NORMAL);
 }
 
+static void test_group_pause_applies_to_all_sheep(void) {
+    App sheep[3] = {0};
+    SheepGroup group = { sheep, 3 };
+    group_set_paused(&group, TRUE);
+    assert(sheep[0].paused && sheep[1].paused && sheep[2].paused);
+    group_set_paused(&group, FALSE);
+    assert(!sheep[0].paused && !sheep[1].paused && !sheep[2].paused);
+}
+
 static void test_swept_fall_lands_on_window(void) {
     App app;
     init_stub_app(&app, 0, 0, 640, 480, 40);
@@ -621,11 +630,14 @@ int main(void) {
     test_stacking_policy_allows_occlusion();
     printf("  test_stacking_policy_allows_occlusion: PASSED\n");
 
+    test_group_pause_applies_to_all_sheep();
+    printf("  test_group_pause_applies_to_all_sheep: PASSED\n");
+
     printf("  test_excluded_surfaces_rejected: PASSED\n");
 
     test_swept_fall_lands_on_window();
     printf("  test_swept_fall_lands_on_window: PASSED\n");
 
-    printf("\nAll 24 behavior regression tests PASSED\n");
+    printf("\nAll 25 behavior regression tests PASSED\n");
     return 0;
 }
