@@ -89,9 +89,10 @@ with environment variables:
 
 When the desktop provides a legacy status area, one linux-esheep tray icon
 offers group-wide show/hide, pause/resume, bring-to-front, About, and Quit
-actions, plus a settings dialog for runtime tuning. The sheep continues to
-work without a tray area. Character, spritesheet, and sheep-count changes
-take effect after restarting the application.
+actions, plus a settings dialog for tick rate, walk probability, monitor,
+spawn mode, sheep count, window landing, and Conky filtering. The sheep
+continues to work without a tray area. Character, spritesheet, and sheep-count
+changes take effect after restarting the application.
 
 - `ESHEEP_PAUSED=1`: start with all sheep paused (animation stopped, drag
   still works to pick the sheep up).
@@ -172,8 +173,9 @@ at login; `make uninstall-autostart` removes that opt-in entry.
   gaps and differing vertical arrangements are not treated as continuous
   floor.
 - Multiple sheep have independent state, spawn spacing, basic overlap
-  resolution, and grounded-sheep stacking. Richer sheep-to-sheep policies and
-  live compositor stacking coverage remain future work.
+  resolution, and grounded-sheep stacking. X11 foreground clients can
+  occlude a sheep standing on a window behind them; broader compositor-level
+  stacking coverage remains future work.
 
 
 ## Custom sprites and characters

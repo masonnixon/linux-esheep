@@ -145,7 +145,7 @@ typedef struct {
     guint walk_keep_probability;
     gboolean window_landing;
     gboolean exclude_conky;
-    const char *spawn_mode;
+    char spawn_mode[16];
 } SheepGroup;
 
 static int clamp_pos_x(const App *app, int pos_x);
@@ -2230,7 +2230,7 @@ static void save_group_settings(SheepGroup *group) {
                            group->window_landing);
     g_key_file_set_boolean(group->config, "esheep", "exclude_conky",
                            group->exclude_conky);
-    if (group->spawn_mode)
+    if (group->spawn_mode[0] != '\0')
         g_key_file_set_string(group->config, "esheep", "spawn",
                               group->spawn_mode);
     gsize length = 0;
@@ -2253,6 +2253,8 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkSpinButton *tick = g_object_get_data(G_OBJECT(dialog), "tick-ms");
         GtkSpinButton *walk = g_object_get_data(G_OBJECT(dialog), "walk-keep");
         GtkSpinButton *monitor = g_object_get_data(G_OBJECT(dialog), "monitor");
+        GtkSpinButton *count = g_object_get_data(G_OBJECT(dialog), "count");
+        GtkComboBoxText *spawn = g_object_get_data(G_OBJECT(dialog), "spawn");
         GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
         GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
         group_set_tick_ms(group, (guint)gtk_spin_button_get_value_as_int(tick));
@@ -2260,6 +2262,14 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             group, (guint)gtk_spin_button_get_value_as_int(walk));
         group_set_monitor(group,
                           (guint)gtk_spin_button_get_value_as_int(monitor));
+        group->configured_count = clamp_sheep_count(
+            (guint)gtk_spin_button_get_value_as_int(count));
+        gchar *spawn_mode = gtk_combo_box_text_get_active_text(spawn);
+        if (spawn_mode) {
+            g_strlcpy(group->spawn_mode, spawn_mode,
+                      sizeof(group->spawn_mode));
+            g_free(spawn_mode);
+        }
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
         group_set_exclude_conky(group, gtk_toggle_button_get_active(conky));
         save_group_settings(group);
@@ -2277,13 +2287,18 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     GtkWidget *grid = gtk_grid_new();
     GtkWidget *tick = gtk_spin_button_new_with_range(10, 1000, 1);
     GtkWidget *walk = gtk_spin_button_new_with_range(0, 100, 1);
+    GtkWidget *count = gtk_spin_button_new_with_range(1, MAX_SHEEP, 1);
     int monitor_count = group->display ?
                         gdk_display_get_n_monitors(group->display) : 1;
     GtkWidget *monitor = gtk_spin_button_new_with_range(
         0, MAX(0, monitor_count - 1), 1);
     GtkWidget *landing = gtk_check_button_new_with_label("Land on windows and panels");
     GtkWidget *conky = gtk_check_button_new_with_label("Allow Conky as a surface");
-    GtkWidget *note = gtk_label_new("Character, spritesheet, and sheep count apply on restart.");
+    GtkWidget *spawn = gtk_combo_box_text_new();
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "bottom", "Bottom");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "window", "Window");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "random", "Random");
+    GtkWidget *note = gtk_label_new("Character, spritesheet, and count apply on restart.");
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tick interval (ms)"), 0, 0, 1, 1);
@@ -2292,17 +2307,25 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), walk, 1, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Monitor index"), 0, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), monitor, 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), landing, 0, 3, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), conky, 0, 4, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), note, 0, 5, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Sheep count"), 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), count, 1, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spawn mode"), 0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), spawn, 1, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), landing, 0, 5, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), conky, 0, 6, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 7, 2, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(count), group->configured_count);
+    gtk_combo_box_set_active_id(GTK_COMBO_BOX(spawn), group->spawn_mode);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(landing), group->window_landing);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(conky), !group->exclude_conky);
     g_object_set_data(G_OBJECT(dialog), "tick-ms", tick);
     g_object_set_data(G_OBJECT(dialog), "walk-keep", walk);
     g_object_set_data(G_OBJECT(dialog), "monitor", monitor);
+    g_object_set_data(G_OBJECT(dialog), "count", count);
+    g_object_set_data(G_OBJECT(dialog), "spawn", spawn);
     g_object_set_data(G_OBJECT(dialog), "landing", landing);
     g_object_set_data(G_OBJECT(dialog), "conky", conky);
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
@@ -3044,8 +3067,11 @@ int main(int argc, char **argv) {
         .walk_keep_probability = walk_keep_probability,
         .window_landing = window_landing,
         .exclude_conky = exclude_conky,
-        .spawn_mode = spawn_override ? spawn_override : "bottom"
     };
+    g_strlcpy(group.spawn_mode,
+              spawn_override ? spawn_override :
+              (getenv("ESHEEP_SPAWN") ? getenv("ESHEEP_SPAWN") : "bottom"),
+              sizeof(group.spawn_mode));
     GtkStatusIcon *tray_icon = create_tray_icon(&group);
 
     gtk_main();
