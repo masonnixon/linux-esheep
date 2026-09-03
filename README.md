@@ -203,6 +203,10 @@ grammar and supplies its own grid dimensions; provide a matching
 spritesheet with `--sprite` or `spritesheet=`. Use
 `tests/test_spritesheet.py` as a reference for frame-coverage rules.
 
+For a compositor-independent visual review, generate the complete animation
+catalog with `python3 tools/render_animation_catalog.py --output /tmp/esheep-animation-catalog.png`.
+The catalog includes frame IDs and authored child mappings.
+
 Custom characters (any `--character` value other than `sheep` or `penguin`) are
 accepted at the CLI and env/config level. A package can be selected with
 `--package PATH`, `ESHEEP_PACKAGE`, or `package=` in the config file. Package
