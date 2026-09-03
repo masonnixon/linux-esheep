@@ -112,6 +112,41 @@ int main(int argc, char **argv) {
     refresh_objects(&app);
     assert(app.object_count == 0);
 
+    /* Restacking must use the sheep's WM frame too.  Using the reparented
+     * client as the ConfigureWindow target/sibling produces BadMatch under a
+     * real WM because those windows do not share the root parent. */
+    Window sheep_frame = XCreateSimpleWindow(display, root, 220, 180, 64, 64,
+                                             0, 0, 0);
+    Window sheep_client = XCreateSimpleWindow(display, sheep_frame, 0, 0, 64,
+                                              64, 0, 0, 0);
+    Window occluding_frame = XCreateSimpleWindow(display, root, 220, 180,
+                                                  320, 180, 0, 0, 0);
+    Window occluding_client = XCreateSimpleWindow(display, occluding_frame, 0,
+                                                   24, 320, 156, 0, 0, 0);
+    XMapWindow(display, sheep_client);
+    XMapWindow(display, sheep_frame);
+    XMapWindow(display, occluding_client);
+    XMapWindow(display, occluding_frame);
+    XRaiseWindow(display, occluding_frame);
+    XSync(display, False);
+
+    App reparented_sheep = {0};
+    reparented_sheep.xwindow = sheep_client;
+    reparented_sheep.tile_size = 32;
+    reparented_sheep.pos_x = 220;
+    reparented_sheep.pos_y = 180;
+    Window candidates[] = { occluding_client };
+    Window stacking[] = { occluding_client };
+    restack_below_occluding_window(&reparented_sheep, display, candidates, 1,
+                                   stacking, 1);
+    XSync(display, False);
+    assert(root_child_index(display, root, sheep_frame) <
+           root_child_index(display, root, occluding_frame));
+
+    XDestroyWindow(display, sheep_frame);
+    XDestroyWindow(display, occluding_frame);
+    XSync(display, False);
+
     cleanup_app(&app);
     return 0;
 }

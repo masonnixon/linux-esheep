@@ -70,7 +70,7 @@ static uint32_t app_random_seed = 0xC0FFEE01u;
 
 static int x11_refresh_error_handler(Display *display, XErrorEvent *error) {
     (void)display;
-    if (error->error_code == BadWindow) {
+    if (error->error_code == BadWindow || error->error_code == BadMatch) {
         x11_bad_window = TRUE;
         return 0;
     }
@@ -1175,6 +1175,29 @@ static int stacking_order(const Window *stacking, unsigned long count, Window wi
     return -1;
 }
 
+/* Return the root-level window that owns a client or WM frame. A normal
+ * managed GTK toplevel is often reparented, so its client XID is not a valid
+ * sibling for ConfigureWindow relative to another application's frame. */
+static Window x11_top_level_window(Display *display, Window window,
+                                   Window root) {
+    Window current = window;
+    for (int depth = 0; current && depth < 32; depth++) {
+        Window tree_root = None;
+        Window parent = None;
+        Window *children = NULL;
+        unsigned int child_count = 0;
+        x11_bad_window = FALSE;
+        gboolean ok = XQueryTree(display, current, &tree_root, &parent,
+                                 &children, &child_count);
+        x11_refresh_sync(display);
+        if (children) XFree(children);
+        if (x11_bad_window || !ok || tree_root != root) return None;
+        if (parent == root || parent == None) return current;
+        current = parent;
+    }
+    return None;
+}
+
 /* A normal toplevel participates in WM stacking, but moving it does not
  * change its relative position.  If a client is raised over a sheep that is
  * standing on a different (possibly covered) client, explicitly put the
@@ -1189,6 +1212,11 @@ static void restack_below_occluding_window(App *app, Display *display,
     if (!app || !display || !windows || !stacking || !app->xwindow ||
         window_count == 0 || stacking_count == 0) return;
 
+    Window root = DefaultRootWindow(display);
+    Window sheep_stack_window = x11_top_level_window(display, app->xwindow,
+                                                     root);
+    if (!sheep_stack_window) return;
+
     GdkRectangle sheep = { app->pos_x, app->pos_y,
                            app->tile_size, app->tile_size };
     int best_order = -1;
@@ -1196,6 +1224,11 @@ static void restack_below_occluding_window(App *app, Display *display,
     for (unsigned long i = 0; i < window_count; i++) {
         Window candidate = windows[i];
         if (!candidate || candidate == app->xwindow) continue;
+        Window candidate_stack_window = x11_top_level_window(display, candidate,
+                                                             root);
+        if (!candidate_stack_window ||
+            candidate_stack_window == sheep_stack_window)
+            continue;
         gboolean own_window = FALSE;
         for (int sibling = 0; sibling < app->sibling_count; sibling++) {
             if (candidate == app->siblings[sibling].xwindow) {
@@ -1242,16 +1275,41 @@ static void restack_below_occluding_window(App *app, Display *display,
             /* Reparented clients are not siblings of the sheep; the WM frame
              * is.  For an un-reparented client geometry_window is the client
              * itself and remains the correct sibling. */
-            occluding = geometry_window;
+            occluding = x11_top_level_window(display, geometry_window, root);
         }
     }
     if (!occluding) return;
+
+    Window sheep_root = None;
+    Window sheep_parent = None;
+    Window *sheep_children = NULL;
+    unsigned int sheep_child_count = 0;
+    gboolean sheep_tree_ok = XQueryTree(display, sheep_stack_window,
+                                        &sheep_root, &sheep_parent,
+                                        &sheep_children, &sheep_child_count);
+    x11_refresh_sync(display);
+    if (sheep_children) XFree(sheep_children);
+    if (x11_bad_window || !sheep_tree_ok || sheep_parent != root) return;
+
+    Window occluding_root = None;
+    Window occluding_parent = None;
+    Window *occluding_children = NULL;
+    unsigned int occluding_child_count = 0;
+    gboolean occluding_tree_ok = XQueryTree(display, occluding,
+                                            &occluding_root, &occluding_parent,
+                                            &occluding_children,
+                                            &occluding_child_count);
+    x11_refresh_sync(display);
+    if (occluding_children) XFree(occluding_children);
+    if (x11_bad_window || !occluding_tree_ok || occluding_parent != root)
+        return;
 
     XWindowChanges changes = {0};
     changes.sibling = occluding;
     changes.stack_mode = Below;
     x11_bad_window = FALSE;
-    XConfigureWindow(display, app->xwindow, CWSibling | CWStackMode, &changes);
+    XConfigureWindow(display, sheep_stack_window,
+                     CWSibling | CWStackMode, &changes);
     x11_refresh_sync(display);
 }
 
