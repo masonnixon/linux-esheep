@@ -96,11 +96,17 @@ correct runtime context.
 
 ### Animation and child execution
 
-- Generic child state machines with their own sequence transitions.
-- GTK child state machines beyond direct authored records.
-- Automatic recursive child creation from runtime package metadata.
-- Child movement, opacity, flipping, and lifetime driven entirely by authored
-  data.
+- The standalone actor engine now supports independent child clocks, multiple
+  children, bounded child-of-child trees, cycle/depth protection, and subtree
+  cleanup. GTK's composed scene also resolves nested authored child records and
+  resets child state when the parent animation changes.
+- The live GTK path still uses a bounded compatibility representation rather
+  than the actor engine as its authoritative runtime tree. Child lifetime and
+  authored sequence transitions therefore need one more integration pass.
+- Automatic recursive child creation from runtime package metadata is not yet
+  complete.
+- Child movement, opacity, flipping, and lifetime are partly authored-driven;
+  richer action variants and full lifetime semantics remain incomplete.
 - Runtime support for every authored expression without special-case parsing.
 - Visual regression coverage for all 54 animations and all 96 reviewable
   transitions.
@@ -145,11 +151,13 @@ options as features added to the original application.
 Current tests are strongest for data parsing and interpreter transitions. They
 are weak for the parts users see most:
 
-- No deterministic GUI test for left and right edge reversal.
+- Pure deterministic tests cover left and right edge reversal, window landing,
+  child composition, and child cleanup. They do not replace live compositor
+  coverage.
 - No test that a sheep lands on a real X11 window at the expected y coordinate.
-- No test that a child window follows its parent while the parent moves.
-- No test that child windows stack correctly.
-- No test that child transitions complete and clean up.
+- No live test that a composed child scene follows its parent while the parent
+  moves or that the scene remains correctly stacked.
+- No live test that child transitions complete and clean up.
 - No live multi-monitor integration test with actual GDK monitor topology.
 - No test for simultaneous sheep interactions.
 - No frame-by-frame visual comparison against expected screenshots.
