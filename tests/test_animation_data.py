@@ -266,6 +266,9 @@ def validate_xml_text(text, source="<memory>"):
                         err(where, f"<frame> #{i + 1} value {raw_frame!r} is not an integer")
                     elif not 0 <= int(raw_frame) < tile_count:
                         err(where, f"<frame> #{i + 1} value {raw_frame} outside tile range 0..{tile_count - 1}")
+                action = seq.find("e:action", NS)
+                if action is not None and (action.text or "").strip() != "flip":
+                    err(where, f"action {(action.text or '').strip()!r} is not supported")
                 anim["transitions"]["sequence"] = check_transitions(seq, where, "sequence")
             anim["transitions"]["border"] = check_transitions(an.find("e:border", NS), where, "border")
             anim["transitions"]["gravity"] = check_transitions(an.find("e:gravity", NS), where, "gravity")
@@ -518,6 +521,12 @@ def test_unsupported_repeat_expression():
                       "is not a supported repeat expression")
 
 
+def test_unsupported_action():
+    _expect_error(_fixture("<frame>1</frame>",
+                           "<frame>1</frame><action>teleport</action>"),
+                  "action 'teleport' is not supported")
+
+
 def test_unsupported_spawn_expression():
     _expect_error(_fixture("<x>screenW+10</x>", "<x>screenW+42</x>"),
                  "is not supported by eval_spawn_expression")
@@ -617,6 +626,7 @@ TESTS = [
     test_probability_not_integer,
     test_unknown_only_context,
     test_unsupported_repeat_expression,
+    test_unsupported_action,
     test_unsupported_spawn_expression,
     test_unsupported_child_expression,
     test_invalid_child_parent,

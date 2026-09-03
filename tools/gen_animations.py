@@ -109,7 +109,14 @@ def main():
     for an in root.findall("e:animations/e:animation", NS):
         seq_el = an.find("e:sequence", NS)
         frames = [int(f.text.strip()) for f in seq_el.findall("e:frame", NS)]
-        flip = seq_el.find("e:action", NS) is not None and seq_el.find("e:action", NS).text.strip() == "flip"
+        action = seq_el.find("e:action", NS)
+        action_value = (action.text or "").strip() if action is not None else None
+        if action is not None and action_value != "flip":
+            raise ValueError(
+                "unsupported animation action %r in animation %s"
+                % (action_value, an.get("id", "?"))
+            )
+        flip = action is not None
 
         animations.append(
             {
