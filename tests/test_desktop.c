@@ -28,12 +28,29 @@ static void test_monitor_global_coordinates_negative_origin(void) {
 
 static void test_monitor_seam_selection_prefers_direction(void) {
     GdkRectangle monitors[] = {
-        { -1600, 0, 1595, 900 },
+        { -1600, 0, 1606, 900 },
         { 6, 0, 1920, 1080 },
     };
 
-    assert(select_monitor_index(monitors, 2, &monitors[0], 0, 100, 1) == 1);
-    assert(select_monitor_index(monitors, 2, &monitors[1], 0, 100, -1) == 0);
+    assert(select_monitor_index(monitors, 2, &monitors[0], 7, 100, 1) == 1);
+    assert(select_monitor_index(monitors, 2, &monitors[1], 5, 100, -1) == 0);
+}
+
+static void test_monitor_gap_does_not_teleport(void) {
+    GdkRectangle monitors[] = {
+        { 0, 0, 100, 600 },
+        { 140, 0, 100, 600 },
+    };
+    assert(select_monitor_index(monitors, 2, &monitors[0], 120, 200, 1) == -1);
+}
+
+static void test_offset_monitor_requires_vertical_overlap(void) {
+    GdkRectangle monitors[] = {
+        { 0, 0, 100, 400 },
+        { 100, 200, 100, 400 },
+    };
+    assert(select_monitor_index(monitors, 2, &monitors[0], 101, 100, 1) == -1);
+    assert(select_monitor_index(monitors, 2, &monitors[0], 101, 300, 1) == 1);
 }
 
 static void test_surface_sync_filters_other_monitors(void) {
@@ -146,6 +163,8 @@ static void test_fullscreen_surface_coverage(void) {
 int main(void) {
     test_monitor_global_coordinates_negative_origin();
     test_monitor_seam_selection_prefers_direction();
+    test_monitor_gap_does_not_teleport();
+    test_offset_monitor_requires_vertical_overlap();
     test_surface_sync_filters_other_monitors();
     test_child_coordinates_are_local_to_scene();
     test_fullscreen_and_panel_surfaces_are_excluded();

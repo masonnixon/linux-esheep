@@ -414,6 +414,15 @@ static int select_monitor_index(const GdkRectangle *monitors, int monitor_count,
     }
 
     for (int i = 0; i < monitor_count; i++) {
+        if (current && direction != 0) {
+            gboolean past_right = direction > 0 && x >= monitor_right(current);
+            gboolean past_left = direction < 0 && x < current->x;
+            if ((past_right || past_left) &&
+                !(monitors_share_vertical_seam(current, &monitors[i]) &&
+                  y >= MAX(current->y, monitors[i].y) &&
+                  y < MIN(monitor_bottom(current), monitor_bottom(&monitors[i]))))
+                continue;
+        }
         gint64 distance = monitor_distance_sq(&monitors[i], x, y);
         if (best_index < 0 || distance < best_distance) {
             best_index = i;
