@@ -120,6 +120,8 @@ struct App {
     int child_elapsed_ms_values[MAX_RUNTIME_CHILDREN];
     int child_pose_x[MAX_RUNTIME_CHILDREN];
     int child_pose_y[MAX_RUNTIME_CHILDREN];
+    int child_render_x[MAX_RUNTIME_CHILDREN];
+    int child_render_y[MAX_RUNTIME_CHILDREN];
     EsheepState child_states[MAX_RUNTIME_CHILDREN];
     int scene_origin_x;
     int scene_origin_y;
@@ -452,22 +454,15 @@ static gboolean select_monitor_workarea(GdkDisplay *display,
 }
 
 
-/* Evaluate a child animation offset expression. Child positions are local
- * to the parent's composited surface (a single tile_size x tile_size
- * window), so the result is always returned in local coordinates -- the
- * monitor origin is intentionally NOT applied here, even for expressions
- * that look screen-relative (e.g. "areaH-imageH"). The "area" in those
- * expressions is the local composited surface area, not the full monitor. */
+/* Retained as a small compatibility helper for the transition-review tests;
+ * runtime composition now passes the parent origin explicitly. */
+static int child_local_coordinate(const App *app, const char *expr,
+                                  int roll_0_99) __attribute__((unused));
 static int child_local_coordinate(const App *app, const char *expr,
                                   int roll_0_99) {
-    /* image_x/image_y are local to the composited scene (parent tile
-     * origin), not screen coordinates. Passing pos_x/pos_y here would
-     * shift every child offset by the window's screen position and break
-     * authored local placement such as the black sheep at -imageW-8
-     * (i.e. -48 px from the parent) or the flower at -imageW*0.9. */
-    return eval_child_expression(expr, app->bounds.width,
-                               app->bounds.height, app->tile_size,
-                               app->tile_size, 0, 0, roll_0_99);
+    return eval_child_expression(expr, app->bounds.width, app->bounds.height,
+                                 app->tile_size, app->tile_size, 0, 0,
+                                 roll_0_99);
 }
 
 static DesktopBackendCapabilities detect_backend_capabilities(
@@ -943,6 +938,8 @@ static void cleanup_app(App *app) {
            sizeof(app->child_elapsed_ms_values));
     memset(app->child_pose_x, 0, sizeof(app->child_pose_x));
     memset(app->child_pose_y, 0, sizeof(app->child_pose_y));
+    memset(app->child_render_x, 0, sizeof(app->child_render_x));
+    memset(app->child_render_y, 0, sizeof(app->child_render_y));
     memset(app->child_states, 0, sizeof(app->child_states));
     esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
     app->cleaned_up = TRUE;
@@ -1648,13 +1645,23 @@ static void update_child_animation(App *app) {
                sizeof(app->child_elapsed_ms_values));
     }
     memset(app->child_animation_ids, 0, sizeof(app->child_animation_ids));
-    for (int i = 0; i < esheep_child_count &&
-                       child_count < MAX_RUNTIME_CHILDREN; i++) {
-        const EsheepChild *record = &esheep_childs[i];
-        if (record->animation_id != app->state.animation_id ||
-            record->next < 1 || record->next > esheep_animation_count)
-            continue;
-        int slot = child_count++;
+    /* Process the root's records first, then each active child as a parent.
+     * Package validation bounds the graph depth; the renderer bounds the
+     * number of visible descendants. */
+    for (int parent_slot = -1;
+         parent_slot < child_count && child_count < MAX_RUNTIME_CHILDREN;
+         parent_slot++) {
+        int parent_animation = parent_slot < 0 ? app->state.animation_id :
+                               app->child_states[parent_slot].animation_id;
+        int parent_x = parent_slot < 0 ? 0 : app->child_render_x[parent_slot];
+        int parent_y = parent_slot < 0 ? 0 : app->child_render_y[parent_slot];
+        for (int i = 0; i < esheep_child_count &&
+                           child_count < MAX_RUNTIME_CHILDREN; i++) {
+            const EsheepChild *record = &esheep_childs[i];
+            if (record->animation_id != parent_animation ||
+                record->next < 1 || record->next > esheep_animation_count)
+                continue;
+            int slot = child_count++;
         if (previous_child_ids[slot] != record->next) {
             esheep_init(&app->child_states[slot], record->next);
             esheep_set_environment(&app->child_states[slot],
@@ -1675,16 +1682,23 @@ static void update_child_animation(App *app) {
         int frame = app->child_states[slot].frame_index;
         if (frame < 0 || frame >= canim->frame_count) frame = 0;
         child_tile_ids[slot] = canim->frames[frame];
-        child_x[slot] = child_local_coordinate(app, record->x, 0) +
-                       app->child_pose_x[slot];
-        child_y[slot] = child_local_coordinate(app, record->y, 0) +
-                       app->child_pose_y[slot];
+        int child_base_x = eval_child_expression(
+            record->x, app->bounds.width, app->bounds.height,
+            app->tile_size, app->tile_size, parent_x, parent_y, 0);
+        int child_base_y = eval_child_expression(
+            record->y, app->bounds.width, app->bounds.height,
+            app->tile_size, app->tile_size, parent_x, parent_y, 0);
+        child_x[slot] = child_base_x + app->child_pose_x[slot];
+        child_y[slot] = child_base_y + app->child_pose_y[slot];
+        app->child_render_x[slot] = child_x[slot];
+        app->child_render_y[slot] = child_y[slot];
         child_flipped[slot] = sprite_is_flipped(app, canim);
         double opacity_progress = canim->frame_count <= 1 ? 0.0 :
             (double)frame / (double)(canim->frame_count - 1);
         child_opacity[slot] = canim->start.opacity +
             (canim->end.opacity - canim->start.opacity) * opacity_progress;
         child_visible[slot] = TRUE;
+        }
     }
     app->child_animation_id = child_count > 0 ? app->child_animation_ids[0] : 0;
     app->child_frame_index = child_count > 0 ? app->child_frame_indices[0] : 0;

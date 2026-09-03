@@ -215,6 +215,26 @@ static void test_child_authored_pose_progression(void) {
     assert(app.scene.tiles[1].x != initial_x);
 }
 
+static void test_recursive_child_composition(void) {
+    const EsheepChild authored[] = {
+        { 26, "imageX", "imageY", 27 },
+        { 27, "5", "6", 31 },
+    };
+    const EsheepChild *old_children = esheep_childs;
+    int old_count = esheep_child_count;
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+    esheep_childs = authored;
+    esheep_child_count = 2;
+    esheep_init(&app.state, 26);
+    update_child_animation(&app);
+    assert(app.scene.count == 3);
+    assert(app.scene.tiles[1].x == 0 && app.scene.tiles[1].y == 0);
+    assert(app.scene.tiles[2].x == 5 && app.scene.tiles[2].y == 6);
+    esheep_childs = old_children;
+    esheep_child_count = old_count;
+}
+
 /* Test 10: Edge turn preserves direction orientation. */
 static void test_edge_turn_preserves_orientation(void) {
     App app;
@@ -626,6 +646,9 @@ int main(void) {
 
     test_child_authored_pose_progression();
     printf("  test_child_authored_pose_progression: PASSED\n");
+
+    test_recursive_child_composition();
+    printf("  test_recursive_child_composition: PASSED\n");
 
     test_edge_turn_preserves_orientation();
     printf("  test_edge_turn_preserves_orientation: PASSED\n");
