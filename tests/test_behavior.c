@@ -710,6 +710,31 @@ static void test_group_animation_review_selection(void) {
     assert(!group_set_review_animation(&group, esheep_animation_count + 1));
 }
 
+/* Every authored parent must produce a valid composited scene, including any
+ * child records reachable from that parent. This is a deterministic runtime
+ * coverage gate; actual pixel appearance remains a separate visual review. */
+static void test_all_authored_animations_compose(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+    for (int animation_id = 1; animation_id <= esheep_animation_count;
+         animation_id++) {
+        esheep_actor_init(&app.actor, NULL, animation_id, 0, 0,
+                          app.direction);
+        esheep_actor_set_random_source(&app.actor, actor_random_source, &app);
+        update_child_animation(&app);
+        assert(app.scene.count >= 1);
+        assert(app.scene.count <= ESHEEP_RENDER_MAX_CHILDREN);
+        assert(esheep_renderer_valid(&app.scene));
+        for (int i = 0; i < app.scene.count; i++) {
+            const EsheepRenderTile *tile = &app.scene.tiles[i];
+            assert(tile->tile_id >= 0);
+            assert(tile->tile_id < esheep_tiles_x * esheep_tiles_y);
+            assert(tile->width == app.tile_size);
+            assert(tile->height == app.tile_size);
+        }
+    }
+}
+
 static void test_double_click_closes_only_single_pet(void) {
     App app;
     GdkEventButton event;
@@ -836,9 +861,12 @@ int main(void) {
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
 
+    test_all_authored_animations_compose();
+    printf("  test_all_authored_animations_compose: PASSED\n");
+
     test_double_click_closes_only_single_pet();
     printf("  test_double_click_closes_only_single_pet: PASSED\n");
 
-    printf("\nAll 35 behavior regression tests PASSED\n");
+    printf("\nAll 36 behavior regression tests PASSED\n");
     return 0;
 }
