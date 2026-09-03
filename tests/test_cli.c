@@ -118,6 +118,16 @@ static void test_help_shows_usage(void) {
     run_esheep_capture(argv, 1, NULL, buf, sizeof(buf));
     assert(strstr(buf, "--sprite") != NULL);
     assert(strstr(buf, "--character") != NULL);
+    assert(strstr(buf, "--seed") != NULL);
+}
+
+static void test_invalid_seed_is_rejected(void) {
+    fprintf(stderr, "test: invalid --seed is rejected\n");
+    char *argv[] = { "--seed", "0" };
+    char buf[4096] = {0};
+    int status = run_esheep_capture(argv, 2, NULL, buf, sizeof(buf));
+    assert(status == 2);
+    assert(strstr(buf, "invalid --seed") != NULL);
 }
 
 static void test_version_shows_version(void) {
@@ -263,6 +273,7 @@ int main(void) {
     }
 
     test_help_shows_usage();
+    test_invalid_seed_is_rejected();
     test_version_shows_version();
     test_invalid_character();
     test_missing_spritesheet();

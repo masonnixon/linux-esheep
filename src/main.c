@@ -641,6 +641,7 @@ static void print_usage(const char *program) {
     g_print("  --x11-fallback         Use XWayland when available.\n");
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
     g_print("  --walk-keep N          Keep walking probability (0-100, default 90).\n");
+    g_print("  --seed N               Set the reproducible random seed.\n");
     g_print("  --review-animation N   Show animation N for transition review.\n");
     g_print("  --review-parent N      Show parent N with its authored child.\n");
     g_print("  --list-animations      List active animation IDs and names.\n");
@@ -2298,6 +2299,7 @@ int main(int argc, char **argv) {
     guint count = env_uint("ESHEEP_COUNT", 1, 1, MAX_SHEEP);
     guint walk_keep_probability = env_uint("ESHEEP_WALK_KEEP_PROBABILITY",
                                            90, 0, 100);
+    guint random_seed = env_uint("ESHEEP_SEED", 0, 1, G_MAXUINT);
     gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
     gboolean exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
     gboolean x11_fallback = env_bool("ESHEEP_X11_FALLBACK", FALSE);
@@ -2307,6 +2309,7 @@ int main(int argc, char **argv) {
     gboolean window_landing_cli = FALSE;
     gboolean exclude_conky_cli = FALSE;
     gboolean walk_keep_cli = FALSE;
+    gboolean seed_cli = FALSE;
     int review_animation = 0;
     int review_parent = 0;
     gboolean list_animations = FALSE;
@@ -2387,6 +2390,17 @@ int main(int argc, char **argv) {
             walk_keep_cli = TRUE;
             continue;
         }
+        if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            unsigned long long value = strtoull(argv[++i], &end, 10);
+            if (*end || value == 0 || value > G_MAXUINT) {
+                g_printerr("invalid --seed value (use 1-%u)\n", G_MAXUINT);
+                return 2;
+            }
+            random_seed = (guint)value;
+            seed_cli = TRUE;
+            continue;
+        }
         if (strcmp(argv[i], "--review-animation") == 0 && i + 1 < argc) {
             char *end = NULL;
             long value = strtol(argv[++i], &end, 10);
@@ -2423,9 +2437,6 @@ int main(int argc, char **argv) {
         g_setenv("GDK_BACKEND", "x11", FALSE);
     }
     gtk_init(&argc, &argv);
-    app_random_seed = (uint32_t)time(NULL) ^ (uint32_t)getpid();
-    if (app_random_seed == 0) app_random_seed = 0xC0FFEE01u;
-
     GKeyFile *config = g_key_file_new();
     gchar *default_config_path = NULL;
     gchar *config_character = NULL;
@@ -2473,6 +2484,11 @@ int main(int argc, char **argv) {
                                                 "walk_keep_probability", NULL);
             if (value >= 0 && value <= 100) walk_keep_probability = (guint)value;
         }
+        if (!seed_cli && !getenv("ESHEEP_SEED") &&
+            g_key_file_has_key(config, "esheep", "seed", NULL)) {
+            gint64 value = g_key_file_get_int64(config, "esheep", "seed", NULL);
+            if (value > 0 && value <= G_MAXUINT) random_seed = (guint)value;
+        }
         if (!window_landing_cli && !getenv("ESHEEP_WINDOW_LANDING") &&
             g_key_file_has_key(config, "esheep", "window_landing", NULL))
             window_landing = g_key_file_get_boolean(config, "esheep",
@@ -2482,6 +2498,11 @@ int main(int argc, char **argv) {
             exclude_conky = g_key_file_get_boolean(config, "esheep",
                                                     "exclude_conky", NULL);
     }
+    if (random_seed != 0)
+        app_random_seed = (uint32_t)random_seed;
+    else
+        app_random_seed = (uint32_t)time(NULL) ^ (uint32_t)getpid();
+    if (app_random_seed == 0) app_random_seed = 0xC0FFEE01u;
     count = clamp_sheep_count(count);
 
     GError *error = NULL;

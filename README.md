@@ -27,6 +27,7 @@ Command-line options are available with `./esheep --help`:
 --x11-fallback      Use XWayland when available.
 --tick-ms N         Set the update interval from 10 to 1000 ms.
 --walk-keep N       Set the floor walk keep-walking probability from 0 to 100.
+--seed N            Set a reproducible random seed for all sheep.
 --review-animation N Show animation N for transition review.
 --list-animations  List active animation IDs and names.
 ```
@@ -53,6 +54,7 @@ count=2
 spawn=random
 tick_ms=33
 walk_keep_probability=90
+seed=12345
 window_landing=true
 exclude_conky=true
 ```
@@ -75,6 +77,7 @@ Runtime settings can be overridden with environment variables:
 - `ESHEEP_WALK_KEEP_PROBABILITY`: floor walk probability for repeating the
   walking behavior. The original value is 90. Lower it to see other floor
   behaviors more often.
+- `ESHEEP_SEED`: non-zero seed for reproducible, independent random streams.
 
 Left-click-drag picks the sheep up. Right-click opens a pet menu with
 Pause, Hide, Bring to Front, and Quit. Runtime settings can be overridden

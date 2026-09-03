@@ -59,6 +59,10 @@ test-gui: esheep
 	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
 	xvfb-run -a env WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
 
+test-cli: esheep
+	gcc -std=c11 -Wall -Wextra -Werror -o /tmp/esheep_test_cli tests/test_cli.c
+	/tmp/esheep_test_cli
+
 test-assets:
 	python3 tests/test_spritesheet.py
 
@@ -72,7 +76,7 @@ test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
 	/tmp/esheep_test_context
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui test-cli
 
 esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
@@ -101,6 +105,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-gui esheep install install-autostart uninstall uninstall-autostart clean
+.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
