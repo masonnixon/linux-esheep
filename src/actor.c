@@ -13,18 +13,26 @@ static int esheep_actor_default_random(void *context) {
 
 void esheep_actor_init(EsheepActor *actor, EsheepActor *parent,
                        int animation_id, int x, int y, int direction) {
+    if (!actor) return;
     esheep_init(&actor->state, animation_id);
     actor->x = x;
     actor->y = y;
     actor->direction = direction < 0 ? -1 : 1;
     actor->visible = true;
-    actor->parent = parent;
+    actor->parent = NULL;
     for (int i = 0; i < ESHEEP_ACTOR_MAX_CHILDREN; i++)
         actor->children[i] = NULL;
     actor->child_count = 0;
-    actor->depth = parent ? parent->depth + 1 : 0;
+    actor->depth = 0;
     actor->random = NULL;
     actor->random_context = NULL;
+    if (parent) {
+        /* Use the normal validated link path so the parent's child list,
+         * depth, and capacity remain consistent. A rejected link leaves a
+         * fully initialized detached actor. */
+        (void)esheep_actor_add_child(parent, actor, animation_id, x, y,
+                                     direction);
+    }
 }
 
 void esheep_actor_set_random_source(EsheepActor *actor, EsheepActorRandom random,

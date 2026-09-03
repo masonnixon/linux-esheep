@@ -353,6 +353,25 @@ static void test_owned_props(void) {
     assert(actor.x == 300 && actor.y == 400);
 }
 
+static void test_init_with_parent_links_consistently(void) {
+    EsheepActor parent, child;
+    root_actor(&parent, 1, 0, 0, 1, 0);
+    esheep_actor_init(&child, &parent, 2, 10, 20, -1);
+    assert(child.parent == &parent);
+    assert(parent.child_count == 1);
+    assert(parent.children[0] == &child);
+    assert(child.depth == 1);
+    assert(child.state.animation_id == 2);
+    assert(child.x == 10 && child.y == 20);
+
+    EsheepActor full[ESHEEP_ACTOR_MAX_CHILDREN + 1];
+    for (int i = 0; i < ESHEEP_ACTOR_MAX_CHILDREN; i++)
+        esheep_actor_init(&full[i], &parent, 2, i, 0, 1);
+    esheep_actor_init(&full[ESHEEP_ACTOR_MAX_CHILDREN], &parent, 2, 0, 0, 1);
+    assert(full[ESHEEP_ACTOR_MAX_CHILDREN].parent == NULL);
+    assert(parent.child_count == ESHEEP_ACTOR_MAX_CHILDREN);
+}
+
 /* Border and gravity events dispatch through the actor's own roll source. */
 static void test_event_dispatch(void) {
     EsheepActor actor;
@@ -387,6 +406,7 @@ int main(void) {
     test_child_record_alone_spawns_nothing();
     test_multiple_authored_child_records();
     test_owned_props();
+    test_init_with_parent_links_consistently();
     test_event_dispatch();
 
     printf("All actor tests passed\n");

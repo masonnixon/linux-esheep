@@ -33,9 +33,11 @@ struct EsheepActor {
     void *random_context;
 };
 
-/* Initialize a fresh actor. `parent` may be NULL for a root. Do not call
- * this on an actor that currently has children or a parent; use
- * esheep_actor_add_child to (re)attach an existing actor. */
+/* Initialize a fresh actor. `parent` may be NULL for a root; when non-NULL,
+ * initialization attaches through the same capacity/cycle/depth checks as
+ * esheep_actor_add_child. A rejected attachment leaves a valid detached
+ * actor. Do not call this on an actor that currently has children or a
+ * parent; use esheep_actor_add_child to (re)attach an existing actor. */
 void esheep_actor_init(EsheepActor *actor, EsheepActor *parent,
                        int animation_id, int x, int y, int direction);
 
