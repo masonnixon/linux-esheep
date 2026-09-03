@@ -501,8 +501,8 @@ Requirements:
 - Add tray actions: pause, show/hide, bring-to-front, settings, quit.
 - Add settings for pet, package, count, monitor, spawn, landing, walk
   probability, review mode, and sound. Character, spritesheet, package,
-  count, monitor, spawn, landing, Conky, tick, and walk-probability
-  persistence are implemented; review-mode and sound controls remain.
+  count, monitor, spawn, landing, Conky, tick, walk-probability, and named
+  review-animation persistence are implemented; sound controls remain.
 - Add about/help and current-animation diagnostics.
 - Add isolated sound playback, autostart, install/uninstall checks, and
   version metadata.

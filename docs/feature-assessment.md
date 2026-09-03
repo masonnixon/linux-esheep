@@ -123,10 +123,11 @@ correct runtime context.
 - Complete handling for unusual panel placement and compositor-specific
   stacking. X11 foreground-client occlusion is implemented for normal and
   reparented clients, with live compositor coverage still limited.
-- A full animation chooser remains incomplete. The runtime settings dialog
-  now persists character, spritesheet, package, count, monitor, spawn,
-  landing, Conky, tick, and walk-probability settings; the indexed review
-  tool remains available for animation selection.
+- The runtime settings dialog now provides a named chooser for every active
+  animation plus normal walking, and persists character, spritesheet,
+  package, count, monitor, spawn, landing, Conky, tick, and walk-probability
+  settings. Parent-child review remains available through the indexed review
+  tool.
 - Sound effects and authored sound playback.
 - Update and broader application-management behavior from the original
   desktop application.
