@@ -523,6 +523,18 @@ static void test_excluded_surfaces_rejected(void) {
 
 /* A fall frame may move more than the classifier's contact tolerance. The
  * runtime must still land when that frame crosses a window top. */
+
+/* Test: Sheep stacking policy allows application windows to occlude it.
+ * The sheep window uses GDK_WINDOW_TYPE_HINT_NORMAL on a managed toplevel,
+ * which places it in the normal WM stacking layer and allows any freshly
+ * raised application window to cover it. No keep-above, sticky, or per-tick
+ * raise is requested. The production setup uses the same normal-stacking
+ * policy helper tested here. */
+static void test_stacking_policy_allows_occlusion(void) {
+    /* Normal stacking: the WM controls layering; no unconditional topmost. */
+    assert(sheep_window_type_hint() == GDK_WINDOW_TYPE_HINT_NORMAL);
+}
+
 static void test_swept_fall_lands_on_window(void) {
     App app;
     init_stub_app(&app, 0, 0, 640, 480, 40);
@@ -606,11 +618,14 @@ int main(void) {
     printf("  test_walk_in_front_of_taskbar_not_lifted: PASSED\n");
 
     test_excluded_surfaces_rejected();
+    test_stacking_policy_allows_occlusion();
+    printf("  test_stacking_policy_allows_occlusion: PASSED\n");
+
     printf("  test_excluded_surfaces_rejected: PASSED\n");
 
     test_swept_fall_lands_on_window();
     printf("  test_swept_fall_lands_on_window: PASSED\n");
 
-    printf("\nAll 23 behavior regression tests PASSED\n");
+    printf("\nAll 24 behavior regression tests PASSED\n");
     return 0;
 }

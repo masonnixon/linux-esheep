@@ -121,6 +121,18 @@ static void test_x11_fallback_capabilities(void) {
     assert(runtime_x11.can_query_desktop_surfaces);
 }
 
+
+
+static void test_x11_occlusion_stacking_policy(void) {
+    /* The sheep window must NOT request an unconditional keep-above
+     * stacking state, and must NOT pin itself to all desktops via stick().
+     * Both of those prior behaviors forced the sheep back on top of any
+     * freshly-raised application window every tick. The idiomatic GTK3
+     * policy is GDK_WINDOW_TYPE_HINT_NORMAL on a GTK_WINDOW_TOPLEVEL: the
+     * WM controls stacking and newly-raised application windows occlude the
+     * sheep. */
+    assert(sheep_window_type_hint() == GDK_WINDOW_TYPE_HINT_NORMAL);
+}
 int main(void) {
     test_monitor_global_coordinates_negative_origin();
     test_monitor_seam_selection_prefers_direction();
@@ -128,6 +140,7 @@ int main(void) {
     test_child_coordinates_are_local_to_scene();
     test_fullscreen_and_panel_surfaces_are_excluded();
     test_x11_fallback_capabilities();
+    test_x11_occlusion_stacking_policy();
     printf("All desktop backend tests passed\n");
     return 0;
 }

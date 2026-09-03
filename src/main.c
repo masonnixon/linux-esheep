@@ -1782,9 +1782,31 @@ static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer use
     return TRUE;
 }
 
+
+/* Normal managed stacking lets the window manager occlude the sheep when an
+ * application window is raised. Keep this policy in one place so tests can
+ * verify the contract without pretending to be a compositor. */
+static GdkWindowTypeHint sheep_window_type_hint(void) {
+    return GDK_WINDOW_TYPE_HINT_NORMAL;
+}
+
 static void setup_sheep_window(App *app, GdkDisplay *display,
                                GdkMonitor *monitor) {
-    GtkWidget *window = gtk_window_new(GTK_WINDOW_POPUP);
+    /* Managed undecorated toplevel using normal WM stacking:
+     * - GTK_WINDOW_TOPLEVEL + GDK_WINDOW_TYPE_HINT_NORMAL gives the WM full
+     *   control; the sheep participates in normal window occlusion and will
+     *   be covered by any newly-raised application window.
+     * - skip_taskbar + skip_pager keep it out of the pager and taskbar.
+     * - Transparency, parent-only input, dragging, and scene-origin
+     *   positioning are preserved via gtk_widget_set_visual, event masks,
+     *   and gtk_window_move.
+     *
+     * Limitation: with a compositor that always keeps "active" or "focused"
+     * windows above everything else, NORMAL-type windows may still receive
+     * unexpected raise requests from that compositor. The sheep cannot
+     * prevent this without reverting to notification-type or unconditional
+     * keep-above. */
+    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     app->window = window;
 
     GdkScreen *screen = gtk_widget_get_screen(window);
@@ -1801,10 +1823,9 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
     gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-    gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
+    gtk_window_set_type_hint(GTK_WINDOW(window), sheep_window_type_hint());
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
     gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
-    gtk_window_stick(GTK_WINDOW(window));
 
     if (monitor) gdk_monitor_get_workarea(monitor, &app->bounds);
     esheep_set_environment(&app->state, app->bounds.width, app->bounds.height,
