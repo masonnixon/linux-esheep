@@ -148,6 +148,7 @@ typedef struct {
     guint walk_keep_probability;
     gboolean window_landing;
     gboolean exclude_conky;
+    int review_animation;
     char spawn_mode[16];
 } SheepGroup;
 
@@ -268,8 +269,9 @@ static gboolean group_set_monitor(SheepGroup *group, guint monitor_index) {
 }
 
 static gboolean group_set_review_animation(SheepGroup *group, int animation_id) {
-    if (!group || !group->sheep || animation_id < 1 ||
+    if (!group || !group->sheep || animation_id < 0 ||
         animation_id > esheep_animation_count) return FALSE;
+    if (animation_id == 0) animation_id = ANIM_WALK;
     for (guint i = 0; i < group->count; i++) {
         App *app = &group->sheep[i];
         esheep_init(&app->state, animation_id);
@@ -286,6 +288,7 @@ static gboolean group_set_review_animation(SheepGroup *group, int animation_id) 
             set_sprite_input_region(app);
         }
     }
+    group->review_animation = animation_id == ANIM_WALK ? 0 : animation_id;
     return TRUE;
 }
 
@@ -2227,6 +2230,8 @@ static void save_group_settings(SheepGroup *group) {
                            (gint)group->configured_count);
     g_key_file_set_integer(group->config, "esheep", "monitor",
                            (gint)group->monitor_index);
+    g_key_file_set_integer(group->config, "esheep", "review_animation",
+                           group->review_animation);
     if (group->character[0] != '\0')
         g_key_file_set_string(group->config, "esheep", "character",
                               group->character);
@@ -2272,6 +2277,7 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkSpinButton *walk = g_object_get_data(G_OBJECT(dialog), "walk-keep");
         GtkSpinButton *monitor = g_object_get_data(G_OBJECT(dialog), "monitor");
         GtkSpinButton *count = g_object_get_data(G_OBJECT(dialog), "count");
+        GtkSpinButton *review = g_object_get_data(G_OBJECT(dialog), "review");
         GtkComboBoxText *spawn = g_object_get_data(G_OBJECT(dialog), "spawn");
         GtkEntry *character = g_object_get_data(G_OBJECT(dialog), "character");
         GtkEntry *spritesheet = g_object_get_data(G_OBJECT(dialog), "spritesheet");
@@ -2285,6 +2291,9 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                           (guint)gtk_spin_button_get_value_as_int(monitor));
         group->configured_count = clamp_sheep_count(
             (guint)gtk_spin_button_get_value_as_int(count));
+        int review_animation = gtk_spin_button_get_value_as_int(review);
+        if (!group_set_review_animation(group, review_animation))
+            gtk_spin_button_set_value(review, group->review_animation);
         gchar *spawn_mode = gtk_combo_box_text_get_active_text(spawn);
         if (spawn_mode) {
             g_strlcpy(group->spawn_mode, spawn_mode,
@@ -2315,6 +2324,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     GtkWidget *tick = gtk_spin_button_new_with_range(10, 1000, 1);
     GtkWidget *walk = gtk_spin_button_new_with_range(0, 100, 1);
     GtkWidget *count = gtk_spin_button_new_with_range(1, MAX_SHEEP, 1);
+    GtkWidget *review = gtk_spin_button_new_with_range(0,
+                                                        esheep_animation_count,
+                                                        1);
     int monitor_count = group->display ?
                         gdk_display_get_n_monitors(group->display) : 1;
     GtkWidget *monitor = gtk_spin_button_new_with_range(
@@ -2339,21 +2351,25 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), monitor, 1, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Sheep count"), 0, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), count, 1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spawn mode"), 0, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), spawn, 1, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Character"), 0, 5, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), character, 1, 5, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spritesheet"), 0, 6, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), spritesheet, 1, 6, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Behavior package"), 0, 7, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), package, 1, 7, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), landing, 0, 8, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), conky, 0, 9, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), note, 0, 10, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Review animation (0 = normal)"),
+                    0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), review, 1, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spawn mode"), 0, 5, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), spawn, 1, 5, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Character"), 0, 6, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), character, 1, 6, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spritesheet"), 0, 7, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), spritesheet, 1, 7, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Behavior package"), 0, 8, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), package, 1, 8, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), landing, 0, 9, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), conky, 0, 10, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 11, 2, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(count), group->configured_count);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(review), group->review_animation);
     gtk_combo_box_set_active_id(GTK_COMBO_BOX(spawn), group->spawn_mode);
     gtk_entry_set_text(GTK_ENTRY(character), group->character);
     gtk_entry_set_text(GTK_ENTRY(spritesheet), group->spritesheet);
@@ -2364,6 +2380,7 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     g_object_set_data(G_OBJECT(dialog), "walk-keep", walk);
     g_object_set_data(G_OBJECT(dialog), "monitor", monitor);
     g_object_set_data(G_OBJECT(dialog), "count", count);
+    g_object_set_data(G_OBJECT(dialog), "review", review);
     g_object_set_data(G_OBJECT(dialog), "spawn", spawn);
     g_object_set_data(G_OBJECT(dialog), "character", character);
     g_object_set_data(G_OBJECT(dialog), "spritesheet", spritesheet);
@@ -2621,6 +2638,7 @@ int main(int argc, char **argv) {
     int review_animation = 0;
     int review_parent = 0;
     gboolean list_animations = FALSE;
+    gboolean review_cli = FALSE;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -2728,6 +2746,7 @@ int main(int argc, char **argv) {
                 return 2;
             }
             review_animation = (int)value;
+            review_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--review-parent") == 0 && i + 1 < argc) {
@@ -2812,6 +2831,13 @@ int main(int argc, char **argv) {
             g_key_file_has_key(config, "esheep", "monitor", NULL)) {
             gint64 value = g_key_file_get_int64(config, "esheep", "monitor", NULL);
             if (value >= 0 && value <= G_MAXUINT) monitor_index = (guint)value;
+        }
+        if (!review_cli && g_key_file_has_key(config, "esheep",
+                                              "review_animation", NULL)) {
+            gint64 value = g_key_file_get_int64(config, "esheep",
+                                                "review_animation", NULL);
+            if (value >= 0 && value <= esheep_animation_count)
+                review_animation = (int)value;
         }
         if (!window_landing_cli && !getenv("ESHEEP_WINDOW_LANDING") &&
             g_key_file_has_key(config, "esheep", "window_landing", NULL))
@@ -3109,6 +3135,7 @@ int main(int argc, char **argv) {
         .walk_keep_probability = walk_keep_probability,
         .window_landing = window_landing,
         .exclude_conky = exclude_conky,
+        .review_animation = review_animation,
     };
     g_strlcpy(group.character, character ? character : "sheep",
               sizeof(group.character));
