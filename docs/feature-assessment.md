@@ -34,6 +34,8 @@ The current implementation has these working foundations:
 - Explicit opt-in XDG autostart installation.
 - Runtime composition of every authored child record for the active parent,
   with independent frame timing per child slot.
+- Pure actor support for querying all authored child records, independent
+  child clocks, bounded child trees, and recursive cleanup.
 - Sheep-to-sheep overlap resolution and spawn spacing.
 - Sheep and replacement penguin spritesheets sharing the same tile grid.
 - A transition review tool with indexed playback.
@@ -55,12 +57,12 @@ transparent windows:
 
 The current renderer supports all authored child records for a parent, with an
 independent frame clock per child slot. The platform-independent actor layer
-also supports recursively linked child trees, but the GTK runtime still
-materializes only the authored direct-child records and does not yet apply
-child-specific sequence, border, or gravity transitions. A child is still tied
-to the lifetime of its immediate parent animation. This differs from the
-upstream model, which allows child-created subchildren and richer child
-lifetimes.
+also supports recursively linked child trees and exposes the complete authored
+child-record set. The GTK runtime still materializes only authored direct-child
+records and does not yet apply child-specific sequence, border, or gravity
+transitions. A child is still tied to the lifetime of its immediate parent
+animation. This differs from the upstream model, which allows child-created
+subchildren and richer child lifetimes.
 
 Child placement and stacking have received targeted fixes, but there is no
 automated screenshot or geometry test proving that every child remains beside
@@ -93,8 +95,8 @@ correct runtime context.
 ### Animation and child execution
 
 - Generic child state machines with their own sequence transitions.
-- Multiple children attached to one parent.
-- Recursive child creation.
+- GTK child state machines beyond direct authored records.
+- Automatic recursive child creation from runtime package metadata.
 - Child movement, opacity, flipping, and lifetime driven entirely by authored
   data.
 - Runtime support for every authored expression without special-case parsing.
@@ -125,9 +127,9 @@ options as features added to the original application.
 ### Pet and asset distribution
 
 - Runtime loading of the supported XML behavior graph via `--package`,
-  `ESHEEP_PACKAGE`, or `package=` configuration.
-- Validation of package structure, references, expressions, frame bounds, and
-  tile grid before window creation.
+  `ESHEEP_PACKAGE`, or `package=` configuration is implemented.
+- Package structure, references, expressions, frame bounds, child graphs, and
+  tile grid are validated before window creation.
 - Full XML feature parity is still incomplete: authored action variants beyond
   flip, arbitrary expression forms, and richer package metadata are not yet
   represented by the runtime loader.
