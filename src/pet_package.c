@@ -47,7 +47,8 @@ typedef enum {
     FIELD_SPAWN_Y,
     FIELD_CHILD_X,
     FIELD_CHILD_Y,
-    FIELD_CHILD_NEXT
+    FIELD_CHILD_NEXT,
+    FIELD_IMAGE_FILE
 } Field;
 
 typedef struct {
@@ -67,6 +68,7 @@ struct EsheepPetPackage {
     int animation_count;
     EsheepChild *childs;
     int child_count;
+    const char *spritesheet;
     GPtrArray *strings;
     GPtrArray *animation_builds;
     GPtrArray *spawn_builds;
@@ -236,6 +238,8 @@ static void begin_field(ParseState *state, const char *name) {
         else if (strcmp(name, "y") == 0) state->field = FIELD_SPAWN_Y;
     } else if (strcmp(name, "tilesx") == 0) state->field = FIELD_HEADER_TILES_X;
     else if (strcmp(name, "tilesy") == 0) state->field = FIELD_HEADER_TILES_Y;
+    else if (strcmp(name, "file") == 0 || strcmp(name, "spritesheet") == 0)
+        state->field = FIELD_IMAGE_FILE;
     if (state->field != FIELD_NONE) {
         if (state->text) g_string_truncate(state->text, 0);
         else state->text = g_string_new(NULL);
@@ -372,6 +376,8 @@ static void finish_text(ParseState *state) {
     } else if (state->spawn) {
         if (state->field == FIELD_SPAWN_X) state->spawn->value.x = owned_string(state->package, value);
         else if (state->field == FIELD_SPAWN_Y) state->spawn->value.y = owned_string(state->package, value);
+    } else if (state->field == FIELD_IMAGE_FILE) {
+        state->package->spritesheet = owned_string(state->package, value);
     }
 }
 
@@ -524,6 +530,15 @@ gboolean esheep_pet_package_load(const char *path, EsheepPetPackage **out,
     g_markup_parse_context_free(context);
     g_free(contents);
     if (!ok) { esheep_pet_package_free(package); return FALSE; }
+    if (package->spritesheet && package->spritesheet[0] &&
+        !g_path_is_absolute(package->spritesheet)) {
+        gchar *directory = g_path_get_dirname(path);
+        gchar *absolute = g_canonicalize_filename(package->spritesheet,
+                                                  directory);
+        package->spritesheet = owned_string(package, absolute);
+        g_free(absolute);
+        g_free(directory);
+    }
     *out = package;
     return TRUE;
 }
@@ -534,6 +549,10 @@ void esheep_pet_package_activate(EsheepPetPackage *package) {
     esheep_spawns = package->spawns; esheep_spawn_count = package->spawn_count;
     esheep_animations = package->animations; esheep_animation_count = package->animation_count;
     esheep_childs = package->childs; esheep_child_count = package->child_count;
+}
+
+const char *esheep_pet_package_spritesheet(const EsheepPetPackage *package) {
+    return package ? package->spritesheet : NULL;
 }
 
 void esheep_pet_package_free(EsheepPetPackage *package) {

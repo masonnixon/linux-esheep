@@ -2468,6 +2468,8 @@ int main(int argc, char **argv) {
     } else {
         const char *env_path = getenv("ESHEEP_SPRITESHEET");
         sheet_path = env_path ? env_path : config_sprite;
+        if (!sheet_path && runtime_package)
+            sheet_path = esheep_pet_package_spritesheet(runtime_package);
         if (!sheet_path) {
             snprintf(default_sheet_path_buf, sizeof(default_sheet_path_buf),
                      "%s/%s_spritesheet.png", ESHEEP_DATADIR,

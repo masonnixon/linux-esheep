@@ -15,6 +15,10 @@ gboolean esheep_pet_package_load(const char *path, EsheepPetPackage **out,
  * this before creating actors or GTK windows. */
 void esheep_pet_package_activate(EsheepPetPackage *package);
 
+/* Optional spritesheet reference from <image><file> or
+ * <image><spritesheet>; the package owns the returned string. */
+const char *esheep_pet_package_spritesheet(const EsheepPetPackage *package);
+
 /* Restore generated data and release a package. The package must not be
  * active while actors are using it. */
 void esheep_pet_package_free(EsheepPetPackage *package);

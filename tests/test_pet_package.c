@@ -8,6 +8,7 @@
 static const char PACKAGE_XML[] =
     "<animations xmlns=\"https://esheep.petrucci.ch/\">"
     "<header><tilesx>4</tilesx><tilesy>4</tilesy></header>"
+    "<image><file>custom.png</file></image>"
     "<spawns><spawn id=\"1\" probability=\"100\"><x>10</x><y>20</y>"
     "<next>1</next></spawn></spawns>"
     "<animations>"
@@ -47,6 +48,8 @@ int main(void) {
     assert(esheep_animations[0].flip == 1);
     assert(esheep_spawn_count == 1 && esheep_spawns[0].x != NULL);
     assert(esheep_child_count == 2);
+    assert(g_str_has_suffix(esheep_pet_package_spritesheet(package),
+                            "/custom.png"));
 
     esheep_pet_package_free(package);
     assert(esheep_animation_count == esheep_default_animation_count);
