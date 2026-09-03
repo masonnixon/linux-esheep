@@ -2298,7 +2298,7 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkSpinButton *walk = g_object_get_data(G_OBJECT(dialog), "walk-keep");
         GtkSpinButton *monitor = g_object_get_data(G_OBJECT(dialog), "monitor");
         GtkSpinButton *count = g_object_get_data(G_OBJECT(dialog), "count");
-        GtkSpinButton *review = g_object_get_data(G_OBJECT(dialog), "review");
+        GtkComboBoxText *review = g_object_get_data(G_OBJECT(dialog), "review");
         GtkComboBoxText *spawn = g_object_get_data(G_OBJECT(dialog), "spawn");
         GtkEntry *character = g_object_get_data(G_OBJECT(dialog), "character");
         GtkEntry *spritesheet = g_object_get_data(G_OBJECT(dialog), "spritesheet");
@@ -2312,9 +2312,21 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                           (guint)gtk_spin_button_get_value_as_int(monitor));
         group->configured_count = clamp_sheep_count(
             (guint)gtk_spin_button_get_value_as_int(count));
-        int review_animation = gtk_spin_button_get_value_as_int(review);
-        if (!group_set_review_animation(group, review_animation))
-            gtk_spin_button_set_value(review, group->review_animation);
+        const char *review_id = gtk_combo_box_get_active_id(
+            GTK_COMBO_BOX(review));
+        char *review_end = NULL;
+        long review_value = review_id ? strtol(review_id, &review_end, 10) : -1;
+        int review_animation = review_end && *review_end == '\0' &&
+                               review_value >= 0 &&
+                               review_value <= esheep_animation_count ?
+                               (int)review_value : -1;
+        if (!group_set_review_animation(group, review_animation)) {
+            char previous_review_id[16];
+            g_snprintf(previous_review_id, sizeof(previous_review_id), "%d",
+                       group->review_animation);
+            gtk_combo_box_set_active_id(GTK_COMBO_BOX(review),
+                                        previous_review_id);
+        }
         gchar *spawn_mode = gtk_combo_box_text_get_active_text(spawn);
         if (spawn_mode) {
             g_strlcpy(group->spawn_mode, spawn_mode,
@@ -2345,9 +2357,17 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     GtkWidget *tick = gtk_spin_button_new_with_range(10, 1000, 1);
     GtkWidget *walk = gtk_spin_button_new_with_range(0, 100, 1);
     GtkWidget *count = gtk_spin_button_new_with_range(1, MAX_SHEEP, 1);
-    GtkWidget *review = gtk_spin_button_new_with_range(0,
-                                                        esheep_animation_count,
-                                                        1);
+    GtkWidget *review = gtk_combo_box_text_new();
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(review), "0", "Normal walking");
+    for (int animation_index = 0; animation_index < esheep_animation_count;
+         animation_index++) {
+        const EsheepAnimation *animation = &esheep_animations[animation_index];
+        char animation_id[16];
+        g_snprintf(animation_id, sizeof(animation_id), "%d", animation->id);
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(review), animation_id,
+                                  animation->name && animation->name[0] ?
+                                  animation->name : animation_id);
+    }
     int monitor_count = group->display ?
                         gdk_display_get_n_monitors(group->display) : 1;
     GtkWidget *monitor = gtk_spin_button_new_with_range(
@@ -2372,7 +2392,7 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), monitor, 1, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Sheep count"), 0, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), count, 1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Review animation (0 = normal)"),
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Review animation"),
                     0, 4, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), review, 1, 4, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spawn mode"), 0, 5, 1, 1);
@@ -2390,7 +2410,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(count), group->configured_count);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(review), group->review_animation);
+    char review_id[16];
+    g_snprintf(review_id, sizeof(review_id), "%d", group->review_animation);
+    gtk_combo_box_set_active_id(GTK_COMBO_BOX(review), review_id);
     gtk_combo_box_set_active_id(GTK_COMBO_BOX(spawn), group->spawn_mode);
     gtk_entry_set_text(GTK_ENTRY(character), group->character);
     gtk_entry_set_text(GTK_ENTRY(spritesheet), group->spritesheet);
