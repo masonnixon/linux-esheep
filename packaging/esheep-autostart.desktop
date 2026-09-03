@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=eSheep
+Comment=A tiny sheep that walks around your desktop
+Exec=esheep
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel

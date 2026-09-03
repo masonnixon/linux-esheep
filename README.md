@@ -126,6 +126,8 @@ make uninstall PREFIX=/usr/local
 ```
 
 Installs the binary, spritesheet, and a `.desktop` entry.
+Use `make install-autostart PREFIX=/usr/local` to additionally enable eSheep
+at login; `make uninstall-autostart` removes that opt-in entry.
 
 ## What's implemented
 
@@ -146,7 +148,7 @@ Installs the binary, spritesheet, and a `.desktop` entry.
 
 ## Known limitations / not yet built
 
-- Sound effects, an autostart hook, and a full settings dialog are not yet
+- Sound effects and a full settings dialog are not yet
   implemented. The tray and right-click menus cover the current runtime
   actions.
 - Native Wayland window discovery and arbitrary popup positioning require

@@ -6,6 +6,7 @@ PREFIX ?= /usr/local
 DATADIR := $(PREFIX)/share/esheep
 BINDIR := $(PREFIX)/bin
 APPDIR := $(PREFIX)/share/applications
+AUTOSTARTDIR := $(PREFIX)/share/xdg/autostart
 MANDIR := $(PREFIX)/share/man/man1
 
 all: esheep
@@ -74,6 +75,12 @@ install: src/main.c src/interpreter.c src/animations_data.c src/context.c src/re
 	install -Dm644 packaging/esheep.1 $(DESTDIR)$(MANDIR)/esheep.1
 	rm -f /tmp/esheep-install-build
 
+install-autostart: install
+	install -Dm644 packaging/esheep-autostart.desktop $(DESTDIR)$(AUTOSTARTDIR)/esheep.desktop
+
+uninstall-autostart:
+	rm -f $(DESTDIR)$(AUTOSTARTDIR)/esheep.desktop
+
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/esheep
 	rm -f $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
@@ -82,6 +89,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-behavior test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-gui esheep install uninstall clean
+.PHONY: all test test-desktop test-behavior test-renderer test-actor test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-gui esheep install install-autostart uninstall uninstall-autostart clean
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
