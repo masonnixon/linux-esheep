@@ -79,7 +79,9 @@ with environment variables:
 
 When the desktop provides a legacy status area, one linux-esheep tray icon
 offers group-wide show/hide, pause/resume, bring-to-front, About, and Quit
-actions. The sheep continues to work without a tray area.
+actions, plus a settings dialog for runtime tuning. The sheep continues to
+work without a tray area. Character, spritesheet, and sheep-count changes
+take effect after restarting the application.
 
 - `ESHEEP_PAUSED=1`: start with all sheep paused (animation stopped, drag
   still works to pick the sheep up).
@@ -148,9 +150,8 @@ at login; `make uninstall-autostart` removes that opt-in entry.
 
 ## Known limitations / not yet built
 
-- Sound effects and a full settings dialog are not yet
-  implemented. The tray and right-click menus cover the current runtime
-  actions.
+- Sound effects are not yet implemented. The tray and right-click menus plus
+  the settings dialog cover the current runtime actions.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.

@@ -108,8 +108,9 @@ correct runtime context.
   and spawn spacing are implemented.
 - Fullscreen application detection and temporary backgrounding.
 - Complete handling for unusual panel placement and compositor stacking.
-- A full settings/options UI and persistent animation chooser. The tray About
-  view and indexed review tool are implemented.
+- A full animation chooser and richer settings for character/package
+  selection. The runtime settings dialog, tray About view, and indexed review
+  tool are implemented.
 - Sound effects and authored sound playback.
 - Update and broader application-management behavior from the original
   desktop application.
