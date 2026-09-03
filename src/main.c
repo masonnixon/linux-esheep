@@ -603,6 +603,7 @@ static void print_usage(const char *program) {
     g_print("  --walk-keep N          Keep walking probability (0-100, default 90).\n");
     g_print("  --review-animation N   Show animation N for transition review.\n");
     g_print("  --review-parent N      Show parent N with its authored child.\n");
+    g_print("  --list-animations      List active animation IDs and names.\n");
 }
 
 static void update_monitor_bounds(App *app) {
@@ -2238,6 +2239,7 @@ int main(int argc, char **argv) {
     gboolean walk_keep_cli = FALSE;
     int review_animation = 0;
     int review_parent = 0;
+    gboolean list_animations = FALSE;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -2337,6 +2339,10 @@ int main(int argc, char **argv) {
             review_parent = (int)value;
             continue;
         }
+        if (strcmp(argv[i], "--list-animations") == 0) {
+            list_animations = TRUE;
+            continue;
+        }
         g_printerr("unknown or incomplete option: %s\n", argv[i]);
         print_usage(argv[0]);
         return 2;
@@ -2424,6 +2430,17 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (runtime_package) esheep_pet_package_activate(runtime_package);
+
+    if (list_animations) {
+        for (int i = 0; i < esheep_animation_count; i++)
+            g_print("%d\t%s\n", esheep_animations[i].id,
+                    esheep_animations[i].name ? esheep_animations[i].name : "");
+        esheep_pet_package_free(runtime_package);
+        g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+        g_free(config_package); g_free(default_config_path);
+        g_key_file_free(config);
+        return 0;
+    }
 
     const char *character = character_override ? character_override :
                             getenv("ESHEEP_CHARACTER");

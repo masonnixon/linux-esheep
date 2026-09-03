@@ -28,6 +28,7 @@ Command-line options are available with `./esheep --help`:
 --tick-ms N         Set the update interval from 10 to 1000 ms.
 --walk-keep N       Set the floor walk keep-walking probability from 0 to 100.
 --review-animation N Show animation N for transition review.
+--list-animations  List active animation IDs and names.
 ```
 
 Requires `libgtk-3-dev` (`pkg-config gtk+-3.0`). Run from the repo root so
