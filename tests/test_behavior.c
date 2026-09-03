@@ -537,7 +537,7 @@ static void test_stacking_policy_allows_occlusion(void) {
 
 static void test_group_pause_applies_to_all_sheep(void) {
     App sheep[3] = {0};
-    SheepGroup group = { sheep, 3 };
+    SheepGroup group = { .sheep = sheep, .count = 3 };
     group_set_paused(&group, TRUE);
     assert(sheep[0].paused && sheep[1].paused && sheep[2].paused);
     group_set_paused(&group, FALSE);

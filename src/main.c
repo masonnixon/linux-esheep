@@ -119,7 +119,16 @@ struct App {
 typedef struct {
     App *sheep;
     guint count;
+    GKeyFile *config;
+    const char *config_path;
+    guint tick_ms;
+    guint walk_keep_probability;
+    gboolean window_landing;
+    gboolean exclude_conky;
+    const char *spawn_mode;
 } SheepGroup;
+
+static gboolean on_tick(gpointer user_data);
 
 static void group_set_paused(SheepGroup *group, gboolean paused) {
     if (!group || !group->sheep) return;
@@ -143,6 +152,40 @@ static void group_present(SheepGroup *group) {
     group_set_hidden(group, FALSE);
     for (guint i = 0; i < group->count; i++)
         gtk_window_present(GTK_WINDOW(group->sheep[i].window));
+}
+
+static void group_set_tick_ms(SheepGroup *group, guint tick_ms) {
+    if (!group || !group->sheep || tick_ms < 10 || tick_ms > 1000) return;
+    for (guint i = 0; i < group->count; i++) {
+        App *app = &group->sheep[i];
+        if (app->tick_source_id != 0)
+            g_source_remove(app->tick_source_id);
+        app->tick_ms = tick_ms;
+        app->tick_source_id = g_timeout_add(app->tick_ms, on_tick, app);
+    }
+    group->tick_ms = tick_ms;
+}
+
+static void group_set_walk_keep_probability(SheepGroup *group, guint probability) {
+    if (!group || probability > 100) return;
+    for (guint i = 0; i < group->count; i++)
+        esheep_set_walk_keep_probability(&group->sheep[i].state,
+                                         (int)probability);
+    group->walk_keep_probability = probability;
+}
+
+static void group_set_window_landing(SheepGroup *group, gboolean enabled) {
+    if (!group) return;
+    for (guint i = 0; i < group->count; i++)
+        group->sheep[i].window_landing = enabled;
+    group->window_landing = enabled;
+}
+
+static void group_set_exclude_conky(SheepGroup *group, gboolean excluded) {
+    if (!group) return;
+    for (guint i = 0; i < group->count; i++)
+        group->sheep[i].exclude_conky = excluded;
+    group->exclude_conky = excluded;
 }
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -1807,6 +1850,89 @@ static void on_about_activate(GtkMenuItem *item, gpointer user_data) {
                           NULL);
 }
 
+static void save_group_settings(SheepGroup *group) {
+    if (!group || !group->config || !group->config_path) return;
+    gchar *directory = g_path_get_dirname(group->config_path);
+    g_mkdir_with_parents(directory, 0700);
+    g_free(directory);
+    g_key_file_set_integer(group->config, "esheep", "tick_ms",
+                           (gint)group->tick_ms);
+    g_key_file_set_integer(group->config, "esheep", "walk_keep_probability",
+                           (gint)group->walk_keep_probability);
+    g_key_file_set_boolean(group->config, "esheep", "window_landing",
+                           group->window_landing);
+    g_key_file_set_boolean(group->config, "esheep", "exclude_conky",
+                           group->exclude_conky);
+    if (group->spawn_mode)
+        g_key_file_set_string(group->config, "esheep", "spawn",
+                              group->spawn_mode);
+    gsize length = 0;
+    GError *error = NULL;
+    gchar *data = g_key_file_to_data(group->config, &length, &error);
+    if (data) {
+        if (!g_file_set_contents(group->config_path, data, (gssize)length,
+                                 &error))
+            g_printerr("failed to save settings '%s': %s\n",
+                       group->config_path, error->message);
+        g_free(data);
+    }
+    if (error) g_error_free(error);
+}
+
+static void on_settings_response(GtkDialog *dialog, gint response,
+                                 gpointer user_data) {
+    SheepGroup *group = user_data;
+    if (response == GTK_RESPONSE_OK) {
+        GtkSpinButton *tick = g_object_get_data(G_OBJECT(dialog), "tick-ms");
+        GtkSpinButton *walk = g_object_get_data(G_OBJECT(dialog), "walk-keep");
+        GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
+        GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
+        group_set_tick_ms(group, (guint)gtk_spin_button_get_value_as_int(tick));
+        group_set_walk_keep_probability(
+            group, (guint)gtk_spin_button_get_value_as_int(walk));
+        group_set_window_landing(group, gtk_toggle_button_get_active(landing));
+        group_set_exclude_conky(group, gtk_toggle_button_get_active(conky));
+        save_group_settings(group);
+    }
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    SheepGroup *group = user_data;
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        "eSheep Settings", NULL, GTK_DIALOG_MODAL,
+        "Cancel", GTK_RESPONSE_CANCEL, "Apply", GTK_RESPONSE_OK, NULL);
+    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *grid = gtk_grid_new();
+    GtkWidget *tick = gtk_spin_button_new_with_range(10, 1000, 1);
+    GtkWidget *walk = gtk_spin_button_new_with_range(0, 100, 1);
+    GtkWidget *landing = gtk_check_button_new_with_label("Land on windows and panels");
+    GtkWidget *conky = gtk_check_button_new_with_label("Allow Conky as a surface");
+    GtkWidget *note = gtk_label_new("Character, spritesheet, and sheep count apply on restart.");
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tick interval (ms)"), 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), tick, 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Walk keep probability (%)"), 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), walk, 1, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), landing, 0, 2, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), conky, 0, 3, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 4, 2, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(landing), group->window_landing);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(conky), !group->exclude_conky);
+    g_object_set_data(G_OBJECT(dialog), "tick-ms", tick);
+    g_object_set_data(G_OBJECT(dialog), "walk-keep", walk);
+    g_object_set_data(G_OBJECT(dialog), "landing", landing);
+    g_object_set_data(G_OBJECT(dialog), "conky", conky);
+    gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+    gtk_container_add(GTK_CONTAINER(content), grid);
+    g_signal_connect(dialog, "response", G_CALLBACK(on_settings_response), group);
+    gtk_widget_show_all(dialog);
+}
+
 static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time,
                           gpointer user_data) {
     (void)button;
@@ -1818,17 +1944,20 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     GtkWidget *pause = gtk_menu_item_new_with_label(paused ? "Resume All" : "Pause All");
     GtkWidget *hide = gtk_menu_item_new_with_label(hidden ? "Show All" : "Hide All");
     GtkWidget *front = gtk_menu_item_new_with_label("Bring All to Front");
+    GtkWidget *settings = gtk_menu_item_new_with_label("Settings");
     GtkWidget *about = gtk_menu_item_new_with_label("About");
     GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
 
     g_signal_connect(pause, "activate", G_CALLBACK(on_group_pause_activate), group);
     g_signal_connect(hide, "activate", G_CALLBACK(on_group_hide_activate), group);
     g_signal_connect(front, "activate", G_CALLBACK(on_group_front_activate), group);
+    g_signal_connect(settings, "activate", G_CALLBACK(on_settings_activate), group);
     g_signal_connect(about, "activate", G_CALLBACK(on_about_activate), NULL);
     g_signal_connect(quit, "activate", G_CALLBACK(on_quit_activate), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), pause);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), hide);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), front);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), settings);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), about);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
     gtk_widget_show_all(menu);
@@ -2367,7 +2496,17 @@ int main(int argc, char **argv) {
         g_timeout_add((guint)atoi(autoquit), on_autoquit, NULL);
     }
 
-    SheepGroup group = { sheep, count };
+    SheepGroup group = {
+        .sheep = sheep,
+        .count = count,
+        .config = config,
+        .config_path = config_override,
+        .tick_ms = tick_ms,
+        .walk_keep_probability = walk_keep_probability,
+        .window_landing = window_landing,
+        .exclude_conky = exclude_conky,
+        .spawn_mode = spawn_override ? spawn_override : "bottom"
+    };
     GtkStatusIcon *tray_icon = create_tray_icon(&group);
 
     gtk_main();
