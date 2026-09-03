@@ -22,9 +22,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROGRAM = os.path.join(ROOT, "esheep")
 
 
-def generated_transitions(runner):
+def generated_transitions(runner, package_options):
     completed = subprocess.run(
-        runner + [PROGRAM, "--list-transitions"], cwd=ROOT,
+        runner + [PROGRAM] + package_options + ["--list-transitions"], cwd=ROOT,
         check=True, text=True, capture_output=True)
     result = []
     for line in completed.stdout.splitlines():
@@ -50,6 +50,8 @@ def main():
                         help="1-based transition index, or omit for all")
     parser.add_argument("duration", nargs="?", type=int, default=1800,
                         help="milliseconds to show each transition")
+    parser.add_argument("--package", help="behavior package to review")
+    parser.add_argument("--sprite", help="spritesheet for the selected package")
     args = parser.parse_args()
     if args.duration < 100:
         parser.error("duration must be at least 100 milliseconds")
@@ -65,7 +67,13 @@ def main():
               file=sys.stderr)
         return 2
 
-    transitions = generated_transitions(runner)
+    package_options = []
+    if args.package:
+        package_options += ["--package", args.package]
+    if args.sprite:
+        package_options += ["--sprite", args.sprite]
+
+    transitions = generated_transitions(runner, package_options)
     if args.index is None:
         selected = [(item["index"], item) for item in transitions]
     elif 1 <= args.index <= len(transitions):
@@ -84,8 +92,9 @@ def main():
         review_option = "--review-parent" if transition["kind"] == "child" \
             else "--review-animation"
         review_id = source if transition["kind"] == "child" else target
-        command = runner + [PROGRAM, review_option, str(review_id),
-                            "--spawn", "bottom", "--no-window-landing"]
+        command = (runner + [PROGRAM] + package_options +
+                   [review_option, str(review_id), "--spawn", "bottom",
+                    "--no-window-landing"])
         environment = os.environ.copy()
         environment["ESHEEP_AUTOQUIT_MS"] = str(args.duration)
         completed = subprocess.run(command, cwd=ROOT, env=environment)

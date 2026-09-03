@@ -134,6 +134,8 @@ running binary for the active generated transition table, then plays each
 sequence, border, gravity, and child transition back-to-back while printing its
 1-based index and source/target in the terminal. Pass an index to review one
 transition, for example `tools/review_transitions.py 17 3000`.
+For a custom behavior package, pass `--package PATH` and optionally
+`--sprite PATH` before the index.
 
 ## Install
 
