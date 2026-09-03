@@ -78,6 +78,13 @@ bool esheep_actor_gravity_event(EsheepActor *actor, const char *context);
  * esheep_actor_add_child explicitly. */
 const EsheepChild *esheep_actor_child_record(int parent_animation_id);
 
+/* Return every authored child record for a parent animation. The returned
+ * count is bounded by `capacity`; records remain owned by the active data
+ * table and must not be freed by the caller. */
+int esheep_actor_child_records(int parent_animation_id,
+                               const EsheepChild **records,
+                               int capacity);
+
 /* Count all descendants (children, grandchildren, ...). */
 int esheep_actor_count_descendants(EsheepActor *actor);
 

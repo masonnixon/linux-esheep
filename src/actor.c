@@ -140,6 +140,19 @@ const EsheepChild *esheep_actor_child_record(int parent_animation_id) {
     return NULL;
 }
 
+int esheep_actor_child_records(int parent_animation_id,
+                               const EsheepChild **records,
+                               int capacity) {
+    if (capacity < 0) capacity = 0;
+    int total = 0;
+    for (int i = 0; i < esheep_child_count; i++) {
+        if (esheep_childs[i].animation_id != parent_animation_id) continue;
+        if (records && total < capacity) records[total] = &esheep_childs[i];
+        total++;
+    }
+    return total;
+}
+
 int esheep_actor_count_descendants(EsheepActor *actor) {
     if (!actor) return 0;
     int count = 0;

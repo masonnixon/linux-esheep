@@ -7,22 +7,30 @@
 static int fixed_roll(void *context) { return *(int *)context; }
 static int over_roll(void *context) { (void)context; return 250; }
 static int under_roll(void *context) { (void)context; return -7; }
+static int helper_rolls[128];
+static int helper_roll_count;
+
+static int *next_helper_roll(int value) {
+    assert(helper_roll_count < (int)(sizeof(helper_rolls) /
+                                     sizeof(helper_rolls[0])));
+    helper_rolls[helper_roll_count] = value;
+    return &helper_rolls[helper_roll_count++];
+}
 
 static EsheepActor *add_at(EsheepActor *parent, EsheepActor *child,
                            int animation_id, int x, int y, int roll) {
     esheep_actor_init(child, NULL, animation_id, x, y, 1);
-    int source = roll;
     EsheepActor *linked = esheep_actor_add_child(parent, child, animation_id,
                                                  x, y, 1);
-    if (linked) esheep_actor_set_random_source(linked, fixed_roll, &source);
+    if (linked) esheep_actor_set_random_source(linked, fixed_roll,
+                                                next_helper_roll(roll));
     return linked;
 }
 
 static EsheepActor *root_actor(EsheepActor *actor, int animation_id,
                                int x, int y, int direction, int roll) {
-    int source = roll;
     esheep_actor_init(actor, NULL, animation_id, x, y, direction);
-    esheep_actor_set_random_source(actor, fixed_roll, &source);
+    esheep_actor_set_random_source(actor, fixed_roll, next_helper_roll(roll));
     return actor;
 }
 
@@ -270,6 +278,13 @@ static void test_child_record_alone_spawns_nothing(void) {
            esheep_actor_child_record(28)->next == 31);
     assert(esheep_actor_child_record(1) == NULL);
 
+    const EsheepChild *records[ESHEEP_ACTOR_MAX_CHILDREN] = {0};
+    assert(esheep_actor_child_records(26, records,
+                                      ESHEEP_ACTOR_MAX_CHILDREN) == 1);
+    assert(records[0] == record);
+    assert(esheep_actor_child_records(1, records,
+                                      ESHEEP_ACTOR_MAX_CHILDREN) == 0);
+
     EsheepActor parent, child;
     int roll = 0;
     esheep_actor_init(&parent, NULL, 26, 0, 0, 1);   /* eat: authored child 27 */
@@ -285,11 +300,36 @@ static void test_child_record_alone_spawns_nothing(void) {
     assert(parent.state.animation_id == 1); /* full eat sequence completed */
     assert(parent.child_count == 0);        /* still none without an explicit add */
 
+    esheep_actor_init(&child, NULL, record->next, 0, 0, 1);
     assert(esheep_actor_add_child(&parent, &child, record->next, 9, 9, 1));
     assert(parent.child_count == 1);
     assert(child.state.animation_id == 27);
     esheep_actor_tick(&parent, 300, "none");
     assert(child.state.frame_index == 1);
+}
+
+static void test_multiple_authored_child_records(void) {
+    const EsheepChild authored[] = {
+        { 26, "x", "y", 27 },
+        { 26, "x+1", "y+1", 31 },
+    };
+    const EsheepChild *records[ESHEEP_ACTOR_MAX_CHILDREN] = {0};
+    const EsheepChild *old_records = esheep_childs;
+    int old_count = esheep_child_count;
+    esheep_childs = authored;
+    esheep_child_count = 2;
+
+    assert(esheep_actor_child_records(26, records,
+                                      ESHEEP_ACTOR_MAX_CHILDREN) == 2);
+    assert(records[0] == &authored[0]);
+    assert(records[1] == &authored[1]);
+
+    /* The API reports the full count even when the output buffer is smaller. */
+    assert(esheep_actor_child_records(26, records, 1) == 2);
+    assert(esheep_actor_child_records(1, records,
+                                      ESHEEP_ACTOR_MAX_CHILDREN) == 0);
+    esheep_childs = old_records;
+    esheep_child_count = old_count;
 }
 
 /* Owned props: direction normalization, visibility, and the engine never
@@ -345,6 +385,7 @@ int main(void) {
     test_depth_and_cycle_rejection();
     test_child_capacity();
     test_child_record_alone_spawns_nothing();
+    test_multiple_authored_child_records();
     test_owned_props();
     test_event_dispatch();
 
