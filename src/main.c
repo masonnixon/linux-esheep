@@ -1682,9 +1682,6 @@ static void update_child_animation(App *app) {
                               0, 0, app->direction);
             esheep_actor_set_random_source(&app->child_actors[slot],
                                            actor_random_source, app);
-            esheep_set_environment(&app->child_actors[slot].state,
-                                   app->bounds.width, app->bounds.height,
-                                   app->tile_size, app->tile_size);
             if (slot == 0 && app->child_frame_index > 0 &&
                 app->child_animation_id == record->next &&
                 (previous_child_parents[0] == 0 ||
@@ -1696,6 +1693,9 @@ static void update_child_animation(App *app) {
                 esheep_actor_add_child(&app->child_actors[parent_slot],
                                        &app->child_actors[slot], record->next,
                                        0, 0, app->direction);
+            esheep_set_environment(&app->child_actors[slot].state,
+                                   app->bounds.width, app->bounds.height,
+                                   app->tile_size, app->tile_size);
             app->child_frame_indices[slot] = 0;
             app->child_elapsed_ms_values[slot] = 0;
             app->child_pose_x[slot] = 0;
@@ -1727,6 +1727,17 @@ static void update_child_animation(App *app) {
         child_visible[slot] = TRUE;
         }
     }
+    for (int slot = child_count; slot < MAX_RUNTIME_CHILDREN; slot++) {
+        esheep_actor_detach(&app->child_actors[slot]);
+        app->child_animation_ids[slot] = 0;
+        app->child_parent_animations[slot] = 0;
+        app->child_frame_indices[slot] = 0;
+        app->child_elapsed_ms_values[slot] = 0;
+        app->child_pose_x[slot] = 0;
+        app->child_pose_y[slot] = 0;
+        app->child_render_x[slot] = 0;
+        app->child_render_y[slot] = 0;
+    }
     app->child_animation_id = child_count > 0 ? app->child_animation_ids[0] : 0;
     app->child_frame_index = child_count > 0 ? app->child_frame_indices[0] : 0;
     app->child_elapsed_ms = child_count > 0 ? app->child_elapsed_ms_values[0] : 0;
@@ -1737,6 +1748,25 @@ static void update_child_animation(App *app) {
         child_count,
         child_tile_ids, child_x, child_y,
         child_flipped, child_opacity, child_visible);
+}
+
+static void accumulate_child_events(App *app, EsheepActor *actor) {
+    int slot = (int)(actor - app->child_actors);
+    for (int event_index = 0;
+         event_index < actor->state.event_count; event_index++) {
+        EsheepFrameEvent event = actor->state.events[event_index];
+        if (event.animation_id < 1 ||
+            event.animation_id > esheep_animation_count) continue;
+        const EsheepAnimation *animation =
+            &esheep_animations[event.animation_id - 1];
+        app->child_pose_x[slot] += pose_delta(app, animation,
+                                              event.frame_index, TRUE);
+        app->child_pose_y[slot] += pose_delta(app, animation,
+                                              event.frame_index, FALSE);
+    }
+    for (int child_index = 0; child_index < actor->child_count;
+         child_index++)
+        accumulate_child_events(app, actor->children[child_index]);
 }
 
 static void advance_child_animation(App *app, int dt_ms) {
@@ -1760,21 +1790,9 @@ static void advance_child_animation(App *app, int dt_ms) {
         int animation_id = app->child_animation_ids[slot];
         if (animation_id < 1 || animation_id > esheep_animation_count)
             continue;
-        esheep_tick(&app->child_actors[slot].state, dt_ms, "none",
-                    app_random_0_99(app));
-        for (int event_index = 0;
-             event_index < app->child_actors[slot].state.event_count;
-             event_index++) {
-            EsheepFrameEvent event =
-                app->child_actors[slot].state.events[event_index];
-            if (event.animation_id < 1 ||
-                event.animation_id > esheep_animation_count) continue;
-            const EsheepAnimation *animation =
-                &esheep_animations[event.animation_id - 1];
-            app->child_pose_x[slot] += pose_delta(app, animation,
-                                                  event.frame_index, TRUE);
-            app->child_pose_y[slot] += pose_delta(app, animation,
-                                                  event.frame_index, FALSE);
+        if (app->child_actors[slot].parent == NULL) {
+            esheep_actor_tick(&app->child_actors[slot], dt_ms, "none");
+            accumulate_child_events(app, &app->child_actors[slot]);
         }
         app->child_animation_ids[slot] =
             app->child_actors[slot].state.animation_id;
