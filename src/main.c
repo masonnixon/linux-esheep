@@ -2682,6 +2682,7 @@ int main(int argc, char **argv) {
         App *app = &sheep[i];
         app->sheet = sheet;
         app->tile_size = tile_size;
+        app->ordinal = (int)i;
         app->direction = app_random_0_99(app) < 50 ? -1 : 1;
         app->tick_ms = tick_ms;
         app->window_landing = window_landing;
@@ -2692,7 +2693,6 @@ int main(int argc, char **argv) {
         app->random_spawn = spawn_override ?
                            strcasecmp(spawn_override, "random") == 0 :
                            env_equals("ESHEEP_SPAWN", "random");
-        app->ordinal = (int)i;
         app->siblings = sheep;
         app->sibling_count = (int)count;
         app->bounds = initial_bounds;
