@@ -1,4 +1,4 @@
-/* Transparent, always-on-top GTK window rendering the interpreter's current
+/* Transparent GTK window rendering the interpreter's current
  * sprite frame, with real x/y movement driven by each animation's pose
  * deltas and collision against X11 client windows, panels, and the monitor
  * workarea.
@@ -138,6 +138,7 @@ typedef struct {
     guint count;
     GdkDisplay *display;
     guint monitor_index;
+    guint configured_count;
     GKeyFile *config;
     const char *config_path;
     guint tick_ms;
@@ -2137,6 +2138,10 @@ static void save_group_settings(SheepGroup *group) {
     g_free(directory);
     g_key_file_set_integer(group->config, "esheep", "tick_ms",
                            (gint)group->tick_ms);
+    g_key_file_set_integer(group->config, "esheep", "count",
+                           (gint)group->configured_count);
+    g_key_file_set_integer(group->config, "esheep", "monitor",
+                           (gint)group->monitor_index);
     g_key_file_set_integer(group->config, "esheep", "walk_keep_probability",
                            (gint)group->walk_keep_probability);
     g_key_file_set_boolean(group->config, "esheep", "window_landing",
@@ -2950,6 +2955,7 @@ int main(int argc, char **argv) {
         .count = count,
         .display = display,
         .monitor_index = active_monitor_index,
+        .configured_count = count,
         .config = config,
         .config_path = config_override,
         .tick_ms = tick_ms,
