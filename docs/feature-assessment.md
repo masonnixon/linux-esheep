@@ -29,6 +29,12 @@ The current implementation has these working foundations:
 - Multiple independent sheep at startup.
 - Configurable spritesheet, character selection, spawn mode, sheep count,
   tick interval, window landing, and walking probability.
+- One optional status/tray icon with group-wide show/hide, pause/resume,
+  bring-to-front, About, and Quit actions.
+- Explicit opt-in XDG autostart installation.
+- Runtime composition of every authored child record for the active parent,
+  with independent frame timing per child slot.
+- Sheep-to-sheep overlap resolution and spawn spacing.
 - Sheep and replacement penguin spritesheets sharing the same tile grid.
 - A transition review tool with indexed playback.
 - Unit tests for the pure interpreter, animation data, sprite references, and
@@ -47,11 +53,12 @@ transparent windows:
 | 26 | 27 | Flower while eating |
 | 28 | 31 | Black-sheep companion |
 
-The current renderer supports one child per parent. Child state is advanced by
-its frame timing, but child sequence, border, gravity, and child-of-child
-transitions are not interpreted. A child is also tied to the lifetime of its
-immediate parent animation. This differs from the upstream model, which allows
-multiple children and child-created subchildren.
+The current renderer supports all authored child records for a parent, with an
+independent frame clock per child slot. Child sequence, border, gravity, and
+child-of-child transitions are not yet interpreted by the GTK runtime. A child
+is still tied to the lifetime of its immediate parent animation. This differs
+from the upstream model, which allows child-created subchildren and richer
+child lifetimes.
 
 Child placement and stacking have received targeted fixes, but there is no
 automated screenshot or geometry test proving that every child remains beside
@@ -97,12 +104,14 @@ correct runtime context.
 - Native Wayland surface and window-discovery support.
 - Seamless movement across monitor boundaries. Sheep currently use one
   monitor workarea at a time.
-- Sheep-to-sheep collision and landing.
+- Sheep-to-sheep landing and richer collision policy. Basic overlap resolution
+  and spawn spacing are implemented.
 - Fullscreen application detection and temporary backgrounding.
 - Complete handling for unusual panel placement and compositor stacking.
-- A proper tray icon, settings/options UI, about view, and animation chooser.
+- A full settings/options UI and persistent animation chooser. The tray About
+  view and indexed review tool are implemented.
 - Sound effects and authored sound playback.
-- Autostart, update, and application-management behavior from the original
+- Update and broader application-management behavior from the original
   desktop application.
 
 The upstream history lists fullscreen handling, tray controls, sounds,
