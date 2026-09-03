@@ -1883,8 +1883,6 @@ static void update_child_animation(App *app) {
             esheep_actor_detach(&app->child_actors[slot]);
             esheep_actor_init(&app->child_actors[slot], NULL, record->next,
                               0, 0, app->direction);
-            esheep_actor_set_random_source(&app->child_actors[slot],
-                                           actor_random_source, app);
             gboolean preserve_legacy_frame =
                 slot == 0 && app->child_frame_index > 0 &&
                 app->child_animation_id == record->next &&
@@ -1894,6 +1892,11 @@ static void update_child_animation(App *app) {
                                         &app->child_actors[parent_slot];
             esheep_actor_add_child(parent_actor, &app->child_actors[slot],
                                    record->next, 0, 0, app->direction);
+            /* add_child() resets a detached actor's state and ownership;
+             * install the per-sheep RNG after attachment so child transition
+             * choices remain independent and reproducible. */
+            esheep_actor_set_random_source(&app->child_actors[slot],
+                                           actor_random_source, app);
             esheep_set_environment(&app->child_actors[slot].state,
                                    app->bounds.width, app->bounds.height,
                                    app->tile_size, app->tile_size);

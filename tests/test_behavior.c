@@ -221,6 +221,20 @@ static void test_child_frame_progression(void) {
     assert(app.child_frame_index < child_anim->frame_count);
 }
 
+static void test_child_uses_parent_random_source(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+    esheep_actor_init(&app.actor, NULL, 26, 0, 0, app.direction);
+    esheep_actor_set_random_source(&app.actor, actor_random_source, &app);
+
+    esheep_init(&app.state, 26);
+    update_child_animation(&app);
+
+    assert(app.child_actors[0].parent == &app.actor);
+    assert(app.child_actors[0].random == actor_random_source);
+    assert(app.child_actors[0].random_context == &app);
+}
+
 static void test_child_authored_pose_progression(void) {
     App app;
     init_stub_app(&app, 0, 0, 640, 360, 40);
@@ -753,6 +767,9 @@ int main(void) {
     test_child_frame_progression();
     printf("  test_child_frame_progression: PASSED\n");
 
+    test_child_uses_parent_random_source();
+    printf("  test_child_uses_parent_random_source: PASSED\n");
+
     test_child_authored_pose_progression();
     printf("  test_child_authored_pose_progression: PASSED\n");
 
@@ -822,6 +839,6 @@ int main(void) {
     test_double_click_closes_only_single_pet();
     printf("  test_double_click_closes_only_single_pet: PASSED\n");
 
-    printf("\nAll 34 behavior regression tests PASSED\n");
+    printf("\nAll 35 behavior regression tests PASSED\n");
     return 0;
 }
