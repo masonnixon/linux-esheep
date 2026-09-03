@@ -2309,6 +2309,12 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     gtk_window_set_type_hint(GTK_WINDOW(window), sheep_window_type_hint());
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
     gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
+    /* A desktop pet must not become the active window merely by appearing.
+     * Let the window manager keep application windows above it for genuine
+     * occlusion; the explicit tray/menu "Bring to Front" action is the only
+     * path that intentionally raises the pet. */
+    gtk_window_set_focus_on_map(GTK_WINDOW(window), FALSE);
+    gtk_window_set_accept_focus(GTK_WINDOW(window), FALSE);
 
     if (monitor) gdk_monitor_get_workarea(monitor, &app->bounds);
     esheep_set_environment(&app->state, app->bounds.width, app->bounds.height,
