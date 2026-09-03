@@ -37,7 +37,7 @@ def referenced_frames():
                                  src):
         frames[name] = [int(v) for v in re.findall(r"-?\d+", body)]
 
-    table = src[src.index("const EsheepAnimation esheep_animations[]"):]
+    table = src[src.index("const EsheepAnimation esheep_default_animations[]"):]
     used = set()
     for _id, _name, anim in re.findall(r'(\d+), "([^"]+)",.*?(anim\d+)_frames',
                                        table, re.S):

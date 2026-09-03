@@ -2,8 +2,8 @@
 #include <stddef.h>
 #include "animations_data.h"
 
-const int esheep_tiles_x = 16;
-const int esheep_tiles_y = 11;
+const int esheep_default_tiles_x = 16;
+const int esheep_default_tiles_y = 11;
 
 static const EsheepTransition spawn1_next[] = {
     { 100, NULL, 1 },
@@ -18,13 +18,13 @@ static const EsheepTransition spawn4_next[] = {
     { 100, NULL, 28 },
 };
 
-const EsheepSpawn esheep_spawns[] = {
+const EsheepSpawn esheep_default_spawns[] = {
     { 1, 20, "screenW+10", "areaH-imageH", spawn1_next, 1 },
     { 2, 80, "random*(screenW-imageW-50)/100+25", "-imageH-20", spawn2_next, 1 },
     { 3, 3, "screenW+10", "areaH/2-(randS*areaH/2)/120-imageH", spawn3_next, 1 },
     { 4, 3, "screenW", "areaH-imageH", spawn4_next, 1 },
 };
-const int esheep_spawn_count = 4;
+const int esheep_default_spawn_count = 4;
 
 static const int anim1_frames[] = { 2, 3 };
 static const EsheepTransition anim1_seq_next[] = {
@@ -643,7 +643,7 @@ static const EsheepTransition anim54_gravity_next[] = {
     { 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
-const EsheepAnimation esheep_animations[] = {
+const EsheepAnimation esheep_default_animations[] = {
     {
         1, "walk",
         { "-2", "0", 200, "0", 1.0 },
@@ -1239,9 +1239,9 @@ const EsheepAnimation esheep_animations[] = {
         anim54_gravity_next, 0,
     },
 };
-const int esheep_animation_count = 54;
+const int esheep_default_animation_count = 54;
 
-const EsheepChild esheep_childs[] = {
+const EsheepChild esheep_default_childs[] = {
     {
         21, "screenW+10-areaH/2-(randS*areaH/2)/120", "areaH-imageH", 23
     },
@@ -1252,4 +1252,24 @@ const EsheepChild esheep_childs[] = {
         28, "-imageW-8", "imageY", 31
     },
 };
-const int esheep_child_count = 3;
+const int esheep_default_child_count = 3;
+
+int esheep_tiles_x = esheep_default_tiles_x;
+int esheep_tiles_y = esheep_default_tiles_y;
+const EsheepSpawn *esheep_spawns = esheep_default_spawns;
+int esheep_spawn_count = esheep_default_spawn_count;
+const EsheepAnimation *esheep_animations = esheep_default_animations;
+int esheep_animation_count = esheep_default_animation_count;
+const EsheepChild *esheep_childs = esheep_default_childs;
+int esheep_child_count = esheep_default_child_count;
+
+void esheep_use_default_animation_data(void) {
+    esheep_tiles_x = esheep_default_tiles_x;
+    esheep_tiles_y = esheep_default_tiles_y;
+    esheep_spawns = esheep_default_spawns;
+    esheep_spawn_count = esheep_default_spawn_count;
+    esheep_animations = esheep_default_animations;
+    esheep_animation_count = esheep_default_animation_count;
+    esheep_childs = esheep_default_childs;
+    esheep_child_count = esheep_default_child_count;
+}

@@ -188,17 +188,31 @@ typedef struct {
     int gravity_next_count;
 } EsheepAnimation;
 
-extern const int esheep_tiles_x;
-extern const int esheep_tiles_y;
+/* Runtime-selected data. Built-in generated data is installed at startup;
+ * validated pet packages may replace these pointers before GTK starts. */
+extern int esheep_tiles_x;
+extern int esheep_tiles_y;
 
-extern const EsheepSpawn esheep_spawns[];
-extern const int esheep_spawn_count;
+extern const EsheepSpawn *esheep_spawns;
+extern int esheep_spawn_count;
 
-extern const EsheepAnimation esheep_animations[];
-extern const int esheep_animation_count;
+extern const EsheepAnimation *esheep_animations;
+extern int esheep_animation_count;
 
-extern const EsheepChild esheep_childs[];
-extern const int esheep_child_count;
+extern const EsheepChild *esheep_childs;
+extern int esheep_child_count;
+
+extern const int esheep_default_tiles_x;
+extern const int esheep_default_tiles_y;
+extern const EsheepSpawn esheep_default_spawns[];
+extern const int esheep_default_spawn_count;
+extern const EsheepAnimation esheep_default_animations[];
+extern const int esheep_default_animation_count;
+extern const EsheepChild esheep_default_childs[];
+extern const int esheep_default_child_count;
+
+/* Restore the generated built-in data after a runtime package is unloaded. */
+void esheep_use_default_animation_data(void);
 
 #endif /* ESHEEP_ANIMATIONS_DATA_H */
 """
@@ -231,14 +245,14 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
     lines.append("#include <stddef.h>")
     lines.append('#include "animations_data.h"')
     lines.append("")
-    lines.append(f"const int esheep_tiles_x = {tilesx};")
-    lines.append(f"const int esheep_tiles_y = {tilesy};")
+    lines.append(f"const int esheep_default_tiles_x = {tilesx};")
+    lines.append(f"const int esheep_default_tiles_y = {tilesy};")
     lines.append("")
 
     for sp in spawns:
         emit_transitions(lines, f"spawn{sp['id']}_next", sp["next"])
     lines.append("")
-    lines.append("const EsheepSpawn esheep_spawns[] = {")
+    lines.append("const EsheepSpawn esheep_default_spawns[] = {")
     for sp in spawns:
         n = len(sp["next"])
         lines.append(
@@ -246,7 +260,7 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
             f'spawn{sp["id"]}_next, {n} }},'
         )
     lines.append("};")
-    lines.append(f"const int esheep_spawn_count = {len(spawns)};")
+    lines.append(f"const int esheep_default_spawn_count = {len(spawns)};")
     lines.append("")
 
     for an in animations:
@@ -262,7 +276,7 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
         emit_transitions(lines, f"anim{aid}_gravity_next", an["gravity_next"])
         lines.append("")
 
-    lines.append("const EsheepAnimation esheep_animations[] = {")
+    lines.append("const EsheepAnimation esheep_default_animations[] = {")
     for an in animations:
         aid = an["id"]
         lines.append("    {")
@@ -277,10 +291,10 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
         lines.append(f"        anim{aid}_gravity_next, {len(an['gravity_next'])},")
         lines.append("    },")
     lines.append("};")
-    lines.append(f"const int esheep_animation_count = {len(animations)};")
+    lines.append(f"const int esheep_default_animation_count = {len(animations)};")
     lines.append("")
 
-    lines.append("const EsheepChild esheep_childs[] = {")
+    lines.append("const EsheepChild esheep_default_childs[] = {")
     for ch in childs:
         lines.append("    {")
         lines.append(f"        {ch['animation_id']}, {c_str(ch['x'])}, {c_str(ch['y'])}, {ch['next']}")
@@ -288,7 +302,27 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
     if not childs:
         lines.append("    { 0, NULL, NULL, 0 }, /* unused placeholder, count is 0 */")
     lines.append("};")
-    lines.append(f"const int esheep_child_count = {len(childs)};")
+    lines.append(f"const int esheep_default_child_count = {len(childs)};")
+    lines.append("")
+    lines.append("int esheep_tiles_x = esheep_default_tiles_x;")
+    lines.append("int esheep_tiles_y = esheep_default_tiles_y;")
+    lines.append("const EsheepSpawn *esheep_spawns = esheep_default_spawns;")
+    lines.append("int esheep_spawn_count = esheep_default_spawn_count;")
+    lines.append("const EsheepAnimation *esheep_animations = esheep_default_animations;")
+    lines.append("int esheep_animation_count = esheep_default_animation_count;")
+    lines.append("const EsheepChild *esheep_childs = esheep_default_childs;")
+    lines.append("int esheep_child_count = esheep_default_child_count;")
+    lines.append("")
+    lines.append("void esheep_use_default_animation_data(void) {")
+    lines.append("    esheep_tiles_x = esheep_default_tiles_x;")
+    lines.append("    esheep_tiles_y = esheep_default_tiles_y;")
+    lines.append("    esheep_spawns = esheep_default_spawns;")
+    lines.append("    esheep_spawn_count = esheep_default_spawn_count;")
+    lines.append("    esheep_animations = esheep_default_animations;")
+    lines.append("    esheep_animation_count = esheep_default_animation_count;")
+    lines.append("    esheep_childs = esheep_default_childs;")
+    lines.append("    esheep_child_count = esheep_default_child_count;")
+    lines.append("}")
 
     path.write_text("\n".join(lines) + "\n")
 

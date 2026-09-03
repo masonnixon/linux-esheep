@@ -50,16 +50,30 @@ typedef struct {
     int gravity_next_count;
 } EsheepAnimation;
 
-extern const int esheep_tiles_x;
-extern const int esheep_tiles_y;
+/* Runtime-selected data. Built-in generated data is installed at startup;
+ * validated pet packages may replace these pointers before GTK starts. */
+extern int esheep_tiles_x;
+extern int esheep_tiles_y;
 
-extern const EsheepSpawn esheep_spawns[];
-extern const int esheep_spawn_count;
+extern const EsheepSpawn *esheep_spawns;
+extern int esheep_spawn_count;
 
-extern const EsheepAnimation esheep_animations[];
-extern const int esheep_animation_count;
+extern const EsheepAnimation *esheep_animations;
+extern int esheep_animation_count;
 
-extern const EsheepChild esheep_childs[];
-extern const int esheep_child_count;
+extern const EsheepChild *esheep_childs;
+extern int esheep_child_count;
+
+extern const int esheep_default_tiles_x;
+extern const int esheep_default_tiles_y;
+extern const EsheepSpawn esheep_default_spawns[];
+extern const int esheep_default_spawn_count;
+extern const EsheepAnimation esheep_default_animations[];
+extern const int esheep_default_animation_count;
+extern const EsheepChild esheep_default_childs[];
+extern const int esheep_default_child_count;
+
+/* Restore the generated built-in data after a runtime package is unloaded. */
+void esheep_use_default_animation_data(void);
 
 #endif /* ESHEEP_ANIMATIONS_DATA_H */

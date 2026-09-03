@@ -99,11 +99,11 @@ def test_generated_child_data():
     anim_data_c = Path("src/animations_data.c").read_text()
 
     # Check for EsheepChild array
-    assert "const EsheepChild esheep_childs[]" in anim_data_c, \
+    assert "const EsheepChild esheep_default_childs[]" in anim_data_c, \
         "Generated data missing esheep_childs array"
 
     # Verify count matches
-    count_match = re.search(r"const int esheep_child_count = (\d+);", anim_data_c)
+    count_match = re.search(r"const int esheep_default_child_count = (\d+);", anim_data_c)
     assert count_match, "Generated data missing esheep_child_count"
     child_count = int(count_match.group(1))
     assert child_count == 3, f"Expected 3 child records, got {child_count}"
