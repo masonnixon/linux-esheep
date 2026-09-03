@@ -722,6 +722,40 @@ static void print_usage(const char *program) {
     g_print("  --review-animation N   Show animation N for transition review.\n");
     g_print("  --review-parent N      Show parent N with its authored child.\n");
     g_print("  --list-animations      List active animation IDs and names.\n");
+    g_print("  --list-transitions     List active authored transitions.\n");
+}
+
+static void print_transitions(void) {
+    int index = 1;
+
+    for (int animation_index = 0; animation_index < esheep_animation_count;
+         animation_index++) {
+        const EsheepAnimation *animation = &esheep_animations[animation_index];
+        const EsheepTransition *lists[] = {
+            animation->sequence_next, animation->border_next,
+            animation->gravity_next
+        };
+        const int counts[] = {
+            animation->sequence_next_count, animation->border_next_count,
+            animation->gravity_next_count
+        };
+        const char *kinds[] = { "sequence", "border", "gravity" };
+        for (int kind = 0; kind < 3; kind++) {
+            for (int transition_index = 0;
+                 transition_index < counts[kind]; transition_index++) {
+                const EsheepTransition *transition =
+                    &lists[kind][transition_index];
+                g_print("%d\t%d\t%s\t%s\t%d\t%d\n", index++, animation->id,
+                        kinds[kind], transition->only ? transition->only : "any",
+                        transition->probability, transition->target);
+            }
+        }
+    }
+    for (int child_index = 0; child_index < esheep_child_count; child_index++) {
+        const EsheepChild *child = &esheep_childs[child_index];
+        g_print("%d\t%d\tchild\tany\t100\t%d\n", index++,
+                child->animation_id, child->next);
+    }
 }
 
 static void update_monitor_bounds(App *app) {
@@ -2711,6 +2745,7 @@ int main(int argc, char **argv) {
     int review_animation = 0;
     int review_parent = 0;
     gboolean list_animations = FALSE;
+    gboolean list_transitions = FALSE;
     gboolean review_cli = FALSE;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
@@ -2837,6 +2872,10 @@ int main(int argc, char **argv) {
             list_animations = TRUE;
             continue;
         }
+        if (strcmp(argv[i], "--list-transitions") == 0) {
+            list_transitions = TRUE;
+            continue;
+        }
         g_printerr("unknown or incomplete option: %s\n", argv[i]);
         print_usage(argv[0]);
         return 2;
@@ -2956,10 +2995,13 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    if (list_animations) {
-        for (int i = 0; i < esheep_animation_count; i++)
-            g_print("%d\t%s\n", esheep_animations[i].id,
-                    esheep_animations[i].name ? esheep_animations[i].name : "");
+    if (list_animations || list_transitions) {
+        if (list_animations) {
+            for (int i = 0; i < esheep_animation_count; i++)
+                g_print("%d\t%s\n", esheep_animations[i].id,
+                        esheep_animations[i].name ? esheep_animations[i].name : "");
+        }
+        if (list_transitions) print_transitions();
         esheep_pet_package_free(runtime_package);
         g_free(config_character); g_free(config_sprite); g_free(config_spawn);
         g_free(config_package); g_free(default_config_path);

@@ -122,6 +122,18 @@ static void test_help_shows_usage(void) {
     assert(strstr(buf, "--monitor") != NULL);
 }
 
+static void test_list_transitions_uses_active_graph(void) {
+    fprintf(stderr, "test: --list-transitions shows generated graph\n");
+    if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
+    char *argv[] = { "--list-transitions" };
+    char buf[4096] = {0};
+    int rc = run_esheep_capture(argv, 1, "ESHEEP_AUTOQUIT_MS=1",
+                                buf, sizeof(buf));
+    assert(rc == 0);
+    assert(strstr(buf, "1\t1\tsequence\twindow\t2\t11") != NULL);
+    assert(strstr(buf, "\tchild\tany\t100\t23") != NULL);
+}
+
 static void test_invalid_monitor_is_rejected(void) {
     fprintf(stderr, "test: invalid --monitor is rejected\n");
     if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
@@ -294,6 +306,7 @@ int main(void) {
     }
 
     test_help_shows_usage();
+    test_list_transitions_uses_active_graph();
     test_invalid_seed_is_rejected();
     test_invalid_monitor_is_rejected();
     test_version_shows_version();

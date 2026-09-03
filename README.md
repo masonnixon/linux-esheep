@@ -31,6 +31,7 @@ Command-line options are available with `./esheep --help`:
 --seed N            Set a reproducible random seed for all sheep.
 --review-animation N Show animation N for transition review (0 = normal walk).
 --list-animations  List active animation IDs and names.
+--list-transitions  List active generated transitions for review tooling.
 ```
 
 Requires `libgtk-3-dev` (`pkg-config gtk+-3.0`). Run from the repo root so
@@ -128,10 +129,11 @@ Needs Pillow.
 Run `make test` for all of the above plus the GTK/X11 smoke test. It uses Xvfb
 and exits automatically after startup.
 
-For visual review, run `tools/review_transitions.py` after building. It plays
-each authored sequence, border, gravity, and child transition back-to-back and
-prints its 1-based index and source/target in the terminal. Pass an index to
-review one transition, for example `tools/review_transitions.py 17 3000`.
+For visual review, run `tools/review_transitions.py` after building. It asks the
+running binary for the active generated transition table, then plays each
+sequence, border, gravity, and child transition back-to-back while printing its
+1-based index and source/target in the terminal. Pass an index to review one
+transition, for example `tools/review_transitions.py 17 3000`.
 
 ## Install
 

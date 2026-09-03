@@ -16,44 +16,30 @@ import shutil
 import subprocess
 import sys
 import time
-import xml.etree.ElementTree as ET
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-XML = os.path.join(ROOT, "tools", "esheep_animations.xml")
 PROGRAM = os.path.join(ROOT, "esheep")
-NS = {"e": "https://esheep.petrucci.ch/"}
 
 
-def authored_transitions():
-    root = ET.parse(XML).getroot()
-    animations = {int(node.attrib["id"]): node
-                  for node in root.find("e:animations", NS)}
+def generated_transitions(runner):
+    completed = subprocess.run(
+        runner + [PROGRAM, "--list-transitions"], cwd=ROOT,
+        check=True, text=True, capture_output=True)
     result = []
-    for source_id, node in animations.items():
-        for kind in ("sequence", "border", "gravity"):
-            section = node.find("e:" + kind, NS)
-            if section is None:
-                continue
-            for transition in section.findall("e:next", NS):
-                result.append({
-                    "source": source_id,
-                    "kind": kind,
-                    "context": transition.attrib.get("only", "any"),
-                    "probability": transition.attrib.get("probability", "100"),
-                    "target": int(transition.text.strip()),
-                })
-
-    children = root.find("e:childs", NS)
-    if children is not None:
-        for child in children.findall("e:child", NS):
-            result.append({
-                "source": int(child.attrib["animationid"]),
-                "kind": "child",
-                "context": "any",
-                "probability": "100",
-                "target": int(child.find("e:next", NS).text.strip()),
-            })
+    for line in completed.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) != 6:
+            continue
+        index, source, kind, context, probability, target = fields
+        result.append({
+            "index": int(index),
+            "source": int(source),
+            "kind": kind,
+            "context": context,
+            "probability": probability,
+            "target": int(target),
+        })
     return result
 
 
@@ -67,14 +53,6 @@ def main():
     if args.duration < 100:
         parser.error("duration must be at least 100 milliseconds")
 
-    transitions = authored_transitions()
-    if args.index is None:
-        selected = list(enumerate(transitions, 1))
-    elif 1 <= args.index <= len(transitions):
-        selected = [(args.index, transitions[args.index - 1])]
-    else:
-        parser.error("index must be between 1 and %d" % len(transitions))
-
     if not os.path.exists(PROGRAM):
         subprocess.run(["make", "esheep"], cwd=ROOT, check=True)
 
@@ -85,6 +63,14 @@ def main():
         print("review_transitions: DISPLAY is unset and xvfb-run is unavailable",
               file=sys.stderr)
         return 2
+
+    transitions = generated_transitions(runner)
+    if args.index is None:
+        selected = [(item["index"], item) for item in transitions]
+    elif 1 <= args.index <= len(transitions):
+        selected = [(args.index, transitions[args.index - 1])]
+    else:
+        parser.error("index must be between 1 and %d" % len(transitions))
 
     for index, transition in selected:
         source = transition["source"]
