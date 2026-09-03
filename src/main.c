@@ -33,6 +33,7 @@
 typedef struct {
     GdkRectangle rect;
     gboolean taskbar;
+    gboolean fullscreen;
     int stack_order;
 } DesktopObject;
 
@@ -104,6 +105,7 @@ struct App {
     gboolean cleaned_up;
     gboolean paused;
     gboolean hidden;
+    gboolean fullscreen_suppressed;
     App *siblings;
     int sibling_count;
     int child_animation_id;  /* active child animation id, or 0 if none */
@@ -243,6 +245,13 @@ static gboolean rect_overlaps_monitor(const GdkRectangle *monitor,
            rect->x + rect->width > monitor->x &&
            rect->y < monitor_bottom(monitor) &&
            rect->y + rect->height > monitor->y;
+}
+
+static gboolean fullscreen_covers_monitor(const GdkRectangle *monitor,
+                                          const GdkRectangle *surface) {
+    return surface && surface->x <= monitor->x && surface->y <= monitor->y &&
+           surface->x + surface->width >= monitor_right(monitor) &&
+           surface->y + surface->height >= monitor_bottom(monitor);
 }
 
 static int monitor_axis_gap(int point, int start, int end) {
@@ -1014,6 +1023,7 @@ static int stacking_order(const Window *stacking, unsigned long count, Window wi
 
 static void refresh_objects(App *app) {
     app->object_count = 0;
+    app->fullscreen_suppressed = FALSE;
     if (!app->window_landing) return;
     GdkDisplay *gdk_display = gtk_widget_get_display(app->window);
     if (!GDK_IS_X11_DISPLAY(gdk_display)) return;
@@ -1069,6 +1079,26 @@ static void refresh_objects(App *app) {
             state_atom, fullscreen_state, strut_atom, strut_partial_atom,
             app->exclude_conky);
         if (x11_bad_window) continue;
+        if (traits.fullscreen_surface) {
+            XWindowAttributes fullscreen_attributes;
+            if (XGetWindowAttributes(display, windows[i], &fullscreen_attributes)) {
+                int fullscreen_x, fullscreen_y;
+                Window fullscreen_child;
+                if (XTranslateCoordinates(display, windows[i], root, 0, 0,
+                                           &fullscreen_x, &fullscreen_y,
+                                           &fullscreen_child)) {
+                    GdkRectangle fullscreen_rect = {
+                        fullscreen_x, fullscreen_y,
+                        fullscreen_attributes.width, fullscreen_attributes.height
+                    };
+                    if (fullscreen_covers_monitor(&app->bounds,
+                                                  &fullscreen_rect))
+                        app->fullscreen_suppressed = TRUE;
+                }
+            }
+            x11_refresh_sync(display);
+            continue;
+        }
         if (!x11_surface_is_landing_candidate(&traits)) continue;
         XWindowAttributes attributes;
         gboolean attributes_ok = XGetWindowAttributes(display, windows[i], &attributes);
@@ -1646,6 +1676,15 @@ static gboolean on_tick(gpointer user_data) {
 
     update_monitor_bounds(app);
     refresh_objects(app);
+
+    if (app->fullscreen_suppressed) {
+        if (!app->hidden)
+            gtk_widget_hide(app->window);
+        return G_SOURCE_CONTINUE;
+    }
+    if (app->fullscreen_suppressed == FALSE &&
+        gtk_widget_get_visible(app->window) == FALSE && !app->hidden)
+        gtk_widget_show(app->window);
 
     /* Build context and classify surfaces using the platform-independent helper */
     EsheepContext ctx;

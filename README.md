@@ -141,6 +141,8 @@ at login; `make uninstall-autostart` removes that opt-in entry.
   applied at runtime.
 - Real movement and collision with visible X11 windows, panels, and the
   monitor workarea.
+- Fullscreen X11 windows temporarily suppress the sheep on the covered
+  monitor.
 - Screen-edge and detected-window-side climbing with top-surface traversal.
 - Mouse drag and a right-click pet menu with pause, hide, bring-to-front, and quit actions.
 - Optional start-paused and start-hidden via the `ESHEEP_PAUSED` and `ESHEEP_HIDDEN`

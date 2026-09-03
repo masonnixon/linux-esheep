@@ -133,6 +133,16 @@ static void test_x11_occlusion_stacking_policy(void) {
      * sheep. */
     assert(sheep_window_type_hint() == GDK_WINDOW_TYPE_HINT_NORMAL);
 }
+
+static void test_fullscreen_surface_coverage(void) {
+    GdkRectangle monitor = { -1920, 0, 1920, 1080 };
+    GdkRectangle full = { -1920, 0, 1920, 1080 };
+    GdkRectangle partial = { -1920, 0, 1920, 1000 };
+    GdkRectangle offset = { -1919, 0, 1920, 1080 };
+    assert(fullscreen_covers_monitor(&monitor, &full));
+    assert(!fullscreen_covers_monitor(&monitor, &partial));
+    assert(!fullscreen_covers_monitor(&monitor, &offset));
+}
 int main(void) {
     test_monitor_global_coordinates_negative_origin();
     test_monitor_seam_selection_prefers_direction();
@@ -141,6 +151,7 @@ int main(void) {
     test_fullscreen_and_panel_surfaces_are_excluded();
     test_x11_fallback_capabilities();
     test_x11_occlusion_stacking_policy();
+    test_fullscreen_surface_coverage();
     printf("All desktop backend tests passed\n");
     return 0;
 }
