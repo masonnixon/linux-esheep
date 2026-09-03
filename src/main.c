@@ -605,14 +605,25 @@ static void print_usage(const char *program) {
 
 static void update_monitor_bounds(App *app) {
     GdkDisplay *display = gtk_widget_get_display(app->window);
-    int center_x = app->pos_x + app->tile_size / 2;
+    /* Probe just beyond the leading edge. Probing the center leaves a sheep
+     * trapped at a monitor boundary because clamping keeps its center inside
+     * the old workarea. */
+    int center_x = app->direction > 0 ? app->pos_x + app->tile_size + 1 :
+                   app->direction < 0 ? app->pos_x - 1 :
+                   app->pos_x + app->tile_size / 2;
     int center_y = app->pos_y + app->tile_size / 2;
     GdkRectangle workarea;
     if (!select_monitor_workarea(display, &app->bounds, center_x, center_y,
                                  app->direction, &workarea))
         return;
-    if (memcmp(&app->bounds, &workarea, sizeof(workarea)) != 0)
+    if (memcmp(&app->bounds, &workarea, sizeof(workarea)) != 0) {
+        gboolean moving_right = workarea.x > app->bounds.x;
         app->bounds = workarea;
+        app->pos_x = moving_right ? app->bounds.x :
+                     app->bounds.x + app->bounds.width - app->tile_size;
+        if (app->pos_y < app->bounds.y) app->pos_y = app->bounds.y;
+        if (app->pos_y > floor_pos_y(app)) app->pos_y = floor_pos_y(app);
+    }
 }
 
 static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b) {
