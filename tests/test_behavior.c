@@ -733,13 +733,13 @@ int main(void) {
     printf("  test_walk_in_front_of_taskbar_not_lifted: PASSED\n");
 
     test_excluded_surfaces_rejected();
+    printf("  test_excluded_surfaces_rejected: PASSED\n");
+
     test_stacking_policy_allows_occlusion();
     printf("  test_stacking_policy_allows_occlusion: PASSED\n");
 
     test_group_pause_applies_to_all_sheep();
     printf("  test_group_pause_applies_to_all_sheep: PASSED\n");
-
-    printf("  test_excluded_surfaces_rejected: PASSED\n");
 
     test_swept_fall_lands_on_window();
     printf("  test_swept_fall_lands_on_window: PASSED\n");
@@ -747,6 +747,6 @@ int main(void) {
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
 
-    printf("\nAll 26 behavior regression tests PASSED\n");
+    printf("\nAll 30 behavior regression tests PASSED\n");
     return 0;
 }
