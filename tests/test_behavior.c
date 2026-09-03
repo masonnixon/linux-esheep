@@ -112,6 +112,14 @@ static void test_scaled_child_expression(void) {
     assert(child_local_coordinate(&app, "-imageH*0.5", 0) == -20);
 }
 
+static void test_spritesheet_requires_alpha(void) {
+    GdkPixbuf *opaque_sheet = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8,
+                                             640, 440);
+    assert(opaque_sheet != NULL);
+    assert(!validate_spritesheet_pixbuf(opaque_sheet, "<test>", "sheep"));
+    g_object_unref(opaque_sheet);
+}
+
 /* Test 5: Eating animation (26) flower child placement. */
 static void test_eating_flower_child_offset(void) {
     App app;
@@ -708,6 +716,9 @@ int main(void) {
     test_scaled_child_expression();
     printf("  test_scaled_child_expression: PASSED\n");
 
+    test_spritesheet_requires_alpha();
+    printf("  test_spritesheet_requires_alpha: PASSED\n");
+
     test_eating_flower_child_offset();
     printf("  test_eating_flower_child_offset: PASSED\n");
 
@@ -789,6 +800,6 @@ int main(void) {
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
 
-    printf("\nAll 32 behavior regression tests PASSED\n");
+    printf("\nAll 33 behavior regression tests PASSED\n");
     return 0;
 }

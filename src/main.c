@@ -1590,6 +1590,13 @@ static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet
                                            const char *character) {
     int w = gdk_pixbuf_get_width(sheet);
     int h = gdk_pixbuf_get_height(sheet);
+    if (!gdk_pixbuf_get_has_alpha(sheet) ||
+        gdk_pixbuf_get_n_channels(sheet) < 4) {
+        g_printerr("spritesheet '%s' has no alpha channel; transparent "
+                   "RGBA sprites are required to avoid a rectangular "
+                   "desktop surface.\n", sheet_path);
+        return FALSE;
+    }
     int ts_x = w / esheep_tiles_x;
     int ts_y = h / esheep_tiles_y;
     if (ts_x < 8 || ts_y < 8 || ts_x != ts_y ||
