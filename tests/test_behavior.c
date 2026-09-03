@@ -335,6 +335,11 @@ static void test_child_opacity_default(void) {
         assert(app.scene.tiles[0].opacity == 1.0);
         assert(app.scene.tiles[1].opacity == 1.0);
     }
+
+    esheep_init(&app.state, 26);
+    update_child_animation(&app);
+    assert(app.scene.count > 1);
+    assert(app.scene.tiles[1].opacity == 0.8);
 }
 
 /* The stub App has no GTK window, so the GTK entry points on_tick still

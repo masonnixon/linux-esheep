@@ -1671,9 +1671,11 @@ static void update_child_animation(App *app) {
         child_tile_ids[slot] = canim->frames[frame];
         child_x[slot] = child_local_coordinate(app, record->x, 0);
         child_y[slot] = child_local_coordinate(app, record->y, 0);
-        child_flipped[slot] = sprite_is_flipped(
-            app, &esheep_animations[app->state.animation_id - 1]);
-        child_opacity[slot] = 1.0;
+        child_flipped[slot] = sprite_is_flipped(app, canim);
+        double opacity_progress = canim->frame_count <= 1 ? 0.0 :
+            (double)frame / (double)(canim->frame_count - 1);
+        child_opacity[slot] = canim->start.opacity +
+            (canim->end.opacity - canim->start.opacity) * opacity_progress;
         child_visible[slot] = TRUE;
     }
     app->child_animation_id = child_count > 0 ? app->child_animation_ids[0] : 0;
