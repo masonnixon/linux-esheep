@@ -2,6 +2,7 @@
 #include "animations_data.h"
 #include "renderer.h"
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,7 +121,7 @@ static gboolean parse_double(const char *text, double *out) {
     if (!text || !*text) return FALSE;
     errno = 0;
     value = g_ascii_strtod(text, &end);
-    if (errno || end == text || *end != '\0') return FALSE;
+    if (errno || end == text || *end != '\0' || !isfinite(value)) return FALSE;
     if (out) *out = value;
     return TRUE;
 }
