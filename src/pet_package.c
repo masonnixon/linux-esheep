@@ -5,12 +5,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define ESHEEP_PACKAGE_MAX_CHILD_DEPTH 4
+
 typedef struct {
     EsheepTransition value;
 } TransitionBuild;
 
 typedef struct {
     EsheepAnimation value;
+    gboolean has_start;
+    gboolean has_end;
+    gboolean has_sequence;
     GArray *frames;
     GArray *sequence_next;
     GArray *border_next;
@@ -259,12 +264,18 @@ static void start_element(GMarkupParseContext *context, const gchar *element,
         state->child.x = owned_string(state->package, "0");
         state->child.y = owned_string(state->package, "0");
         state->in_child = TRUE;
-    } else if (strcmp(element, "start") == 0) state->in_start_pose = TRUE;
-    else if (strcmp(element, "end") == 0) state->in_end_pose = TRUE;
+    } else if (strcmp(element, "start") == 0) {
+        if (state->animation) state->animation->has_start = TRUE;
+        state->in_start_pose = TRUE;
+    } else if (strcmp(element, "end") == 0) {
+        if (state->animation) state->animation->has_end = TRUE;
+        state->in_end_pose = TRUE;
+    }
     else if (state->in_child && strcmp(element, "next") == 0) {
         begin_field(state, element);
     } else if (strcmp(element, "sequence") == 0) {
         if (state->animation) {
+            state->animation->has_sequence = TRUE;
             state->transition_destination = state->animation->sequence_next;
             for (int i = 0; attribute_names && attribute_names[i]; i++) {
                 if (strcmp(attribute_names[i], "repeat") == 0)
@@ -391,12 +402,16 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
     package->animations = g_new0(EsheepAnimation, package->animation_count);
     for (int i = 0; i < package->animation_count; i++) {
         AnimationBuild *build = g_ptr_array_index(package->animation_builds, i);
-        if (build->value.id != i + 1 || build->frames->len == 0)
-            return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "animation IDs must be contiguous and every sequence needs a frame"), FALSE;
+        if (build->value.id != i + 1 || !build->has_start || !build->has_end ||
+            !build->has_sequence || build->frames->len == 0)
+            return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "animation IDs must be contiguous and every animation needs start, end, and sequence data"), FALSE;
         if (!valid_integer_or_image_factor(build->value.start.x) || !valid_integer_or_image_factor(build->value.start.y) ||
             !valid_integer_or_image_factor(build->value.end.x) || !valid_integer_or_image_factor(build->value.end.y) ||
             !valid_repeat_expression(build->value.repeat) || !valid_repeat_expression(build->value.repeat_from))
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "unsupported animation expression"), FALSE;
+        if (build->value.start.opacity < 0.0 || build->value.start.opacity > 1.0 ||
+            build->value.end.opacity < 0.0 || build->value.end.opacity > 1.0)
+            return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "pose opacity must be between 0 and 1"), FALSE;
         GArray *transition_lists[] = { build->sequence_next, build->border_next,
                                        build->gravity_next };
         for (guint list = 0; list < G_N_ELEMENTS(transition_lists); list++) {
@@ -460,6 +475,32 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
             !valid_child_expression(child.x) || !valid_child_expression(child.y))
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid child definition"), FALSE;
         package->childs[i] = child;
+    }
+    /* At most one authored child record may own a given parent animation in
+     * the current table format. Reject cycles so a package cannot create an
+     * unbounded child tree when the GTK host materializes it. */
+    for (int i = 0; i < package->child_count; i++) {
+        int parent = package->childs[i].animation_id;
+        for (int j = i + 1; j < package->child_count; j++)
+            if (package->childs[j].animation_id == parent)
+                return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "duplicate child parent animation"), FALSE;
+        int seen[ESHEEP_PACKAGE_MAX_CHILD_DEPTH + 1];
+        int seen_count = 0;
+        while (parent > 0 && seen_count <= ESHEEP_PACKAGE_MAX_CHILD_DEPTH) {
+            for (int j = 0; j < seen_count; j++)
+                if (seen[j] == parent)
+                    return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "child records contain a cycle"), FALSE;
+            seen[seen_count++] = parent;
+            int next_parent = 0;
+            for (int j = 0; j < package->child_count; j++)
+                if (package->childs[j].animation_id == parent) {
+                    next_parent = package->childs[j].next;
+                    break;
+                }
+            parent = next_parent;
+        }
+        if (seen_count > ESHEEP_PACKAGE_MAX_CHILD_DEPTH)
+            return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "child nesting exceeds runtime depth"), FALSE;
     }
     return TRUE;
 }
