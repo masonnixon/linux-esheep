@@ -126,6 +126,8 @@ struct App {
 typedef struct {
     App *sheep;
     guint count;
+    GdkDisplay *display;
+    guint monitor_index;
     GKeyFile *config;
     const char *config_path;
     guint tick_ms;
@@ -134,6 +136,9 @@ typedef struct {
     gboolean exclude_conky;
     const char *spawn_mode;
 } SheepGroup;
+
+static int clamp_pos_x(const App *app, int pos_x);
+static int floor_pos_y(const App *app);
 
 /* Each sheep owns its random stream. This prevents child animation draws or
  * a sibling's decisions from changing another sheep's behavior sequence. */
@@ -208,6 +213,40 @@ static void group_set_exclude_conky(SheepGroup *group, gboolean excluded) {
     for (guint i = 0; i < group->count; i++)
         group->sheep[i].exclude_conky = excluded;
     group->exclude_conky = excluded;
+}
+
+static gboolean group_set_monitor(SheepGroup *group, guint monitor_index) {
+    if (!group || !group->sheep || !group->display ||
+        monitor_index >= (guint)gdk_display_get_n_monitors(group->display))
+        return FALSE;
+    GdkMonitor *monitor = gdk_display_get_monitor(group->display,
+                                                   (gint)monitor_index);
+    if (!monitor) return FALSE;
+    GdkRectangle bounds;
+    gdk_monitor_get_workarea(monitor, &bounds);
+
+    for (guint i = 0; i < group->count; i++) {
+        App *app = &group->sheep[i];
+        int old_floor = floor_pos_y(app);
+        gboolean grounded = app->pos_y >= old_floor;
+        int old_usable = app->bounds.width - app->tile_size;
+        int new_usable = bounds.width - app->tile_size;
+        int relative_x = app->pos_x - app->bounds.x;
+        if (old_usable > 0 && new_usable > 0)
+            relative_x = (int)((gint64)relative_x * new_usable / old_usable);
+        app->bounds = bounds;
+        app->pos_x = clamp_pos_x(app, bounds.x + relative_x);
+        app->pos_y = grounded ? floor_pos_y(app) :
+                     CLAMP(app->pos_y, bounds.y, floor_pos_y(app));
+        if (app->window) {
+            gtk_window_move(GTK_WINDOW(app->window),
+                            app->pos_x - app->scene_origin_x,
+                            app->pos_y - app->scene_origin_y);
+            set_sprite_input_region(app);
+        }
+    }
+    group->monitor_index = monitor_index;
+    return TRUE;
 }
 
 static gboolean group_set_review_animation(SheepGroup *group, int animation_id) {
@@ -2039,11 +2078,14 @@ static void on_settings_response(GtkDialog *dialog, gint response,
     if (response == GTK_RESPONSE_OK) {
         GtkSpinButton *tick = g_object_get_data(G_OBJECT(dialog), "tick-ms");
         GtkSpinButton *walk = g_object_get_data(G_OBJECT(dialog), "walk-keep");
+        GtkSpinButton *monitor = g_object_get_data(G_OBJECT(dialog), "monitor");
         GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
         GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
         group_set_tick_ms(group, (guint)gtk_spin_button_get_value_as_int(tick));
         group_set_walk_keep_probability(
             group, (guint)gtk_spin_button_get_value_as_int(walk));
+        group_set_monitor(group,
+                          (guint)gtk_spin_button_get_value_as_int(monitor));
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
         group_set_exclude_conky(group, gtk_toggle_button_get_active(conky));
         save_group_settings(group);
@@ -2061,6 +2103,10 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     GtkWidget *grid = gtk_grid_new();
     GtkWidget *tick = gtk_spin_button_new_with_range(10, 1000, 1);
     GtkWidget *walk = gtk_spin_button_new_with_range(0, 100, 1);
+    int monitor_count = group->display ?
+                        gdk_display_get_n_monitors(group->display) : 1;
+    GtkWidget *monitor = gtk_spin_button_new_with_range(
+        0, MAX(0, monitor_count - 1), 1);
     GtkWidget *landing = gtk_check_button_new_with_label("Land on windows and panels");
     GtkWidget *conky = gtk_check_button_new_with_label("Allow Conky as a surface");
     GtkWidget *note = gtk_label_new("Character, spritesheet, and sheep count apply on restart.");
@@ -2070,15 +2116,19 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), tick, 1, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Walk keep probability (%)"), 0, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), walk, 1, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), landing, 0, 2, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), conky, 0, 3, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), note, 0, 4, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Monitor index"), 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), monitor, 1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), landing, 0, 3, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), conky, 0, 4, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 5, 2, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(landing), group->window_landing);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(conky), !group->exclude_conky);
     g_object_set_data(G_OBJECT(dialog), "tick-ms", tick);
     g_object_set_data(G_OBJECT(dialog), "walk-keep", walk);
+    g_object_set_data(G_OBJECT(dialog), "monitor", monitor);
     g_object_set_data(G_OBJECT(dialog), "landing", landing);
     g_object_set_data(G_OBJECT(dialog), "conky", conky);
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
@@ -2715,6 +2765,16 @@ int main(int argc, char **argv) {
         gdk_monitor_get_workarea(monitor, &initial_bounds);
         have_initial_bounds = TRUE;
     }
+    guint active_monitor_index = monitor_index != G_MAXUINT ? monitor_index : 0;
+    GdkMonitor *active_monitor = gdk_display_get_monitor_at_point(
+        display, initial_bounds.x + initial_bounds.width / 2,
+        initial_bounds.y + initial_bounds.height / 2);
+    for (int i = 0; i < gdk_display_get_n_monitors(display); i++) {
+        if (gdk_display_get_monitor(display, i) == active_monitor) {
+            active_monitor_index = (guint)i;
+            break;
+        }
+    }
     /* workarea excludes panels/docks/taskbars -- using raw geometry here
      * would let the sheep spawn flush with the physical bottom edge of the
      * screen, which on most desktops means directly underneath (and fully
@@ -2783,6 +2843,8 @@ int main(int argc, char **argv) {
     SheepGroup group = {
         .sheep = sheep,
         .count = count,
+        .display = display,
+        .monitor_index = active_monitor_index,
         .config = config,
         .config_path = config_override,
         .tick_ms = tick_ms,
