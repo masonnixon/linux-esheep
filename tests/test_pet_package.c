@@ -109,6 +109,22 @@ int main(void) {
     g_clear_error(&error);
     remove(invalid_number_path);
 
+    package = NULL;
+    const char *invalid_expression_path = "/tmp/esheep-test-invalid-expression.xml";
+    const char *invalid_expression_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence repeat=\"random/10+1garbage\"><frame>0</frame>"
+        "</sequence></animation></animations></animations>";
+    assert(g_file_set_contents(invalid_expression_path, invalid_expression_xml,
+                               -1, &error));
+    assert(!esheep_pet_package_load(invalid_expression_path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    assert(strstr(error->message, "unsupported animation expression") != NULL);
+    g_clear_error(&error);
+    remove(invalid_expression_path);
+
     puts("All pet package tests passed");
     return 0;
 }

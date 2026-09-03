@@ -158,14 +158,25 @@ static gboolean valid_spawn_expression(const char *text) {
     if (parse_int(text, &value)) return TRUE;
     for (int i = 0; exact[i]; i++)
         if (strcmp(text, exact[i]) == 0) return TRUE;
-    return strstr(text, "random*(screenW-imageW-50)/100+25") != NULL;
+    return text && strcmp(text, "random*(screenW-imageW-50)/100+25") == 0;
 }
 
 static gboolean valid_repeat_expression(const char *text) {
+    int first, second, offset;
+    char trailing;
     int value;
     if (parse_int(text, &value)) return TRUE;
-    return strstr(text, "random/") != NULL || strstr(text, "+random/") != NULL ||
-           strstr(text, "screenW/2") != NULL || strstr(text, "areaH/2") != NULL;
+    if (!text) return FALSE;
+    if (sscanf(text, "random/%d+%d%c", &first, &second, &trailing) == 2)
+        return first > 0;
+    if (sscanf(text, "%d+random/%d%c", &first, &second, &trailing) == 2)
+        return second > 0;
+    if (sscanf(text, "(areaH/2+(randS*areaH/2)/120-imageH-%d)/2%c",
+               &offset, &trailing) == 1)
+        return TRUE;
+    return strcmp(text, "(screenW/2)/30-6") == 0 ||
+           strcmp(text, "24+(Convert(screenW/2,System.Int32)%30)/7") == 0 ||
+           strcmp(text, "25+(Convert(screenW/2,System.Int32)%30)/7") == 0;
 }
 
 static gboolean valid_child_expression(const char *text) {
