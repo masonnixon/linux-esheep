@@ -27,6 +27,8 @@ The current implementation has these working foundations:
 - Falling onto detected windows and walking on supported surfaces.
 - Conky exclusion by default, with an option to allow it.
 - Multiple independent sheep at startup.
+- Multiple independent application instances can run concurrently; the
+  process intentionally does not take a single-instance lock.
 - Configurable spritesheet, character selection, spawn mode, sheep count,
   monitor selection, tick interval, window landing, and walking probability.
 - One optional status/tray icon with group-wide show/hide, pause/resume,

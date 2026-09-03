@@ -58,6 +58,7 @@ test-gui: esheep
 	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --package tools/esheep_animations.xml --sprite assets/sheep_spritesheet.png --no-window-landing
 	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
 	xvfb-run -a env WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
+	xvfb-run -a sh -c 'set -eu; ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 101 --no-window-landing & first=$$!; ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 202 --no-window-landing & second=$$!; wait "$$first"; wait "$$second"'
 
 test-cli: esheep
 	gcc -std=c11 -Wall -Wextra -Werror -o /tmp/esheep_test_cli tests/test_cli.c
