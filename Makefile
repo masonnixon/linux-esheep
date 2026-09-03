@@ -34,20 +34,20 @@ test-runtime:
 	/tmp/esheep_test_runtime
 
 test-desktop:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
 	/tmp/esheep_test_desktop
 
 test-x11-refresh:
 	command -v xvfb-run >/dev/null
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_refresh tests/test_x11_refresh.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_refresh tests/test_x11_refresh.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
 	xvfb-run -a /tmp/esheep_test_x11_refresh
 
 test-behavior:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_behavior tests/test_behavior.c src/animations_data.c src/interpreter.c src/renderer.c src/context.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_behavior tests/test_behavior.c src/actor.c src/animations_data.c src/interpreter.c src/renderer.c src/context.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
 	/tmp/esheep_test_behavior
 
 test-multisheep:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
 	/tmp/esheep_test_multisheep
 
 test-gui: esheep
@@ -78,12 +78,12 @@ test-context:
 
 test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-multisheep test-context test-animation-data test-assets test-child-animations test-gui test-cli
 
-esheep: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c
-	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
+esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c
+	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
 
-install: src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c
+install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
-		-o /tmp/esheep-install-build src/main.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
+		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
 	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
 	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png

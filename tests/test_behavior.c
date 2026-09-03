@@ -229,6 +229,10 @@ static void test_recursive_child_composition(void) {
     esheep_init(&app.state, 26);
     update_child_animation(&app);
     assert(app.scene.count == 3);
+    assert(app.child_actors[0].parent == NULL);
+    assert(app.child_actors[0].child_count == 1);
+    assert(app.child_actors[0].children[0] == &app.child_actors[1]);
+    assert(app.child_actors[1].parent == &app.child_actors[0]);
     assert(app.scene.tiles[1].x == 0 && app.scene.tiles[1].y == 0);
     assert(app.scene.tiles[2].x == 5 && app.scene.tiles[2].y == 6);
     esheep_childs = old_children;
