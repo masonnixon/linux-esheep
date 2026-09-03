@@ -193,8 +193,9 @@ repository and must remain reproducible.
   package before creating GTK windows.
 - Pair each behavior definition with its spritesheet and optional sounds.
 - Validate packages before activation and report invalid animation references.
-- Add the UFO, pilot, and any future prop animations as authored behavior,
-  rather than leaving them as unused sprite tiles.
+- Add any future UFO, pilot, meteorite, or other prop behavior only when its
+  animation and child definitions are present in the selected package; do not
+  infer behavior from unused sprite tiles alone.
 
 ### Acceptance
 
