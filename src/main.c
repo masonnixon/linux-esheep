@@ -2073,6 +2073,30 @@ static void on_about_activate(GtkMenuItem *item, gpointer user_data) {
                           NULL);
 }
 
+static void show_current_animation(App *app) {
+    if (!app || app->state.animation_id < 1 ||
+        app->state.animation_id > esheep_animation_count) return;
+    const EsheepAnimation *animation =
+        &esheep_animations[app->state.animation_id - 1];
+    const char *child = app->child_animation_id > 0 ? "present" : "none";
+    GtkWidget *dialog = gtk_message_dialog_new(
+        NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE,
+        "Current animation");
+    gtk_message_dialog_format_secondary_text(
+        GTK_MESSAGE_DIALOG(dialog),
+        "Animation %d: %s\nFrame %d/%d\nChild: %s",
+        animation->id, animation->name, app->state.frame_index + 1,
+        animation->frame_count, child);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+}
+
+static void on_current_animation_activate(GtkMenuItem *item,
+                                          gpointer user_data) {
+    (void)item;
+    show_current_animation(user_data);
+}
+
 static void save_group_settings(SheepGroup *group) {
     if (!group || !group->config || !group->config_path) return;
     gchar *directory = g_path_get_dirname(group->config_path);
@@ -2178,6 +2202,7 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     GtkWidget *pause = gtk_menu_item_new_with_label(paused ? "Resume All" : "Pause All");
     GtkWidget *hide = gtk_menu_item_new_with_label(hidden ? "Show All" : "Hide All");
     GtkWidget *front = gtk_menu_item_new_with_label("Bring All to Front");
+    GtkWidget *current = gtk_menu_item_new_with_label("Current Animation");
     GtkWidget *review = gtk_menu_item_new_with_label("Review Animation");
     GtkWidget *settings = gtk_menu_item_new_with_label("Settings");
     GtkWidget *about = gtk_menu_item_new_with_label("About");
@@ -2186,6 +2211,9 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     g_signal_connect(pause, "activate", G_CALLBACK(on_group_pause_activate), group);
     g_signal_connect(hide, "activate", G_CALLBACK(on_group_hide_activate), group);
     g_signal_connect(front, "activate", G_CALLBACK(on_group_front_activate), group);
+    g_signal_connect(current, "activate",
+                     G_CALLBACK(on_current_animation_activate),
+                     group && group->count > 0 ? &group->sheep[0] : NULL);
     g_signal_connect(review, "activate", G_CALLBACK(on_review_activate), group);
     g_signal_connect(settings, "activate", G_CALLBACK(on_settings_activate), group);
     g_signal_connect(about, "activate", G_CALLBACK(on_about_activate), NULL);
@@ -2193,6 +2221,7 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), pause);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), hide);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), front);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), current);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), review);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), settings);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), about);
@@ -2243,6 +2272,11 @@ static void show_pet_menu(App *app, GdkEventButton *event) {
     g_signal_connect(front_item, "activate",
                      G_CALLBACK(on_bring_to_front_activate), app);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), front_item);
+
+    GtkWidget *current_item = gtk_menu_item_new_with_label("Current Animation");
+    g_signal_connect(current_item, "activate",
+                     G_CALLBACK(on_current_animation_activate), app);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), current_item);
 
     GtkWidget *separator = gtk_separator_menu_item_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), separator);
