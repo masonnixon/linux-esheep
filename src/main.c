@@ -952,6 +952,18 @@ static void resolve_sheep_collisions(App *app) {
         } else if (is_airborne_animation(app->state.animation_id)) {
             app->direction = app->pos_x < other->pos_x ? -1 : 1;
         }
+
+        /* There may be no horizontal separation when both actors are
+         * clamped at the same monitor edge.  Keep the unresolved actor from
+         * repeatedly dispatching the outward turn; the next walk step must
+         * move inward and give the other actor room to separate. */
+        if (apps_overlap(app, other)) {
+            int right = app->bounds.x + app->bounds.width - app->tile_size;
+            if (app->pos_x <= app->bounds.x)
+                app->direction = 1;
+            else if (app->pos_x >= right)
+                app->direction = -1;
+        }
     }
 }
 
