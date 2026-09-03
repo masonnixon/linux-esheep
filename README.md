@@ -171,8 +171,9 @@ at login; `make uninstall-autostart` removes that opt-in entry.
   monitor continues the floor. Walking remains constrained to the workareas;
   gaps and differing vertical arrangements are not treated as continuous
   floor.
-- Multiple sheep have independent state, spawn spacing, and basic overlap
-  resolution; they do not yet land on one another as supporting surfaces.
+- Multiple sheep have independent state, spawn spacing, basic overlap
+  resolution, and grounded-sheep stacking. Richer sheep-to-sheep policies and
+  live compositor stacking coverage remain future work.
 
 
 ## Custom sprites and characters

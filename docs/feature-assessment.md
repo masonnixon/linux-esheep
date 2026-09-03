@@ -118,8 +118,8 @@ correct runtime context.
   crossing is implemented for adjacent workareas, but gaps, differing vertical
   origins, and non-rectangular desktop layouts still need policy and
   integration coverage.
-- Sheep-to-sheep landing and richer collision policy. Basic overlap resolution
-  and spawn spacing are implemented.
+- Richer sheep-to-sheep policy beyond grounded stacking, overlap resolution,
+  and spawn spacing.
 - Complete handling for unusual panel placement and compositor stacking.
 - A full animation chooser and richer settings for character/package
   selection. The runtime settings dialog, tray About view, and indexed review
@@ -159,7 +159,8 @@ are weak for the parts users see most:
   moves or that the scene remains correctly stacked.
 - No live test that child transitions complete and clean up.
 - No live multi-monitor integration test with actual GDK monitor topology.
-- No test for simultaneous sheep interactions.
+- Pure coverage now includes grounded sheep stacking; live simultaneous sheep
+  interaction and compositor stacking coverage remain absent.
 - No frame-by-frame visual comparison against expected screenshots.
 
 ## Overall status
