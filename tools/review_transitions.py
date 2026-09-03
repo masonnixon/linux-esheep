@@ -29,11 +29,12 @@ def generated_transitions(runner):
     result = []
     for line in completed.stdout.splitlines():
         fields = line.split("\t")
-        if len(fields) != 6:
+        if len(fields) != 7:
             continue
-        index, source, kind, context, probability, target = fields
+        index, stable_id, source, kind, context, probability, target = fields
         result.append({
             "index": int(index),
+            "stable_id": int(stable_id),
             "source": int(source),
             "kind": kind,
             "context": context,
@@ -75,8 +76,9 @@ def main():
     for index, transition in selected:
         source = transition["source"]
         target = transition["target"]
-        print("transition %d/%d: animation %d --%s [%s, %s%%]--> animation %d"
-              % (index, len(transitions), source, transition["kind"],
+        print("transition %d/%d (id %s): animation %d --%s [%s, %s%%]--> animation %d"
+              % (index, len(transitions), transition["stable_id"], source,
+                 transition["kind"],
                  transition["context"], transition["probability"], target),
               flush=True)
         review_option = "--review-parent" if transition["kind"] == "child" \

@@ -9,6 +9,14 @@
 
 #define ESHEEP_PACKAGE_MAX_CHILD_DEPTH 4
 
+static guint32 transition_stable_id(int source_id, int event_kind,
+                                    int ordinal, int target) {
+    return ((guint32)(source_id & 0xff) << 24) |
+           ((guint32)(event_kind & 0x0f) << 20) |
+           ((guint32)(ordinal & 0xff) << 12) |
+           (guint32)(target & 0xfff);
+}
+
 typedef struct {
     EsheepTransition value;
 } TransitionBuild;
@@ -442,6 +450,8 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
             GArray *transitions = transition_lists[list];
             for (guint j = 0; j < transitions->len; j++) {
                 EsheepTransition transition = g_array_index(transitions, EsheepTransition, j);
+                transition.stable_id = transition_stable_id(
+                    build->value.id, (int)list, (int)j, transition.target);
                 if (transition.probability < 1 || transition.probability > 100 ||
                     transition.target < 1 || transition.target > package->animation_count ||
                     (transition.only && strcmp(transition.only, "none") != 0 &&
@@ -450,6 +460,7 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
                      strcmp(transition.only, "vertical") != 0 &&
                      strcmp(transition.only, "horizontal+") != 0))
                     return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid animation transition"), FALSE;
+                g_array_index(transitions, EsheepTransition, j) = transition;
             }
         }
         for (guint j = 0; j < build->frames->len; j++) {
@@ -477,6 +488,8 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid spawn definition"), FALSE;
         for (guint j = 0; j < build->next->len; j++) {
             EsheepTransition transition = g_array_index(build->next, EsheepTransition, j);
+            transition.stable_id = transition_stable_id(
+                build->value.id, 3, (int)j, transition.target);
             if (transition.probability < 1 || transition.probability > 100 ||
                 transition.target < 1 || transition.target > package->animation_count ||
                 (transition.only && strcmp(transition.only, "none") != 0 &&
@@ -485,6 +498,7 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
                  strcmp(transition.only, "vertical") != 0 &&
                  strcmp(transition.only, "horizontal+") != 0))
                 return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid spawn transition"), FALSE;
+            g_array_index(build->next, EsheepTransition, j) = transition;
         }
         package->spawns[i] = build->value;
         package->spawns[i].next = (const EsheepTransition *)build->next->data;

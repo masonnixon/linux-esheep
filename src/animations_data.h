@@ -2,7 +2,10 @@
 #ifndef ESHEEP_ANIMATIONS_DATA_H
 #define ESHEEP_ANIMATIONS_DATA_H
 
+#include <stdint.h>
+
 typedef struct {
+    uint32_t stable_id;  /* source/event/ordinal/target identity */
     int probability;
     const char *only;   /* NULL, "none", "window", "taskbar", or "vertical" */
     int target;          /* animation id to transition to */

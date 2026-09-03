@@ -130,7 +130,7 @@ static void test_list_transitions_uses_active_graph(void) {
     int rc = run_esheep_capture(argv, 1, "ESHEEP_AUTOQUIT_MS=1",
                                 buf, sizeof(buf));
     assert(rc == 0);
-    assert(strstr(buf, "1\t1\tsequence\twindow\t2\t11") != NULL);
+    assert(strstr(buf, "1\t16777227\t1\tsequence\twindow\t2\t11") != NULL);
     assert(strstr(buf, "\tchild\tany\t100\t23") != NULL);
 }
 

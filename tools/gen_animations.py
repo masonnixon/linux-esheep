@@ -147,7 +147,10 @@ def write_header(path):
 #ifndef ESHEEP_ANIMATIONS_DATA_H
 #define ESHEEP_ANIMATIONS_DATA_H
 
+#include <stdint.h>
+
 typedef struct {
+    uint32_t stable_id;  /* source/event/ordinal/target identity */
     int probability;
     const char *only;   /* NULL, "none", "window", "taskbar", or "vertical" */
     int target;          /* animation id to transition to */
@@ -226,14 +229,22 @@ void esheep_use_default_animation_data(void);
     )
 
 
-def emit_transitions(lines, var, transitions):
+def stable_transition_id(source_id, event_kind, ordinal, target):
+    return ((source_id & 0xff) << 24) | ((event_kind & 0x0f) << 20) | \
+           ((ordinal & 0xff) << 12) | (target & 0xfff)
+
+
+def emit_transitions(lines, var, transitions, source_id, event_kind):
     lines.append(f"static const EsheepTransition {var}[] = {{")
-    for t in transitions:
+    for ordinal, t in enumerate(transitions):
+        stable_id = stable_transition_id(source_id, event_kind, ordinal,
+                                         t["target"])
         lines.append(
-            f'    {{ {t["probability"]}, {c_str(t["only"])}, {t["target"]} }},'
+            f'    {{ {stable_id}u, {t["probability"]}, '
+            f'{c_str(t["only"])}, {t["target"]} }},'
         )
     if not transitions:
-        lines.append("    { 0, NULL, 0 }, /* unused placeholder, count is 0 */")
+        lines.append("    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */")
     lines.append("};")
 
 
@@ -257,7 +268,8 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
     lines.append("")
 
     for sp in spawns:
-        emit_transitions(lines, f"spawn{sp['id']}_next", sp["next"])
+        emit_transitions(lines, f"spawn{sp['id']}_next", sp["next"],
+                         sp["id"], 3)
     lines.append("")
     lines.append("const EsheepSpawn esheep_default_spawns[] = {")
     for sp in spawns:
@@ -278,9 +290,12 @@ def write_source(path, tilesx, tilesy, spawns, animations, childs):
             + ", ".join(str(f) for f in an["frames"])
             + " };"
         )
-        emit_transitions(lines, f"anim{aid}_seq_next", an["sequence_next"])
-        emit_transitions(lines, f"anim{aid}_border_next", an["border_next"])
-        emit_transitions(lines, f"anim{aid}_gravity_next", an["gravity_next"])
+        emit_transitions(lines, f"anim{aid}_seq_next", an["sequence_next"],
+                         aid, 0)
+        emit_transitions(lines, f"anim{aid}_border_next", an["border_next"],
+                         aid, 1)
+        emit_transitions(lines, f"anim{aid}_gravity_next", an["gravity_next"],
+                         aid, 2)
         lines.append("")
 
     lines.append("const EsheepAnimation esheep_default_animations[] = {")

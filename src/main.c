@@ -745,15 +745,20 @@ static void print_transitions(void) {
                  transition_index < counts[kind]; transition_index++) {
                 const EsheepTransition *transition =
                     &lists[kind][transition_index];
-                g_print("%d\t%d\t%s\t%s\t%d\t%d\n", index++, animation->id,
-                        kinds[kind], transition->only ? transition->only : "any",
+                g_print("%d\t%u\t%d\t%s\t%s\t%d\t%d\n", index++,
+                        transition->stable_id, animation->id, kinds[kind],
+                        transition->only ? transition->only : "any",
                         transition->probability, transition->target);
             }
         }
     }
     for (int child_index = 0; child_index < esheep_child_count; child_index++) {
         const EsheepChild *child = &esheep_childs[child_index];
-        g_print("%d\t%d\tchild\tany\t100\t%d\n", index++,
+        uint32_t stable_id = ((uint32_t)(child->animation_id & 0xff) << 24) |
+                             (4u << 20) |
+                             ((uint32_t)(child_index & 0xff) << 12) |
+                             (uint32_t)(child->next & 0xfff);
+        g_print("%d\t%u\t%d\tchild\tany\t100\t%d\n", index++, stable_id,
                 child->animation_id, child->next);
     }
 }

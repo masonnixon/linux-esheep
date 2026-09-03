@@ -6,16 +6,16 @@ const int esheep_default_tiles_x = 16;
 const int esheep_default_tiles_y = 11;
 
 static const EsheepTransition spawn1_next[] = {
-    { 100, NULL, 1 },
+    { 19922945u, 100, NULL, 1 },
 };
 static const EsheepTransition spawn2_next[] = {
-    { 100, NULL, 1 },
+    { 36700161u, 100, NULL, 1 },
 };
 static const EsheepTransition spawn3_next[] = {
-    { 100, NULL, 21 },
+    { 53477397u, 100, NULL, 21 },
 };
 static const EsheepTransition spawn4_next[] = {
-    { 100, NULL, 28 },
+    { 70254620u, 100, NULL, 28 },
 };
 
 const EsheepSpawn esheep_default_spawns[] = {
@@ -28,619 +28,619 @@ const int esheep_default_spawn_count = 4;
 
 static const int anim1_frames[] = { 2, 3 };
 static const EsheepTransition anim1_seq_next[] = {
-    { 2, "window", 11 },
-    { 10, "taskbar", 35 },
-    { 90, "none", 1 },
-    { 6, "none", 15 },
-    { 50, "taskbar", 50 },
-    { 50, "window", 49 },
+    { 16777227u, 2, "window", 11 },
+    { 16781347u, 10, "taskbar", 35 },
+    { 16785409u, 90, "none", 1 },
+    { 16789519u, 6, "none", 15 },
+    { 16793650u, 50, "taskbar", 50 },
+    { 16797745u, 50, "window", 49 },
 };
 static const EsheepTransition anim1_border_next[] = {
-    { 100, "none", 2 },
-    { 2, "vertical", 37 },
-    { 20, "window", 43 },
+    { 17825794u, 100, "none", 2 },
+    { 17829925u, 2, "vertical", 37 },
+    { 17834027u, 20, "window", 43 },
 };
 static const EsheepTransition anim1_gravity_next[] = {
-    { 100, "none", 5 },
+    { 18874373u, 100, "none", 5 },
 };
 
 static const int anim2_frames[] = { 3, 9, 10 };
 static const EsheepTransition anim2_seq_next[] = {
-    { 100, NULL, 3 },
+    { 33554435u, 100, NULL, 3 },
 };
 static const EsheepTransition anim2_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim2_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim3_frames[] = { 10, 9, 3 };
 static const EsheepTransition anim3_seq_next[] = {
-    { 100, "none", 1 },
-    { 5, "taskbar", 26 },
+    { 50331649u, 100, "none", 1 },
+    { 50335770u, 5, "taskbar", 26 },
 };
 static const EsheepTransition anim3_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim3_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim4_frames[] = { 42, 43, 43, 42, 44, 44 };
 static const EsheepTransition anim4_seq_next[] = {
-    { 100, "none", 1 },
+    { 67108865u, 100, "none", 1 },
 };
 static const EsheepTransition anim4_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim4_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim5_frames[] = { 133 };
 static const EsheepTransition anim5_seq_next[] = {
-    { 100, "none", 6 },
+    { 83886086u, 100, "none", 6 },
 };
 static const EsheepTransition anim5_border_next[] = {
-    { 100, "none", 9 },
+    { 84934665u, 100, "none", 9 },
 };
 static const EsheepTransition anim5_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim6_frames[] = { 46, 46, 46 };
 static const EsheepTransition anim6_seq_next[] = {
-    { 100, "none", 6 },
+    { 100663302u, 100, "none", 6 },
 };
 static const EsheepTransition anim6_border_next[] = {
-    { 100, "none", 10 },
+    { 101711882u, 100, "none", 10 },
 };
 static const EsheepTransition anim6_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim7_frames[] = { 5, 4, 4 };
 static const EsheepTransition anim7_seq_next[] = {
-    { 40, "none", 7 },
-    { 80, "none", 36 },
-    { 20, "taskbar", 25 },
+    { 117440519u, 40, "none", 7 },
+    { 117444644u, 80, "none", 36 },
+    { 117448729u, 20, "taskbar", 25 },
 };
 static const EsheepTransition anim7_border_next[] = {
-    { 100, "vertical", 8 },
+    { 118489096u, 100, "vertical", 8 },
 };
 static const EsheepTransition anim7_gravity_next[] = {
-    { 100, "none", 5 },
+    { 119537669u, 100, "none", 5 },
 };
 
 static const int anim8_frames[] = { 62, 62, 63, 64, 65, 66, 67, 68, 69, 70, 6 };
 static const EsheepTransition anim8_seq_next[] = {
-    { 20, NULL, 2 },
-    { 5, NULL, 7 },
-    { 80, NULL, 1 },
+    { 134217730u, 20, NULL, 2 },
+    { 134221831u, 5, NULL, 7 },
+    { 134225921u, 80, NULL, 1 },
 };
 static const EsheepTransition anim8_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim8_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim9_frames[] = { 133, 133, 133, 133, 49, 13, 12, 6 };
 static const EsheepTransition anim9_seq_next[] = {
-    { 100, "none", 1 },
+    { 150994945u, 100, "none", 1 },
 };
 static const EsheepTransition anim9_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim9_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim10_frames[] = { 48, 48, 48, 48, 47 };
 static const EsheepTransition anim10_seq_next[] = {
-    { 100, "none", 1 },
+    { 167772161u, 100, "none", 1 },
 };
 static const EsheepTransition anim10_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim10_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim11_frames[] = { 3, 12, 13, 103, 104, 105, 106 };
 static const EsheepTransition anim11_seq_next[] = {
-    { 100, NULL, 12 },
+    { 184549388u, 100, NULL, 12 },
 };
 static const EsheepTransition anim11_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim11_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim12_frames[] = { 104, 105, 104, 104, 103, 13, 12 };
 static const EsheepTransition anim12_seq_next[] = {
-    { 100, NULL, 1 },
+    { 201326593u, 100, NULL, 1 },
 };
 static const EsheepTransition anim12_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim12_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim13_frames[] = { 3, 96, 96 };
 static const EsheepTransition anim13_seq_next[] = {
-    { 100, "none", 1 },
+    { 218103809u, 100, "none", 1 },
 };
 static const EsheepTransition anim13_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim13_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim14_frames[] = { 50, 51 };
 static const EsheepTransition anim14_seq_next[] = {
-    { 100, NULL, 1 },
+    { 234881025u, 100, NULL, 1 },
 };
 static const EsheepTransition anim14_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim14_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim15_frames[] = { 3, 107, 108, 107, 108, 107, 31, 32, 33, 0, 1 };
 static const EsheepTransition anim15_seq_next[] = {
-    { 100, "none", 16 },
+    { 251658256u, 100, "none", 16 },
 };
 static const EsheepTransition anim15_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim15_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim16_frames[] = { 0, 80, 79, 78, 77, 37, 38, 39, 38, 37, 6 };
 static const EsheepTransition anim16_seq_next[] = {
-    { 100, NULL, 1 },
+    { 268435457u, 100, NULL, 1 },
 };
 static const EsheepTransition anim16_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim16_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim17_frames[] = { 3, 6, 7, 8, 8, 7, 8, 8 };
 static const EsheepTransition anim17_seq_next[] = {
-    { 100, "none", 18 },
+    { 285212690u, 100, "none", 18 },
 };
 static const EsheepTransition anim17_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim17_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim18_frames[] = { 8, 7, 6 };
 static const EsheepTransition anim18_seq_next[] = {
-    { 100, NULL, 7 },
+    { 301989895u, 100, NULL, 7 },
 };
 static const EsheepTransition anim18_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim18_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim19_frames[] = { 3, 9, 10, 34, 35, 34, 35, 36, 36 };
 static const EsheepTransition anim19_seq_next[] = {
-    { 100, "none", 20 },
+    { 318767124u, 100, "none", 20 },
 };
 static const EsheepTransition anim19_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim19_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim20_frames[] = { 35, 36, 36, 35, 34, 34, 34, 10, 9 };
 static const EsheepTransition anim20_seq_next[] = {
-    { 100, "none", 1 },
+    { 335544321u, 100, "none", 1 },
 };
 static const EsheepTransition anim20_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim20_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim21_frames[] = { 134 };
 static const EsheepTransition anim21_seq_next[] = {
-    { 100, "none", 22 },
+    { 352321558u, 100, "none", 22 },
 };
 static const EsheepTransition anim21_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim21_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim22_frames[] = { 135, 135, 135, 135, 136, 136, 136, 136, 137, 137, 137, 137, 138, 138, 138, 138, 139, 139, 139, 139, 140, 140, 140, 140, 141, 141, 141, 141, 142, 142, 142, 142, 143, 143, 143, 143, 144, 144, 144, 144, 145, 144, 145, 144, 145, 144, 145, 144, 174, 174, 174, 174, 174, 174, 174 };
 static const EsheepTransition anim22_seq_next[] = {
-    { 100, "none", 47 },
+    { 369098799u, 100, "none", 47 },
 };
 static const EsheepTransition anim22_border_next[] = {
-    { 100, "none", 47 },
+    { 370147375u, 100, "none", 47 },
 };
 static const EsheepTransition anim22_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim23_frames[] = { 146 };
 static const EsheepTransition anim23_seq_next[] = {
-    { 100, "none", 24 },
+    { 385875992u, 100, "none", 24 },
 };
 static const EsheepTransition anim23_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim23_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim24_frames[] = { 146, 146, 146, 146, 146, 146, 146, 146, 146, 146, 146, 146, 147, 147, 148, 148, 148, 147, 147, 146, 146, 146, 146, 146 };
 static const EsheepTransition anim24_seq_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim24_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim24_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim25_frames[] = { 76, 30, 30, 30, 30, 23, 23, 23, 23, 23, 24, 24, 24, 24, 77 };
 static const EsheepTransition anim25_seq_next[] = {
-    { 100, "none", 7 },
+    { 419430407u, 100, "none", 7 },
 };
 static const EsheepTransition anim25_border_next[] = {
-    { 80, "taskbar", 7 },
-    { 20, "horizontal+", 36 },
+    { 420478983u, 80, "taskbar", 7 },
+    { 420483108u, 20, "horizontal+", 36 },
 };
 static const EsheepTransition anim25_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim26_frames[] = { 6, 6, 6, 6, 58, 59, 59, 60, 61, 60, 61, 6 };
 static const EsheepTransition anim26_seq_next[] = {
-    { 100, "none", 1 },
+    { 436207617u, 100, "none", 1 },
 };
 static const EsheepTransition anim26_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim26_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim27_frames[] = { 174, 153, 153, 153, 153, 153, 149, 149, 149, 149, 149, 149, 149, 149, 149, 150, 150, 150, 150, 150, 150, 150, 151, 151, 151, 151, 151, 151, 151, 152, 152, 152, 152, 152, 152, 152, 174, 174, 174 };
 static const EsheepTransition anim27_seq_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim27_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim27_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim28_frames[] = { 5, 4, 4 };
 static const EsheepTransition anim28_seq_next[] = {
-    { 100, "none", 29 },
+    { 469762077u, 100, "none", 29 },
 };
 static const EsheepTransition anim28_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim28_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim29_frames[] = { 2, 3 };
 static const EsheepTransition anim29_seq_next[] = {
-    { 100, "none", 30 },
+    { 486539294u, 100, "none", 30 },
 };
 static const EsheepTransition anim29_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim29_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim30_frames[] = { 8, 3, 3, 3, 127, 128, 129, 130, 130, 130, 130, 129, 128, 127, 3, 3, 3 };
 static const EsheepTransition anim30_seq_next[] = {
-    { 100, "none", 1 },
+    { 503316481u, 100, "none", 1 },
 };
 static const EsheepTransition anim30_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim30_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim31_frames[] = { 155, 154, 154 };
 static const EsheepTransition anim31_seq_next[] = {
-    { 100, "none", 32 },
+    { 520093728u, 100, "none", 32 },
 };
 static const EsheepTransition anim31_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim31_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim32_frames[] = { 156, 157 };
 static const EsheepTransition anim32_seq_next[] = {
-    { 100, "none", 33 },
+    { 536870945u, 100, "none", 33 },
 };
 static const EsheepTransition anim32_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim32_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim33_frames[] = { 157 };
 static const EsheepTransition anim33_seq_next[] = {
-    { 100, "none", 34 },
+    { 553648162u, 100, "none", 34 },
 };
 static const EsheepTransition anim33_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim33_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim34_frames[] = { 157 };
 static const EsheepTransition anim34_seq_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim34_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim34_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim35_frames[] = { 2, 3, 2, 5, 4, 5, 4, 5 };
 static const EsheepTransition anim35_seq_next[] = {
-    { 100, "none", 7 },
+    { 587202567u, 100, "none", 7 },
 };
 static const EsheepTransition anim35_border_next[] = {
-    { 100, "vertical", 8 },
+    { 588251144u, 100, "vertical", 8 },
 };
 static const EsheepTransition anim35_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim36_frames[] = { 5, 4, 5, 4, 5, 3, 2, 3, 2, 3 };
 static const EsheepTransition anim36_seq_next[] = {
-    { 100, "none", 1 },
+    { 603979777u, 100, "none", 1 },
 };
 static const EsheepTransition anim36_border_next[] = {
-    { 100, "vertical", 8 },
+    { 605028360u, 100, "vertical", 8 },
 };
 static const EsheepTransition anim36_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim37_frames[] = { 31, 30, 15, 16 };
 static const EsheepTransition anim37_seq_next[] = {
-    { 100, "none", 37 },
+    { 620757029u, 100, "none", 37 },
 };
 static const EsheepTransition anim37_border_next[] = {
-    { 100, "none", 38 },
+    { 621805606u, 100, "none", 38 },
 };
 static const EsheepTransition anim37_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim38_frames[] = { 16, 17, 28 };
 static const EsheepTransition anim38_seq_next[] = {
-    { 100, "none", 39 },
+    { 637534247u, 100, "none", 39 },
 };
 static const EsheepTransition anim38_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim38_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim39_frames[] = { 98, 97 };
 static const EsheepTransition anim39_seq_next[] = {
-    { 100, "none", 39 },
+    { 654311463u, 100, "none", 39 },
 };
 static const EsheepTransition anim39_border_next[] = {
-    { 100, "none", 40 },
+    { 655360040u, 100, "none", 40 },
 };
 static const EsheepTransition anim39_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim40_frames[] = { 97, 97 };
 static const EsheepTransition anim40_seq_next[] = {
-    { 100, "none", 41 },
+    { 671088681u, 100, "none", 41 },
 };
 static const EsheepTransition anim40_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim40_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim41_frames[] = { 19, 20 };
 static const EsheepTransition anim41_seq_next[] = {
-    { 100, "none", 41 },
+    { 687865897u, 100, "none", 41 },
 };
 static const EsheepTransition anim41_border_next[] = {
-    { 100, "none", 42 },
+    { 688914474u, 100, "none", 42 },
 };
 static const EsheepTransition anim41_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim42_frames[] = { 24, 6, 6, 6, 6, 6 };
 static const EsheepTransition anim42_seq_next[] = {
-    { 100, "none", 1 },
+    { 704643073u, 100, "none", 1 },
 };
 static const EsheepTransition anim42_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim42_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim43_frames[] = { 6, 78, 78, 78, 79, 80, 79, 78, 78, 78, 78, 78 };
 static const EsheepTransition anim43_seq_next[] = {
-    { 50, "none", 2 },
-    { 40, "none", 44 },
-    { 40, "none", 51 },
+    { 721420290u, 50, "none", 2 },
+    { 721424428u, 40, "none", 44 },
+    { 721428531u, 40, "none", 51 },
 };
 static const EsheepTransition anim43_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim43_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim44_frames[] = { 31, 30, 30, 4, 4, 4, 21, 25 };
 static const EsheepTransition anim44_seq_next[] = {
-    { 100, "none", 45 },
+    { 738197549u, 100, "none", 45 },
 };
 static const EsheepTransition anim44_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim44_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim45_frames[] = { 25, 25 };
 static const EsheepTransition anim45_seq_next[] = {
-    { 100, "none", 45 },
+    { 754974765u, 100, "none", 45 },
 };
 static const EsheepTransition anim45_border_next[] = {
-    { 100, "none", 46 },
+    { 756023342u, 100, "none", 46 },
 };
 static const EsheepTransition anim45_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim46_frames[] = { 24, 23, 23, 23, 23, 23, 31, 3, 3, 3, 3 };
 static const EsheepTransition anim46_seq_next[] = {
-    { 100, "none", 1 },
+    { 771751937u, 100, "none", 1 },
 };
 static const EsheepTransition anim46_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim46_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim47_frames[] = { 169, 169, 169, 170, 171, 170, 169, 169 };
 static const EsheepTransition anim47_seq_next[] = {
-    { 100, "none", 48 },
+    { 788529200u, 100, "none", 48 },
 };
 static const EsheepTransition anim47_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim47_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim48_frames[] = { 119, 81, 81, 82, 82, 10 };
 static const EsheepTransition anim48_seq_next[] = {
-    { 100, "none", 3 },
+    { 805306371u, 100, "none", 3 },
 };
 static const EsheepTransition anim48_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim48_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim49_frames[] = { 2, 3 };
 static const EsheepTransition anim49_seq_next[] = {
-    { 10, "none", 19 },
-    { 3, "none", 17 },
-    { 80, "none", 1 },
+    { 822083603u, 10, "none", 19 },
+    { 822087697u, 3, "none", 17 },
+    { 822091777u, 80, "none", 1 },
 };
 static const EsheepTransition anim49_border_next[] = {
-    { 100, "none", 2 },
-    { 2, "vertical", 37 },
-    { 20, "window", 43 },
+    { 823132162u, 100, "none", 2 },
+    { 823136293u, 2, "vertical", 37 },
+    { 823140395u, 20, "window", 43 },
 };
 static const EsheepTransition anim49_gravity_next[] = {
-    { 100, "none", 5 },
+    { 824180741u, 100, "none", 5 },
 };
 
 static const int anim50_frames[] = { 2, 3 };
 static const EsheepTransition anim50_seq_next[] = {
-    { 10, "none", 19 },
-    { 3, "none", 17 },
-    { 80, "none", 1 },
+    { 838860819u, 10, "none", 19 },
+    { 838864913u, 3, "none", 17 },
+    { 838868993u, 80, "none", 1 },
 };
 static const EsheepTransition anim50_border_next[] = {
-    { 100, "none", 2 },
-    { 2, "vertical", 37 },
-    { 20, "window", 43 },
+    { 839909378u, 100, "none", 2 },
+    { 839913509u, 2, "vertical", 37 },
+    { 839917611u, 20, "window", 43 },
 };
 static const EsheepTransition anim50_gravity_next[] = {
-    { 100, "none", 1 },
+    { 840957953u, 100, "none", 1 },
 };
 
 static const int anim51_frames[] = { 77 };
 static const EsheepTransition anim51_seq_next[] = {
-    { 100, "none", 52 },
+    { 855638068u, 100, "none", 52 },
 };
 static const EsheepTransition anim51_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim51_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim52_frames[] = { 40, 41 };
 static const EsheepTransition anim52_seq_next[] = {
-    { 100, "none", 53 },
+    { 872415285u, 100, "none", 53 },
 };
 static const EsheepTransition anim52_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim52_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim53_frames[] = { 29, 29 };
 static const EsheepTransition anim53_seq_next[] = {
-    { 100, "none", 53 },
+    { 889192501u, 100, "none", 53 },
 };
 static const EsheepTransition anim53_border_next[] = {
-    { 100, "none", 54 },
+    { 890241078u, 100, "none", 54 },
 };
 static const EsheepTransition anim53_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 static const int anim54_frames[] = { 45, 45, 18, 76, 6 };
 static const EsheepTransition anim54_seq_next[] = {
-    { 100, "none", 1 },
+    { 905969665u, 100, "none", 1 },
 };
 static const EsheepTransition anim54_border_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 static const EsheepTransition anim54_gravity_next[] = {
-    { 0, NULL, 0 }, /* unused placeholder, count is 0 */
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
 const EsheepAnimation esheep_default_animations[] = {
