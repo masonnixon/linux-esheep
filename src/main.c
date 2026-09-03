@@ -8,6 +8,7 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
@@ -63,6 +64,7 @@ typedef struct App App;
 
 static int x11_bad_window;
 static XErrorHandler x11_previous_error_handler;
+static uint32_t app_random_seed = 0xC0FFEE01u;
 
 static int x11_refresh_error_handler(Display *display, XErrorEvent *error) {
     (void)display;
@@ -102,6 +104,7 @@ struct App {
     int climb_target_y;
     int direction; /* -1 = left, +1 = right */
     int ordinal;
+    uint32_t random_state;
     bool edge_dispatched;
     gboolean cleaned_up;
     gboolean paused;
@@ -131,6 +134,17 @@ typedef struct {
     gboolean exclude_conky;
     const char *spawn_mode;
 } SheepGroup;
+
+/* Each sheep owns its random stream. This prevents child animation draws or
+ * a sibling's decisions from changing another sheep's behavior sequence. */
+static int app_random_0_99(App *app) {
+    if (!app) return 0;
+    if (app->random_state == 0)
+        app->random_state = app_random_seed ^ 0x9E3779B9u ^
+                            (uint32_t)(app->ordinal + 1) * 0xA511E9B3u;
+    app->random_state = app->random_state * 1664525u + 1013904223u;
+    return (int)((app->random_state >> 8) % 100u);
+}
 
 static gboolean on_tick(gpointer user_data);
 static void update_child_animation(App *app);
@@ -549,9 +563,9 @@ static int eval_child_expression(const char *expr, int area_width, int area_heig
     return eval_spawn_expression(expr, area_width, area_height, image_width, image_height, roll_0_99);
 }
 
-static int select_spawn_animation(const EsheepSpawn *spawn) {
+static int select_spawn_animation(App *app, const EsheepSpawn *spawn) {
     if (!spawn || spawn->next_count == 0) return ANIM_WALK;
-    int roll = rand() % 100;
+    int roll = app_random_0_99(app);
     int accumulated = 0;
     for (int i = 0; i < spawn->next_count; i++) {
         accumulated += spawn->next[i].probability;
@@ -566,7 +580,7 @@ static void choose_random_spawn(App *app) {
     for (int i = 0; i < esheep_spawn_count; i++)
         total_weight += esheep_spawns[i].probability;
 
-    int roll = rand() % (total_weight > 0 ? total_weight : 1);
+    int roll = app_random_0_99(app) % (total_weight > 0 ? total_weight : 1);
     const EsheepSpawn *selected = NULL;
     int accumulated = 0;
 
@@ -589,7 +603,7 @@ static void choose_random_spawn(App *app) {
     }
 
     /* Evaluate spawn position expressions */
-    int spawn_roll = rand() % 100;
+    int spawn_roll = app_random_0_99(app);
     app->pos_x = monitor_global_x(&app->bounds,
                                   eval_spawn_expression(selected->x,
                                                         app->bounds.width,
@@ -607,7 +621,7 @@ static void choose_random_spawn(App *app) {
 
     /* Set direction and animation based on spawn position */
     app->direction = app->pos_x < app->bounds.x + app->bounds.width / 2 ? 1 : -1;
-    int anim_id = select_spawn_animation(selected);
+    int anim_id = select_spawn_animation(app, selected);
     esheep_init(&app->state, anim_id);
 }
 
@@ -1710,7 +1724,8 @@ static void advance_child_animation(App *app, int dt_ms) {
         int animation_id = app->child_animation_ids[slot];
         if (animation_id < 1 || animation_id > esheep_animation_count)
             continue;
-        esheep_tick(&app->child_states[slot], dt_ms, "none", rand() % 100);
+        esheep_tick(&app->child_states[slot], dt_ms, "none",
+                    app_random_0_99(app));
         app->child_animation_ids[slot] = app->child_states[slot].animation_id;
         app->child_frame_indices[slot] = app->child_states[slot].frame_index;
         app->child_elapsed_ms_values[slot] = app->child_states[slot].elapsed_ms;
@@ -1727,7 +1742,7 @@ static gboolean on_tick(gpointer user_data) {
     if (app->dragging) {
         /* Position is driven by the pointer while dragging; still let the
          * interpreter step so the drag animation's frames keep cycling. */
-        int roll = rand() % 100;
+        int roll = app_random_0_99(app);
         esheep_tick(&app->state, (int)app->tick_ms, "none", roll);
         update_child_animation(app);
         advance_child_animation(app, (int)app->tick_ms);
@@ -1790,7 +1805,7 @@ static gboolean on_tick(gpointer user_data) {
         app->pos_y < floor_y &&
         !object_underfoot(app) &&
         app->state.animation_id != ANIM_FALL) {
-        esheep_gravity_event(&app->state, "none", rand() % 100);
+        esheep_gravity_event(&app->state, "none", app_random_0_99(app));
         if (app->state.animation_id != ANIM_FALL)
             esheep_init(&app->state, ANIM_FALL);
     }
@@ -1808,7 +1823,7 @@ static gboolean on_tick(gpointer user_data) {
         app->edge_dispatched = FALSE;
     }
 
-    int roll = rand() % 100;
+    int roll = app_random_0_99(app);
     gboolean stepped = esheep_tick(&app->state, (int)app->tick_ms,
                                    pretick_context, roll);
 
@@ -1849,7 +1864,7 @@ static gboolean on_tick(gpointer user_data) {
                     if (is_landing_animation(event.animation_id))
                         esheep_init(&app->state, ANIM_WALK);
                 } else {
-                    int border_roll = rand() % 100;
+                    int border_roll = app_random_0_99(app);
                     border_changed = esheep_border_event(&app->state, hit,
                                                          border_roll);
                     if (!border_changed && strcmp(hit, "horizontal+") == 0)
@@ -2408,7 +2423,8 @@ int main(int argc, char **argv) {
         g_setenv("GDK_BACKEND", "x11", FALSE);
     }
     gtk_init(&argc, &argv);
-    srand((unsigned)time(NULL) ^ (unsigned)getpid());
+    app_random_seed = (uint32_t)time(NULL) ^ (uint32_t)getpid();
+    if (app_random_seed == 0) app_random_seed = 0xC0FFEE01u;
 
     GKeyFile *config = g_key_file_new();
     gchar *default_config_path = NULL;
@@ -2645,7 +2661,7 @@ int main(int argc, char **argv) {
         App *app = &sheep[i];
         app->sheet = sheet;
         app->tile_size = tile_size;
-        app->direction = rand() % 2 ? 1 : -1;
+        app->direction = app_random_0_99(app) < 50 ? -1 : 1;
         app->tick_ms = tick_ms;
         app->window_landing = window_landing;
         app->exclude_conky = exclude_conky;

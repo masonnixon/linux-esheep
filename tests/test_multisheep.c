@@ -43,6 +43,16 @@ static void test_count_bounds(void) {
     assert(clamp_sheep_count(MAX_SHEEP + 9) == MAX_SHEEP);
 }
 
+static void test_sheep_random_streams_are_independent(void) {
+    App sheep[2];
+    memset(sheep, 0, sizeof(sheep));
+    sheep[0].ordinal = 0;
+    sheep[1].ordinal = 1;
+    (void)app_random_0_99(&sheep[0]);
+    (void)app_random_0_99(&sheep[1]);
+    assert(sheep[0].random_state != sheep[1].random_state);
+}
+
 static void test_spawn_spacing_on_monitor(void) {
     App sheep[3];
     for (int i = 0; i < 3; i++) {
@@ -217,6 +227,7 @@ static void test_cleanup_is_per_instance(void) {
 
 int main(void) {
     test_count_bounds();
+    test_sheep_random_streams_are_independent();
     test_spawn_spacing_on_monitor();
     test_window_spawn_skips_taskbar_and_overlap();
     test_independent_child_instances();
