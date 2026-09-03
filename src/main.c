@@ -1070,7 +1070,8 @@ static void refresh_objects(App *app) {
                                     &count, &bytes_after,
                                     (unsigned char **)&windows);
     x11_refresh_sync(display);
-    if (x11_bad_window || result != Success || !windows || format != 32) {
+    if (x11_bad_window || result != Success || !windows || format != 32 ||
+        actual_type != XA_WINDOW) {
         if (windows) XFree(windows);
         XSetErrorHandler(x11_previous_error_handler);
         return;
@@ -1089,7 +1090,8 @@ static void refresh_objects(App *app) {
         XSetErrorHandler(x11_previous_error_handler);
         return;
     }
-    if (result != Success || !stacking || format != 32) {
+    if (result != Success || !stacking || format != 32 ||
+        actual_type != XA_WINDOW) {
         if (stacking) XFree(stacking);
         stacking = NULL;
         stacking_count = 0;

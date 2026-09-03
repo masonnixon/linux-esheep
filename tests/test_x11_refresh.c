@@ -43,9 +43,18 @@ int main(int argc, char **argv) {
     refresh_objects(&app);
     assert(app.object_count == 1);
 
+    /* A malformed root property is an incomplete refresh, not an empty
+     * desktop. Preserve the last complete surface snapshot. */
+    XChangeProperty(display, root, client_list, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *)&client, 1);
+    XSync(display, False);
+    refresh_objects(&app);
+    assert(app.object_count == 1);
+
     /* Leave the destroyed ID in _NET_CLIENT_LIST to model a real refresh race.
      * The scoped X11 handler must discard it instead of reaching GDK's fatal
      * error path. */
+    set_client_list(display, root, client_list, client);
     XDestroyWindow(display, client);
     XSync(display, False);
     refresh_objects(&app);
