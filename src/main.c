@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include "context.h"
 #include "interpreter.h"
+#include "pet_package.h"
 #include "renderer.h"
 
 #define TICK_MS 33
@@ -591,6 +592,7 @@ static void print_usage(const char *program) {
     g_print("  --version              Show the version.\n");
     g_print("  --sprite PATH          Use a spritesheet.\n");
     g_print("  --character NAME       Use sheep or penguin sprites.\n");
+    g_print("  --package PATH         Load a validated XML behavior package.\n");
     g_print("  --config PATH          Load settings from an INI config file.\n");
     g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
     g_print("  --count N              Spawn N sheep (1-32).\n");
@@ -2218,6 +2220,7 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
 int main(int argc, char **argv) {
     const char *sprite_override = NULL;
     const char *character_override = NULL;
+    const char *package_override = NULL;
     const char *spawn_override = NULL;
     const char *config_override = NULL;
     guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
@@ -2250,6 +2253,10 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "--character") == 0 && i + 1 < argc) {
             character_override = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--package") == 0 && i + 1 < argc) {
+            package_override = argv[++i];
             continue;
         }
         if (strcmp(argv[i], "--spawn") == 0 && i + 1 < argc) {
@@ -2349,6 +2356,7 @@ int main(int argc, char **argv) {
     gchar *config_character = NULL;
     gchar *config_sprite = NULL;
     gchar *config_spawn = NULL;
+    gchar *config_package = NULL;
     if (!config_override) {
         default_config_path = g_build_filename(g_get_user_config_dir(),
                                                 "esheep", "config", NULL);
@@ -2364,6 +2372,11 @@ int main(int argc, char **argv) {
             config_sprite = g_key_file_get_string(config, "esheep",
                                                    "spritesheet", NULL);
             sprite_override = config_sprite;
+        }
+        if (!package_override && !getenv("ESHEEP_PACKAGE")) {
+            config_package = g_key_file_get_string(config, "esheep",
+                                                   "package", NULL);
+            package_override = config_package;
         }
         if (!spawn_cli && !getenv("ESHEEP_SPAWN")) {
             config_spawn = g_key_file_get_string(config, "esheep", "spawn", NULL);
@@ -2396,6 +2409,22 @@ int main(int argc, char **argv) {
     }
     count = clamp_sheep_count(count);
 
+    GError *error = NULL;
+    EsheepPetPackage *runtime_package = NULL;
+    const char *package_path = package_override ? package_override :
+                               getenv("ESHEEP_PACKAGE");
+    if (package_path && !esheep_pet_package_load(package_path, &runtime_package,
+                                                  &error)) {
+        g_printerr("failed to load behavior package '%s': %s\n", package_path,
+                   error ? error->message : "invalid package");
+        if (error) g_error_free(error);
+        g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+        g_free(config_package); g_free(default_config_path);
+        g_key_file_free(config);
+        return 2;
+    }
+    if (runtime_package) esheep_pet_package_activate(runtime_package);
+
     const char *character = character_override ? character_override :
                             getenv("ESHEEP_CHARACTER");
     gboolean custom_sprite_selected = sprite_override ||
@@ -2405,6 +2434,10 @@ int main(int argc, char **argv) {
         strcasecmp(character, "penguin") != 0 && !custom_sprite_selected) {
         g_printerr("invalid character '%s' (use sheep or penguin, or provide "
                    "a custom spritesheet)\n", character);
+        esheep_pet_package_free(runtime_package);
+        g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+        g_free(config_package); g_free(default_config_path);
+        g_key_file_free(config);
         return 2;
     }
     /* Custom-pet package: resolve spritesheet path respecting precedence.
@@ -2427,7 +2460,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    GError *error = NULL;
     GdkPixbuf *sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
     if (!sheet) {
         g_printerr("failed to load spritesheet '%s': %s\n", sheet_path,
@@ -2441,8 +2473,10 @@ int main(int argc, char **argv) {
         g_free(config_character);
         g_free(config_sprite);
         g_free(config_spawn);
+        g_free(config_package);
         g_free(default_config_path);
         g_key_file_free(config);
+        esheep_pet_package_free(runtime_package);
         return 1;
     }
 
@@ -2452,8 +2486,10 @@ int main(int argc, char **argv) {
         g_free(config_character);
         g_free(config_sprite);
         g_free(config_spawn);
+        g_free(config_package);
         g_free(default_config_path);
         g_key_file_free(config);
+        esheep_pet_package_free(runtime_package);
         return 2;
     }
 
@@ -2468,8 +2504,10 @@ int main(int argc, char **argv) {
         g_free(config_character);
         g_free(config_sprite);
         g_free(config_spawn);
+        g_free(config_package);
         g_free(default_config_path);
         g_key_file_free(config);
+        esheep_pet_package_free(runtime_package);
         g_object_unref(sheet);
         return 2;
     }
@@ -2505,8 +2543,10 @@ int main(int argc, char **argv) {
             g_free(config_character);
             g_free(config_sprite);
             g_free(config_spawn);
+            g_free(config_package);
             g_free(default_config_path);
             g_key_file_free(config);
+            esheep_pet_package_free(runtime_package);
             g_object_unref(sheet);
             return 1;
         }
@@ -2606,8 +2646,10 @@ int main(int argc, char **argv) {
     g_free(config_character);
     g_free(config_sprite);
     g_free(config_spawn);
+    g_free(config_package);
     g_free(default_config_path);
     g_key_file_free(config);
     g_object_unref(sheet);
+    esheep_pet_package_free(runtime_package);
     return 0;
 }

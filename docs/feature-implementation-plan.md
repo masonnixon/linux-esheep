@@ -189,8 +189,8 @@ repository and must remain reproducible.
 
 ### Work
 
-- Load XML behavior definitions at runtime or compile them into a validated pet
-  package during installation.
+- Load supported XML behavior definitions at runtime through a validated pet
+  package before creating GTK windows.
 - Pair each behavior definition with its spritesheet and optional sounds.
 - Validate packages before activation and report invalid animation references.
 - Add the UFO, pilot, and any future prop animations as authored behavior,
@@ -198,7 +198,8 @@ repository and must remain reproducible.
 
 ### Acceptance
 
-- A custom XML and spritesheet can be selected without recompiling the binary.
+- A supported custom XML and matching spritesheet can be selected without
+  recompiling the binary.
 - Invalid packages fail safely with a readable diagnostic.
 - A sample custom pet exercises parent, child, and subchild animations.
 

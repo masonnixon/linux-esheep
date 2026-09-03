@@ -124,10 +124,13 @@ options as features added to the original application.
 
 ### Pet and asset distribution
 
-- Runtime loading of a complete XML pet definition. The current program
-  compiles the behavior graph into C and only swaps the spritesheet through
-  configuration.
-- Validation of custom XML files before use.
+- Runtime loading of the supported XML behavior graph via `--package`,
+  `ESHEEP_PACKAGE`, or `package=` configuration.
+- Validation of package structure, references, expressions, frame bounds, and
+  tile grid before window creation.
+- Full XML feature parity is still incomplete: authored action variants beyond
+  flip, arbitrary expression forms, and richer package metadata are not yet
+  represented by the runtime loader.
 - Runtime support for authored props that are present in the replacement
   spritesheet but absent from the current behavior graph. For example, the
   penguin sheet contains UFO tiles 158–165 and pilot tiles 166–168, but no

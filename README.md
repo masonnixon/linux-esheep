@@ -16,6 +16,7 @@ Command-line options are available with `./esheep --help`:
 ```text
 --sprite PATH       Use a different spritesheet.
 --character sheep    Use sheep or penguin sprites.
+--package PATH        Load a validated XML behavior package.
 --config PATH         Load settings from an INI config file.
 --spawn bottom      Start at the monitor bottom (default).
 --spawn window      Start on a visible application window.
@@ -46,6 +47,7 @@ given with `--config`. It uses an INI section named `[esheep]`:
 [esheep]
 character=sheep
 spritesheet=/path/to/spritesheet.png
+package=/path/to/animations.xml
 count=2
 spawn=random
 tick_ms=33
@@ -173,19 +175,18 @@ penguin. The `--character NAME` option selects a built-in character (`sheep`
 or `penguin`) and resolves its default spritesheet. An explicit `--sprite`
 path always takes priority.
 
-**Package boundary**: the runtime animation behaviour graph
-(`src/animations_data.c`) is hardcoded to the sheep/penguin 16×11 tile grid
-(176 tiles, 640×440 for sheep, 1280×880 for penguin). A custom spritesheet
-must use the same grid layout — same column count and tile size — and cover
-all frames referenced by the behaviour graph. Use `tests/test_spritesheet.py`
-as a reference for frame-coverage rules.
+**Package boundary**: a custom spritesheet uses the same 16×11 tile grid
+(176 tiles, 640×440 for sheep, 1280×880 for penguin). A custom behavior
+package loaded with `--package` is validated against the runtime expression
+vocabulary and supplies its own grid dimensions; provide a matching
+spritesheet with `--sprite` or `spritesheet=`. Use
+`tests/test_spritesheet.py` as a reference for frame-coverage rules.
 
 Custom characters (any `--character` value other than `sheep` or `penguin`) are
-accepted at the CLI and env/config level, but the runtime will emit a warning
-indicating that only the built-in behaviour graph is active. Runtime XML
-behaviour loading from `tools/esheep_animations.xml` is not yet exposed as a
-safe external interface; custom behaviour authoring requires rebuilding
-`src/animations_data.c` from the XML source (`tools/gen_animations.py`).
+accepted at the CLI and env/config level. A package can be selected with
+`--package PATH`, `ESHEEP_PACKAGE`, or `package=` in the config file. Package
+loading fails before window creation when the XML graph is malformed or uses
+unsupported expressions.
 
 Exit codes from `esheep` relating to spritesheet loading:
 - `1` — spritesheet file could not be read (missing, unreadable, or not a
