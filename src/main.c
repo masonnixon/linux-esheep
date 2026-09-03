@@ -1605,35 +1605,40 @@ static void set_sprite_input_region(App *app) {
     GdkWindow *window = gtk_widget_get_window(app->window);
     if (!window) return;
 
-    int tile = esheep_current_tile(&app->state);
-    const EsheepAnimation *anim = &esheep_animations[app->state.animation_id - 1];
-    int sx = (tile % esheep_tiles_x) * app->tile_size;
-    int sy = (tile / esheep_tiles_x) * app->tile_size;
     int rowstride = gdk_pixbuf_get_rowstride(app->sheet);
     int channels = gdk_pixbuf_get_n_channels(app->sheet);
     const guchar *pixels = gdk_pixbuf_get_pixels(app->sheet);
     cairo_region_t *region = cairo_region_create();
 
-    for (int y = 0; y < app->tile_size; y++) {
-        int run_start = -1;
-        for (int x = 0; x <= app->tile_size; x++) {
-            gboolean opaque = FALSE;
-            if (x < app->tile_size) {
-                const guchar *pixel = pixels + (sy + y) * rowstride +
-                                       (sx + x) * channels;
-                opaque = channels < 4 || pixel[3] > 16;
-            }
-            if (opaque && run_start < 0) run_start = x;
-            if (!opaque && run_start >= 0) {
-                int run_width = x - run_start;
-                int region_x = sprite_is_flipped(app, anim) ?
-                               app->tile_size - x : run_start;
-                cairo_rectangle_int_t rect = { app->scene_origin_x + region_x,
-                                               app->scene_origin_y + y + pose_offset_y(anim,
-                                                                            app->state.frame_index),
-                                               run_width, 1 };
-                cairo_region_union_rectangle(region, &rect);
-                run_start = -1;
+    for (int scene_index = 0; scene_index < app->scene.count; scene_index++) {
+        const EsheepRenderTile *scene_tile = &app->scene.tiles[scene_index];
+        if (!scene_tile->visible || scene_tile->opacity <= 0.0 ||
+            scene_tile->tile_id < 0) continue;
+        int tile = scene_tile->tile_id;
+        int tile_sx = (tile % esheep_tiles_x) * app->tile_size;
+        int tile_sy = (tile / esheep_tiles_x) * app->tile_size;
+        for (int y = 0; y < app->tile_size; y++) {
+            int run_start = -1;
+            for (int x = 0; x <= app->tile_size; x++) {
+                gboolean opaque = FALSE;
+                if (x < app->tile_size) {
+                    const guchar *pixel = pixels + (tile_sy + y) * rowstride +
+                                           (tile_sx + x) * channels;
+                    opaque = channels < 4 || pixel[3] > 16;
+                }
+                if (opaque && run_start < 0) run_start = x;
+                if (!opaque && run_start >= 0) {
+                    int run_width = x - run_start;
+                    int region_x = scene_tile->flipped ?
+                                   app->tile_size - x : run_start;
+                    cairo_rectangle_int_t rect = {
+                        app->scene_origin_x + scene_tile->x + region_x,
+                        app->scene_origin_y + scene_tile->y + y,
+                        run_width, 1
+                    };
+                    cairo_region_union_rectangle(region, &rect);
+                    run_start = -1;
+                }
             }
         }
     }
@@ -1856,7 +1861,8 @@ static void update_child_animation(App *app) {
             record->y, app->bounds.width, app->bounds.height,
             app->tile_size, app->tile_size, parent_x, parent_y, 0);
         child_x[slot] = child_base_x + app->child_pose_x[slot];
-        child_y[slot] = child_base_y + app->child_pose_y[slot];
+        child_y[slot] = child_base_y + app->child_pose_y[slot] +
+                        pose_offset_y(canim, frame);
         app->child_render_x[slot] = child_x[slot];
         app->child_render_y[slot] = child_y[slot];
         child_flipped[slot] = sprite_is_flipped(app, canim);
@@ -1889,6 +1895,9 @@ static void update_child_animation(App *app) {
         child_count,
         child_tile_ids, child_x, child_y,
         child_flipped, child_opacity, child_visible);
+    app->scene.tiles[0].y = pose_offset_y(
+        &esheep_animations[app->state.animation_id - 1],
+        app->state.frame_index);
 }
 
 static void accumulate_child_events(App *app, EsheepActor *actor) {
