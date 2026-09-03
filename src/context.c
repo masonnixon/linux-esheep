@@ -88,6 +88,20 @@ void esheep_classify_context(EsheepContext *ctx) {
     ctx->surface_y = ctx->bounds_y + ctx->bounds_height;
 }
 
+const char *esheep_transition_context(const EsheepContext *ctx) {
+    if (!ctx) return "none";
+    if (ctx->surface == ESHEEP_SURFACE_LEFT_EDGE ||
+        ctx->surface == ESHEEP_SURFACE_RIGHT_EDGE)
+        return "vertical";
+    if (ctx->move == ESHEEP_MOVE_FALLING &&
+        ctx->surface == ESHEEP_SURFACE_WINDOW)
+        return "window";
+    if (ctx->move == ESHEEP_MOVE_FALLING &&
+        ctx->surface == ESHEEP_SURFACE_TASKBAR)
+        return "taskbar";
+    return "none";
+}
+
 bool esheep_classify_fall(const EsheepContext *ctx, EsheepFallTarget *out) {
     if (!ctx || !out) return false;
     memset(out, 0, sizeof(*out));

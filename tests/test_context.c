@@ -196,6 +196,24 @@ static void test_unsupported_surface(void) {
     assert(ctx.move == ESHEEP_MOVE_WALKING);
 }
 
+static void test_transition_context_mapping(void) {
+    EsheepContext ctx = {0};
+    assert(strcmp(esheep_transition_context(&ctx), "none") == 0);
+
+    ctx.surface = ESHEEP_SURFACE_LEFT_EDGE;
+    assert(strcmp(esheep_transition_context(&ctx), "vertical") == 0);
+    ctx.surface = ESHEEP_SURFACE_RIGHT_EDGE;
+    assert(strcmp(esheep_transition_context(&ctx), "vertical") == 0);
+
+    ctx.move = ESHEEP_MOVE_FALLING;
+    ctx.surface = ESHEEP_SURFACE_WINDOW;
+    assert(strcmp(esheep_transition_context(&ctx), "window") == 0);
+    ctx.surface = ESHEEP_SURFACE_TASKBAR;
+    assert(strcmp(esheep_transition_context(&ctx), "taskbar") == 0);
+    ctx.surface = ESHEEP_SURFACE_FLOOR;
+    assert(strcmp(esheep_transition_context(&ctx), "none") == 0);
+}
+
 static void test_window_on_monitor_edge(void) {
     fprintf(stderr, "test: window landing on monitor edge\n");
     /* Window spanning the right side of the monitor */
@@ -309,6 +327,7 @@ int main(void) {
     test_window_landing();
     test_taskbar_landing();
     test_unsupported_surface();
+    test_transition_context_mapping();
     test_window_on_monitor_edge();
     test_no_repeated_edge_dispatch();
     test_walking_animation_not_falling();

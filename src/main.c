@@ -1799,13 +1799,7 @@ static gboolean on_tick(gpointer user_data) {
      * this tick's frame step -- e.g. if we're already pinned against the
      * right edge, this tick's context is "vertical" regardless of which
      * direction the current animation is trying to move. */
-    const char *pretick_context = "none";
-    if (ctx.surface == ESHEEP_SURFACE_LEFT_EDGE || ctx.surface == ESHEEP_SURFACE_RIGHT_EDGE)
-        pretick_context = "vertical";
-    else if (ctx.move == ESHEEP_MOVE_FALLING &&
-             (ctx.surface == ESHEEP_SURFACE_WINDOW ||
-              ctx.surface == ESHEEP_SURFACE_TASKBAR))
-        pretick_context = ctx.surface == ESHEEP_SURFACE_WINDOW ? "window" : "taskbar";
+    const char *pretick_context = esheep_transition_context(&ctx);
 
     /* Reset edge dispatch flag when no longer at the edge so the next edge
      * encounter can trigger a fresh reversal. */

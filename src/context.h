@@ -59,6 +59,11 @@ typedef struct {
 
 void esheep_classify_context(EsheepContext *ctx);
 
+/* Convert a classified pre-step context into the transition context used by
+ * the authored interpreter. The returned string is static and remains valid
+ * until the next call. */
+const char *esheep_transition_context(const EsheepContext *ctx);
+
 /* If falling and a window/taskbar is directly below, fill the fall target and
  * return true. Otherwise leave *out untouched and return false. */
 bool esheep_classify_fall(const EsheepContext *ctx, EsheepFallTarget *out);
