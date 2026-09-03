@@ -2750,8 +2750,9 @@ int main(int argc, char **argv) {
         if (strcmp(argv[i], "--review-animation") == 0 && i + 1 < argc) {
             char *end = NULL;
             long value = strtol(argv[++i], &end, 10);
-            if (*end || value < 1) {
-                g_printerr("invalid --review-animation value (use a positive ID)\n");
+            if (*end || value < 0) {
+                g_printerr("invalid --review-animation value (use 0-%d)\n",
+                           esheep_animation_count);
                 return 2;
             }
             review_animation = (int)value;

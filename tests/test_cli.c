@@ -150,6 +150,16 @@ static void test_version_shows_version(void) {
     assert(strstr(buf, "0.1.0") != NULL);
 }
 
+static void test_zero_review_animation_restores_normal(void) {
+    fprintf(stderr, "test: --review-animation 0 selects normal walking\n");
+    if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
+    char *argv[] = { "--review-animation", "0", "--no-window-landing" };
+    char buf[4096] = {0};
+    int rc = run_esheep_capture(argv, 3, "ESHEEP_AUTOQUIT_MS=1",
+                                buf, sizeof(buf));
+    assert(rc == 0);
+}
+
 /* These require GTK init to reach the character/spritesheet validation code. */
 static void test_invalid_character(void) {
     fprintf(stderr, "test: invalid character exits 2 with diagnostic\n");
@@ -287,6 +297,7 @@ int main(void) {
     test_invalid_seed_is_rejected();
     test_invalid_monitor_is_rejected();
     test_version_shows_version();
+    test_zero_review_animation_restores_normal();
     test_invalid_character();
     test_missing_spritesheet();
     test_unreadable_spritesheet();

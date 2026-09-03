@@ -29,7 +29,7 @@ Command-line options are available with `./esheep --help`:
 --tick-ms N         Set the update interval from 10 to 1000 ms.
 --walk-keep N       Set the floor walk keep-walking probability from 0 to 100.
 --seed N            Set a reproducible random seed for all sheep.
---review-animation N Show animation N for transition review.
+--review-animation N Show animation N for transition review (0 = normal walk).
 --list-animations  List active animation IDs and names.
 ```
 
