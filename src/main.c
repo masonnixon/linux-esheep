@@ -32,6 +32,12 @@
 #define ANIM_FALL 5
 #define MAX_OBJECTS 128
 #define MAX_SHEEP 32
+/* Ticks between refresh_objects() X11 rescans per sheep (see on_tick). At
+ * the default 33ms tick, 5 is ~165ms -- responsive enough for window
+ * landing, far enough apart that a multi-sheep group's combined X11 round
+ * trips per tick can't starve GTK's redraw queue the way doing this every
+ * single tick does. */
+#define OBJECT_REFRESH_INTERVAL_TICKS 5
 #define MAX_RUNTIME_CHILDREN (ESHEEP_RENDER_MAX_CHILDREN - 1)
 
 typedef struct {
@@ -115,6 +121,7 @@ struct App {
     gboolean paused;
     gboolean hidden;
     gboolean fullscreen_suppressed;
+    int object_refresh_countdown; /* ticks until the next X11 desktop rescan */
     App *siblings;
     int sibling_count;
     int child_animation_id;  /* active child animation id, or 0 if none */
@@ -1208,7 +1215,9 @@ static void restack_below_occluding_window(App *app, Display *display,
                                            const Window *windows,
                                            unsigned long window_count,
                                            const Window *stacking,
-                                           unsigned long stacking_count) {
+                                           unsigned long stacking_count,
+                                           Atom window_type_atom,
+                                           Atom desktop_type_atom) {
     if (!app || !display || !windows || !stacking || !app->xwindow ||
         window_count == 0 || stacking_count == 0) return;
 
@@ -1237,6 +1246,22 @@ static void restack_below_occluding_window(App *app, Display *display,
             }
         }
         if (own_window) continue;
+
+        /* Desktop-background windows (xfdesktop's per-workspace "Desktop"
+         * windows here) are part of _NET_CLIENT_LIST on this WM and cover
+         * the entire monitor, but sit at the bottom of the stack. Without
+         * this check, a sheep standing anywhere with no real application
+         * window overlapping it still finds an "occluder" -- the wallpaper
+         * -- and gets restacked below it, i.e. below everything, making it
+         * invisible everywhere except when a real window happens to be on
+         * top of it. */
+        x11_bad_window = FALSE;
+        gboolean is_desktop = window_has_type(display, candidate,
+                                              window_type_atom,
+                                              desktop_type_atom);
+        x11_refresh_sync(display);
+        if (x11_bad_window) continue;
+        if (is_desktop) continue;
 
         XWindowAttributes attributes;
         x11_bad_window = FALSE;
@@ -1457,7 +1482,7 @@ static void refresh_objects(App *app) {
         object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
     }
     restack_below_occluding_window(app, display, windows, count, stacking,
-                                   stacking_count);
+                                   stacking_count, window_type, desktop_type);
     x11_refresh_sync(display);
     XSetErrorHandler(x11_previous_error_handler);
     XFree(windows);
@@ -2087,8 +2112,37 @@ static gboolean on_tick(gpointer user_data) {
     }
 
     update_monitor_bounds(app);
-    refresh_objects(app);
+    /* refresh_objects() does several synchronous X11 round trips (an
+     * explicit XSync after nearly every XGetWindowProperty/XQueryTree/
+     * XGetWindowAttributes/XTranslateCoordinates call, for prompt
+     * bad-window detection) for every window in _NET_CLIENT_LIST -- on a
+     * desktop with dozens of real windows open, that easily adds up to a
+     * couple hundred round trips per sheep per call. Doing that every
+     * single tick for every sheep in a multi-sheep group starves the GTK
+     * main loop: it's always got a just-fired, default-priority tick
+     * timeout ready to run, so the idle-priority redraw it queues never
+     * gets serviced and nothing ever actually paints, even though the
+     * window is mapped and every other piece of per-sheep state looks
+     * perfectly normal. Rescanning every few ticks instead of every tick
+     * cuts that cost by the same factor and is imperceptible for window
+     * landing, which only needs to react to windows opening/closing/moving,
+     * not to a 33ms cadence. */
+    if (app->object_refresh_countdown <= 0) {
+        refresh_objects(app);
+        app->object_refresh_countdown = OBJECT_REFRESH_INTERVAL_TICKS;
+    } else {
+        app->object_refresh_countdown--;
+    }
 
+    if (getenv("ESHEEP_DEBUG_LANDING")) {
+        g_printerr("sheep=%d object_count=%d fullscreen_suppressed=%d "
+                   "hidden=%d visible=%d pos=(%d,%d) bounds=(%d,%d,%d,%d)\n",
+                   app->ordinal, app->object_count, app->fullscreen_suppressed,
+                   app->hidden, gtk_widget_get_visible(app->window),
+                   app->pos_x, app->pos_y,
+                   app->bounds.x, app->bounds.y, app->bounds.width,
+                   app->bounds.height);
+    }
     if (app->fullscreen_suppressed) {
         if (!app->hidden)
             gtk_widget_hide(app->window);

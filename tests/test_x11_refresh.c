@@ -137,14 +137,64 @@ int main(int argc, char **argv) {
     reparented_sheep.pos_y = 180;
     Window candidates[] = { occluding_client };
     Window stacking[] = { occluding_client };
+    Atom window_type_atom = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
+    Atom desktop_type_atom = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DESKTOP",
+                                         False);
     restack_below_occluding_window(&reparented_sheep, display, candidates, 1,
-                                   stacking, 1);
+                                   stacking, 1, window_type_atom,
+                                   desktop_type_atom);
     XSync(display, False);
     assert(root_child_index(display, root, sheep_frame) <
            root_child_index(display, root, occluding_frame));
 
     XDestroyWindow(display, sheep_frame);
     XDestroyWindow(display, occluding_frame);
+    XSync(display, False);
+
+    /* A desktop-background window (xfdesktop's per-workspace "Desktop"
+     * window on this WM, but any _NET_WM_WINDOW_TYPE_DESKTOP window is the
+     * same case) covers the whole monitor and is part of _NET_CLIENT_LIST
+     * on this WM, yet sits at the very bottom of the stack. Without
+     * excluding it, a sheep standing anywhere with no real application
+     * window overlapping it still finds an "occluder" -- the wallpaper --
+     * and gets pushed below it, i.e. below everything, which made a sheep
+     * invisible almost everywhere it could stand. It must never be treated
+     * as an occluder. */
+    Window desktop_sheep_frame = XCreateSimpleWindow(display, root, 100, 100,
+                                                      32, 32, 0, 0, 0);
+    Window desktop_sheep_client = XCreateSimpleWindow(display, desktop_sheep_frame,
+                                                       0, 0, 32, 32, 0, 0, 0);
+    Window desktop_frame = XCreateSimpleWindow(display, root, 0, 0, 1920, 1080,
+                                               0, 0, 0);
+    XChangeProperty(display, desktop_frame, window_type_atom, XA_ATOM, 32,
+                    PropModeReplace, (unsigned char *)&desktop_type_atom, 1);
+    XMapWindow(display, desktop_frame);
+    XMapWindow(display, desktop_sheep_client);
+    XMapWindow(display, desktop_sheep_frame);
+    XRaiseWindow(display, desktop_sheep_frame);
+    XSync(display, False);
+
+    int sheep_index_before = root_child_index(display, root,
+                                              desktop_sheep_frame);
+    int desktop_index_before = root_child_index(display, root, desktop_frame);
+    assert(sheep_index_before > desktop_index_before);
+
+    App desktop_test_sheep = {0};
+    desktop_test_sheep.xwindow = desktop_sheep_client;
+    desktop_test_sheep.tile_size = 32;
+    desktop_test_sheep.pos_x = 100;
+    desktop_test_sheep.pos_y = 100;
+    Window desktop_candidates[] = { desktop_frame };
+    Window desktop_stacking[] = { desktop_frame, desktop_sheep_client };
+    restack_below_occluding_window(&desktop_test_sheep, display,
+                                   desktop_candidates, 1, desktop_stacking, 2,
+                                   window_type_atom, desktop_type_atom);
+    XSync(display, False);
+    assert(root_child_index(display, root, desktop_sheep_frame) >
+           root_child_index(display, root, desktop_frame));
+
+    XDestroyWindow(display, desktop_sheep_frame);
+    XDestroyWindow(display, desktop_frame);
     XSync(display, False);
 
     cleanup_app(&app);
