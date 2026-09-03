@@ -53,7 +53,10 @@ def tile_size(sheet):
 def tile_bbox(sheet, index):
     t = tile_size(sheet)
     c, r = index % COLS, index // COLS
-    return sheet.crop((c * t, r * t, c * t + t, r * t + t)).getbbox()
+    # Visibility is determined by alpha, not RGB. RGB data in transparent
+    # pixels must not make an otherwise empty tile appear populated.
+    tile = sheet.crop((c * t, r * t, c * t + t, r * t + t))
+    return tile.getchannel("A").getbbox()
 
 
 def main():
