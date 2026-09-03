@@ -12,10 +12,10 @@ static const char PACKAGE_XML[] =
     "<spawns><spawn id=\"1\" probability=\"100\"><x>10</x><y>20</y>"
     "<next>1</next></spawn></spawns>"
     "<animations>"
-    "<animation id=\"1\"><name>custom walk</name><start><x>-1</x><y>0</y>"
+    "<animation id=\"1\"><name>custom walk</name><start><x>(imageW+10)/2</x><y>0</y>"
     "<interval>100</interval><offsety>0</offsety><opacity>1</opacity></start>"
     "<end><x>-1</x><y>0</y><interval>100</interval><offsety>0</offsety>"
-    "<opacity>1</opacity></end><sequence repeat=\"0\"><frame>1</frame>"
+    "<opacity>1</opacity></end><sequence repeat=\"Convert(screenW/2,System.Int32)%3\"><frame>1</frame>"
     "<frame>2</frame><next probability=\"100\">2</next><action>flip</action></sequence>"
     "</animation>"
     "<animation id=\"2\"><name>custom idle</name><start><x>0</x><y>0</y>"
@@ -24,7 +24,7 @@ static const char PACKAGE_XML[] =
     "<opacity>1</opacity></end><sequence repeat=\"0\"><frame>3</frame>"
     "<next probability=\"100\">1</next></sequence></animation>"
     "</animations>"
-    "<childs><child animationid=\"1\"><x>0</x><y>0</y><next>2</next></child>"
+    "<childs><child animationid=\"1\"><x>imageX-(imageW/2)</x><y>0</y><next>2</next></child>"
     "<child animationid=\"1\"><x>1</x><y>0</y><next>2</next></child></childs>"
     "</animations>";
 
@@ -44,6 +44,7 @@ int main(void) {
     assert(strcmp(esheep_animations[0].name, "custom walk") == 0);
     assert(esheep_animations[0].frame_count == 2);
     assert(esheep_animations[0].sequence_next_count == 1);
+    assert(strcmp(esheep_animations[0].start.x, "(imageW+10)/2") == 0);
     assert(esheep_animations[0].sequence_next[0].target == 2);
     assert(esheep_animations[0].flip == 1);
     assert(esheep_spawn_count == 1 && esheep_spawns[0].x != NULL);
