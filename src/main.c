@@ -636,6 +636,7 @@ static void print_usage(const char *program) {
     g_print("  --config PATH          Load settings from an INI config file.\n");
     g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
     g_print("  --count N              Spawn N sheep (1-32).\n");
+    g_print("  --monitor N            Start on monitor N (zero-based).\n");
     g_print("  --no-window-landing    Disable window and panel landing.\n");
     g_print("  --allow-conky          Allow landing on Conky.\n");
     g_print("  --x11-fallback         Use XWayland when available.\n");
@@ -2297,6 +2298,7 @@ int main(int argc, char **argv) {
     const char *config_override = NULL;
     guint tick_ms = env_uint("ESHEEP_TICK_MS", TICK_MS, 10, 1000);
     guint count = env_uint("ESHEEP_COUNT", 1, 1, MAX_SHEEP);
+    guint monitor_index = env_uint("ESHEEP_MONITOR", G_MAXUINT, 0, G_MAXUINT);
     guint walk_keep_probability = env_uint("ESHEEP_WALK_KEEP_PROBABILITY",
                                            90, 0, 100);
     guint random_seed = env_uint("ESHEEP_SEED", 0, 1, G_MAXUINT);
@@ -2305,6 +2307,7 @@ int main(int argc, char **argv) {
     gboolean x11_fallback = env_bool("ESHEEP_X11_FALLBACK", FALSE);
     gboolean tick_cli = FALSE;
     gboolean count_cli = FALSE;
+    gboolean monitor_cli = FALSE;
     gboolean spawn_cli = FALSE;
     gboolean window_landing_cli = FALSE;
     gboolean exclude_conky_cli = FALSE;
@@ -2348,6 +2351,17 @@ int main(int argc, char **argv) {
             }
             count = (guint)parsed;
             count_cli = TRUE;
+            continue;
+        }
+        if (strcmp(argv[i], "--monitor") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            unsigned long long value = strtoull(argv[++i], &end, 10);
+            if (*end || value > G_MAXUINT) {
+                g_printerr("invalid --monitor value (use a non-negative index)\n");
+                return 2;
+            }
+            monitor_index = (guint)value;
+            monitor_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
@@ -2488,6 +2502,11 @@ int main(int argc, char **argv) {
             g_key_file_has_key(config, "esheep", "seed", NULL)) {
             gint64 value = g_key_file_get_int64(config, "esheep", "seed", NULL);
             if (value > 0 && value <= G_MAXUINT) random_seed = (guint)value;
+        }
+        if (!monitor_cli && !getenv("ESHEEP_MONITOR") &&
+            g_key_file_has_key(config, "esheep", "monitor", NULL)) {
+            gint64 value = g_key_file_get_int64(config, "esheep", "monitor", NULL);
+            if (value >= 0 && value <= G_MAXUINT) monitor_index = (guint)value;
         }
         if (!window_landing_cli && !getenv("ESHEEP_WINDOW_LANDING") &&
             g_key_file_has_key(config, "esheep", "window_landing", NULL))
@@ -2643,16 +2662,39 @@ int main(int argc, char **argv) {
      * just looks like the app did nothing. */
     GdkRectangle initial_bounds = {0};
     gboolean have_initial_bounds = FALSE;
-    GdkSeat *seat = gdk_display_get_default_seat(display);
-    if (seat) {
-        GdkDevice *pointer = gdk_seat_get_pointer(seat);
-        if (pointer) {
-            GdkScreen *pointer_screen;
-            int px, py;
-            gdk_device_get_position(pointer, &pointer_screen, &px, &py);
-            (void)pointer_screen;
-            have_initial_bounds = select_monitor_workarea(display, NULL, px, py,
-                                                          0, &initial_bounds);
+    if (monitor_index != G_MAXUINT) {
+        int monitor_count = gdk_display_get_n_monitors(display);
+        if (monitor_index >= (guint)monitor_count) {
+            g_printerr("monitor index %u is out of range (available: 0-%d)\n",
+                       monitor_index, monitor_count > 0 ? monitor_count - 1 : 0);
+            g_free(config_character);
+            g_free(config_sprite);
+            g_free(config_spawn);
+            g_free(config_package);
+            g_free(default_config_path);
+            g_key_file_free(config);
+            esheep_pet_package_free(runtime_package);
+            g_object_unref(sheet);
+            return 2;
+        }
+        GdkMonitor *monitor = gdk_display_get_monitor(display,
+                                                       (gint)monitor_index);
+        if (monitor) {
+            gdk_monitor_get_workarea(monitor, &initial_bounds);
+            have_initial_bounds = TRUE;
+        }
+    } else {
+        GdkSeat *seat = gdk_display_get_default_seat(display);
+        if (seat) {
+            GdkDevice *pointer = gdk_seat_get_pointer(seat);
+            if (pointer) {
+                GdkScreen *pointer_screen;
+                int px, py;
+                gdk_device_get_position(pointer, &pointer_screen, &px, &py);
+                (void)pointer_screen;
+                have_initial_bounds = select_monitor_workarea(display, NULL, px, py,
+                                                              0, &initial_bounds);
+            }
         }
     }
     if (!have_initial_bounds) {

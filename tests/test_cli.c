@@ -119,6 +119,17 @@ static void test_help_shows_usage(void) {
     assert(strstr(buf, "--sprite") != NULL);
     assert(strstr(buf, "--character") != NULL);
     assert(strstr(buf, "--seed") != NULL);
+    assert(strstr(buf, "--monitor") != NULL);
+}
+
+static void test_invalid_monitor_is_rejected(void) {
+    fprintf(stderr, "test: invalid --monitor is rejected\n");
+    if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
+    char *argv[] = { "--monitor", "999999", "--no-window-landing" };
+    char buf[4096] = {0};
+    int status = run_esheep_capture(argv, 3, NULL, buf, sizeof(buf));
+    assert(status == 2);
+    assert(strstr(buf, "monitor index") != NULL);
 }
 
 static void test_invalid_seed_is_rejected(void) {
@@ -274,6 +285,7 @@ int main(void) {
 
     test_help_shows_usage();
     test_invalid_seed_is_rejected();
+    test_invalid_monitor_is_rejected();
     test_version_shows_version();
     test_invalid_character();
     test_missing_spritesheet();

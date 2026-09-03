@@ -22,6 +22,7 @@ Command-line options are available with `./esheep --help`:
 --spawn window      Start on a visible application window.
 --spawn random      Use the authored weighted spawn points.
 --count N            Spawn N independent sheep (1-32).
+--monitor N          Start on monitor N (zero-based); pointer monitor by default.
 --no-window-landing Disable window and panel landing.
 --allow-conky       Allow Conky as a landing surface.
 --x11-fallback      Use XWayland when available.
@@ -51,6 +52,7 @@ character=sheep
 spritesheet=/path/to/spritesheet.png
 package=/path/to/animations.xml
 count=2
+monitor=0
 spawn=random
 tick_ms=33
 walk_keep_probability=90
@@ -74,6 +76,8 @@ Runtime settings can be overridden with environment variables:
 - `ESHEEP_SPAWN=window`: start on a visible application window instead of
   the default monitor bottom.
 - `ESHEEP_COUNT`: number of sheep to spawn, from 1 to 32.
+- `ESHEEP_MONITOR`: zero-based startup monitor index; by default the pointer's
+  monitor is used.
 - `ESHEEP_WALK_KEEP_PROBABILITY`: floor walk probability for repeating the
   walking behavior. The original value is 90. Lower it to see other floor
   behaviors more often.
