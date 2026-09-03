@@ -112,6 +112,7 @@ struct App {
     int child_animation_ids[MAX_RUNTIME_CHILDREN];
     int child_frame_indices[MAX_RUNTIME_CHILDREN];
     int child_elapsed_ms_values[MAX_RUNTIME_CHILDREN];
+    EsheepState child_states[MAX_RUNTIME_CHILDREN];
     int scene_origin_x;
     int scene_origin_y;
 };
@@ -834,6 +835,7 @@ static void cleanup_app(App *app) {
     memset(app->child_frame_indices, 0, sizeof(app->child_frame_indices));
     memset(app->child_elapsed_ms_values, 0,
            sizeof(app->child_elapsed_ms_values));
+    memset(app->child_states, 0, sizeof(app->child_states));
     esheep_renderer_init(&app->scene, app->tile_size, app->tile_size);
     app->cleaned_up = TRUE;
 }
@@ -1502,6 +1504,8 @@ static void sync_scene_window(App *app) {
         gtk_window_resize(GTK_WINDOW(app->window), width, height);
 }
 
+static int frame_interval(const EsheepAnimation *anim, int frame_index)
+    __attribute__((unused));
 static int frame_interval(const EsheepAnimation *anim, int frame_index) {
     if (anim->frame_count <= 1) return anim->start.interval_ms;
     double progress = (double)frame_index / (double)(anim->frame_count - 1);
@@ -1558,12 +1562,22 @@ static void update_child_animation(App *app) {
             record->next < 1 || record->next > esheep_animation_count)
             continue;
         int slot = child_count++;
-        const EsheepAnimation *canim = &esheep_animations[record->next - 1];
-        app->child_animation_ids[slot] = record->next;
-        int frame = previous_child_ids[slot] == record->next ?
-                    app->child_frame_indices[slot] : 0;
-        if (previous_child_ids[slot] != record->next)
+        if (previous_child_ids[slot] != record->next) {
+            esheep_init(&app->child_states[slot], record->next);
+            esheep_set_environment(&app->child_states[slot],
+                                   app->bounds.width, app->bounds.height,
+                                   app->tile_size, app->tile_size);
+            if (slot == 0 && app->child_frame_index > 0 &&
+                app->child_animation_id == record->next) {
+                app->child_states[slot].frame_index = app->child_frame_index;
+            }
             app->child_elapsed_ms_values[slot] = 0;
+        }
+        int cid = app->child_states[slot].animation_id;
+        if (cid < 1 || cid > esheep_animation_count) cid = record->next;
+        app->child_animation_ids[slot] = cid;
+        const EsheepAnimation *canim = &esheep_animations[cid - 1];
+        int frame = app->child_states[slot].frame_index;
         if (frame < 0 || frame >= canim->frame_count) frame = 0;
         child_tile_ids[slot] = canim->frames[frame];
         child_x[slot] = child_local_coordinate(app, record->x, 0);
@@ -1590,6 +1604,12 @@ static void advance_child_animation(App *app, int dt_ms) {
      * App directly (including older integrations and regression fixtures). */
     if (app->child_animation_ids[0] == 0 && app->child_animation_id > 0) {
         app->child_animation_ids[0] = app->child_animation_id;
+        esheep_init(&app->child_states[0], app->child_animation_id);
+        esheep_set_environment(&app->child_states[0], app->bounds.width,
+                               app->bounds.height, app->tile_size,
+                               app->tile_size);
+        app->child_states[0].frame_index = app->child_frame_index;
+        app->child_states[0].elapsed_ms = app->child_elapsed_ms;
         app->child_frame_indices[0] = app->child_frame_index;
         app->child_elapsed_ms_values[0] = app->child_elapsed_ms;
     }
@@ -1597,21 +1617,10 @@ static void advance_child_animation(App *app, int dt_ms) {
         int animation_id = app->child_animation_ids[slot];
         if (animation_id < 1 || animation_id > esheep_animation_count)
             continue;
-        const EsheepAnimation *child_anim = &esheep_animations[animation_id - 1];
-        app->child_elapsed_ms_values[slot] += dt_ms;
-        while (app->child_elapsed_ms_values[slot] > 0 &&
-               app->child_frame_indices[slot] < child_anim->frame_count) {
-            int interval = frame_interval(child_anim,
-                                           app->child_frame_indices[slot]);
-            if (interval <= 0 || app->child_elapsed_ms_values[slot] < interval)
-                break;
-            app->child_elapsed_ms_values[slot] -= interval;
-            app->child_frame_indices[slot]++;
-        }
-        if (app->child_frame_indices[slot] >= child_anim->frame_count) {
-            app->child_frame_indices[slot] = 0;
-            app->child_elapsed_ms_values[slot] = 0;
-        }
+        esheep_tick(&app->child_states[slot], dt_ms, "none", rand() % 100);
+        app->child_animation_ids[slot] = app->child_states[slot].animation_id;
+        app->child_frame_indices[slot] = app->child_states[slot].frame_index;
+        app->child_elapsed_ms_values[slot] = app->child_states[slot].elapsed_ms;
     }
     app->child_animation_id = app->child_animation_ids[0];
     app->child_frame_index = app->child_frame_indices[0];
