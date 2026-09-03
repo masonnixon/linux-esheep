@@ -136,10 +136,10 @@ gaps are listed below.
   package, count, monitor, spawn, landing, Conky, tick, and walk-probability
   settings. Parent-child review remains available through the indexed review
   tool.
-- Sound effects and authored sound playback. No audio assets or sound tags
-  are present in the current source, and no supported playback library is
-  available in the build environment, so this remains a separate integration
-  phase rather than a safe local implementation.
+- Sound effects and authored sound playback. No audio assets or sound tags are
+  present in the current or upstream source. PulseAudio development support is
+  available locally, but there is no authored content to map to animation
+  events; this remains a separate integration phase.
 - Update and broader application-management behavior from the original
   desktop application.
 
