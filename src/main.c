@@ -604,6 +604,20 @@ static int eval_child_expression(const char *expr, int area_width, int area_heig
     long value = strtol(expr, &end, 10);
     if (end != expr && *end == '\0') return (int)value;
 
+    /* Custom packages may express child placement as a scale of the parent
+     * image dimensions. Keep this evaluator aligned with the package
+     * validator and with pose_value(), rather than silently treating those
+     * valid expressions as zero. */
+    double factor;
+    if (sscanf(expr, "-imageW*%lf", &factor) == 1)
+        return (int)(-image_width * factor - 0.5);
+    if (sscanf(expr, "imageW*%lf", &factor) == 1)
+        return (int)(image_width * factor + 0.5);
+    if (sscanf(expr, "-imageH*%lf", &factor) == 1)
+        return (int)(-image_height * factor - 0.5);
+    if (sscanf(expr, "imageH*%lf", &factor) == 1)
+        return (int)(image_height * factor + 0.5);
+
     /* A negative image width is relative to the parent image. */
     if (strcmp(expr, "-imageW") == 0) return image_x - image_width;
     if (strcmp(expr, "-imageW-8") == 0) return image_x - image_width - 8;
@@ -1501,11 +1515,11 @@ static int pose_value(const char *expression, int image_width, int image_height)
 
     double factor;
     if (sscanf(expression, "-imageW*%lf", &factor) == 1)
-        return (int)(-image_width * factor + 0.5);
+        return (int)(-image_width * factor - 0.5);
     if (sscanf(expression, "imageW*%lf", &factor) == 1)
         return (int)(image_width * factor + 0.5);
     if (sscanf(expression, "-imageH*%lf", &factor) == 1)
-        return (int)(-image_height * factor + 0.5);
+        return (int)(-image_height * factor - 0.5);
     if (sscanf(expression, "imageH*%lf", &factor) == 1)
         return (int)(image_height * factor + 0.5);
     return 0;

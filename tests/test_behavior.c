@@ -102,6 +102,16 @@ static void test_black_sheep_child_local_offset(void) {
     assert(app.scene.tiles[1].y == local_y);
 }
 
+/* Custom package child expressions use the same image-dimension factors as
+ * authored pose expressions. */
+static void test_scaled_child_expression(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+
+    assert(child_local_coordinate(&app, "imageW*0.5", 0) == 20);
+    assert(child_local_coordinate(&app, "-imageH*0.5", 0) == -20);
+}
+
 /* Test 5: Eating animation (26) flower child placement. */
 static void test_eating_flower_child_offset(void) {
     App app;
@@ -695,6 +705,9 @@ int main(void) {
     test_black_sheep_child_local_offset();
     printf("  test_black_sheep_child_local_offset: PASSED\n");
 
+    test_scaled_child_expression();
+    printf("  test_scaled_child_expression: PASSED\n");
+
     test_eating_flower_child_offset();
     printf("  test_eating_flower_child_offset: PASSED\n");
 
@@ -776,6 +789,6 @@ int main(void) {
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
 
-    printf("\nAll 31 behavior regression tests PASSED\n");
+    printf("\nAll 32 behavior regression tests PASSED\n");
     return 0;
 }
