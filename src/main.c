@@ -2381,9 +2381,8 @@ int main(int argc, char **argv) {
         if (strcmp(argv[i], "--review-animation") == 0 && i + 1 < argc) {
             char *end = NULL;
             long value = strtol(argv[++i], &end, 10);
-            if (*end || value < 1 || value > esheep_animation_count) {
-                g_printerr("invalid --review-animation value (use 1-%d)\n",
-                           esheep_animation_count);
+            if (*end || value < 1) {
+                g_printerr("invalid --review-animation value (use a positive ID)\n");
                 return 2;
             }
             review_animation = (int)value;
@@ -2392,9 +2391,8 @@ int main(int argc, char **argv) {
         if (strcmp(argv[i], "--review-parent") == 0 && i + 1 < argc) {
             char *end = NULL;
             long value = strtol(argv[++i], &end, 10);
-            if (*end || value < 1 || value > esheep_animation_count) {
-                g_printerr("invalid --review-parent value (use 1-%d)\n",
-                           esheep_animation_count);
+            if (*end || value < 1) {
+                g_printerr("invalid --review-parent value (use a positive ID)\n");
                 return 2;
             }
             review_parent = (int)value;
@@ -2491,6 +2489,17 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (runtime_package) esheep_pet_package_activate(runtime_package);
+
+    if ((review_animation > 0 && review_animation > esheep_animation_count) ||
+        (review_parent > 0 && review_parent > esheep_animation_count)) {
+        g_printerr("review animation ID is outside the active graph (use 1-%d)\n",
+                   esheep_animation_count);
+        esheep_pet_package_free(runtime_package);
+        g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+        g_free(config_package); g_free(default_config_path);
+        g_key_file_free(config);
+        return 2;
+    }
 
     if (list_animations) {
         for (int i = 0; i < esheep_animation_count; i++)
