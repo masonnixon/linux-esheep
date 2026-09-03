@@ -54,11 +54,13 @@ transparent windows:
 | 28 | 31 | Black-sheep companion |
 
 The current renderer supports all authored child records for a parent, with an
-independent frame clock per child slot. Child sequence, border, gravity, and
-child-of-child transitions are not yet interpreted by the GTK runtime. A child
-is still tied to the lifetime of its immediate parent animation. This differs
-from the upstream model, which allows child-created subchildren and richer
-child lifetimes.
+independent frame clock per child slot. The platform-independent actor layer
+also supports recursively linked child trees, but the GTK runtime still
+materializes only the authored direct-child records and does not yet apply
+child-specific sequence, border, or gravity transitions. A child is still tied
+to the lifetime of its immediate parent animation. This differs from the
+upstream model, which allows child-created subchildren and richer child
+lifetimes.
 
 Child placement and stacking have received targeted fixes, but there is no
 automated screenshot or geometry test proving that every child remains beside
@@ -101,12 +103,13 @@ correct runtime context.
 
 ### Desktop integration
 
-- Native Wayland surface and window-discovery support.
-- Seamless movement across monitor boundaries. Sheep currently use one
-  monitor workarea at a time.
+- Native Wayland surface and window discovery support.
+- Continuous floor traversal across arbitrary monitor layouts. X11 seam
+  crossing is implemented for adjacent workareas, but gaps, differing vertical
+  origins, and non-rectangular desktop layouts still need policy and
+  integration coverage.
 - Sheep-to-sheep landing and richer collision policy. Basic overlap resolution
   and spawn spacing are implemented.
-- Fullscreen application detection and temporary backgrounding.
 - Complete handling for unusual panel placement and compositor stacking.
 - A full animation chooser and richer settings for character/package
   selection. The runtime settings dialog, tray About view, and indexed review

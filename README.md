@@ -157,8 +157,10 @@ at login; `make uninstall-autostart` removes that opt-in entry.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
-- Sheep currently use the monitor workarea containing their center as their
-  walking bounds. They do not cross monitor seams as one continuous floor.
+- Sheep use global monitor workareas and can cross a seam when an adjacent
+  monitor continues the floor. Walking remains constrained to the workareas;
+  gaps and differing vertical arrangements are not treated as continuous
+  floor.
 - Multiple sheep have independent state, spawn spacing, and basic overlap
   resolution; they do not yet land on one another as supporting surfaces.
 
