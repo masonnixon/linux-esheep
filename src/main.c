@@ -1033,14 +1033,19 @@ static int stacking_order(const Window *stacking, unsigned long count, Window wi
 }
 
 static void refresh_objects(App *app) {
-    app->object_count = 0;
-    app->fullscreen_suppressed = FALSE;
-    if (!app->window_landing) return;
+    if (!app->window_landing) {
+        app->object_count = 0;
+        app->fullscreen_suppressed = FALSE;
+        return;
+    }
     GdkDisplay *gdk_display = gtk_widget_get_display(app->window);
     if (!GDK_IS_X11_DISPLAY(gdk_display)) return;
 
     Display *display = gdk_x11_display_get_xdisplay(gdk_display);
     Window root = DefaultRootWindow(display);
+    DesktopObject refreshed_objects[MAX_OBJECTS];
+    int refreshed_count = 0;
+    gboolean refreshed_fullscreen_suppressed = FALSE;
     /* Xlib reports invalid or disappearing client windows asynchronously.
      * Install the scoped handler before even querying the root properties so
      * a stale client-list entry cannot escape into GTK's fatal handler. */
@@ -1078,13 +1083,19 @@ static void refresh_objects(App *app) {
                                 &format, &stacking_count, &bytes_after,
                                 (unsigned char **)&stacking);
     x11_refresh_sync(display);
+    if (x11_bad_window) {
+        if (stacking) XFree(stacking);
+        XFree(windows);
+        XSetErrorHandler(x11_previous_error_handler);
+        return;
+    }
     if (result != Success || !stacking || format != 32) {
         if (stacking) XFree(stacking);
         stacking = NULL;
         stacking_count = 0;
     }
 
-    for (unsigned long i = 0; i < count && app->object_count < MAX_OBJECTS; i++) {
+    for (unsigned long i = 0; i < count && refreshed_count < MAX_OBJECTS; i++) {
         x11_bad_window = FALSE;
         gboolean own_window = windows[i] == app->xwindow;
         for (int sibling = 0; !own_window && sibling < app->sibling_count;
@@ -1110,7 +1121,7 @@ static void refresh_objects(App *app) {
                     };
                     if (fullscreen_covers_monitor(&app->bounds,
                                                   &fullscreen_rect))
-                        app->fullscreen_suppressed = TRUE;
+                        refreshed_fullscreen_suppressed = TRUE;
                 }
             }
             x11_refresh_sync(display);
@@ -1156,7 +1167,7 @@ static void refresh_objects(App *app) {
         x11_refresh_sync(display);
         if (x11_bad_window || !translated) continue;
 
-        DesktopObject *object = &app->objects[app->object_count++];
+        DesktopObject *object = &refreshed_objects[refreshed_count++];
         object->rect = (GdkRectangle){ root_x, root_y, geometry.width,
                                        geometry.height };
         object->taskbar = FALSE;
@@ -1166,6 +1177,10 @@ static void refresh_objects(App *app) {
     XSetErrorHandler(x11_previous_error_handler);
     XFree(windows);
     if (stacking) XFree(stacking);
+    memcpy(app->objects, refreshed_objects,
+           (size_t)refreshed_count * sizeof(refreshed_objects[0]));
+    app->object_count = refreshed_count;
+    app->fullscreen_suppressed = refreshed_fullscreen_suppressed;
 }
 
 static void build_context(App *app, EsheepContext *ctx) {
