@@ -91,6 +91,18 @@ static void test_floor_landing(void) {
     /* Floor is at bounds_y + bounds_height = 1080 */
     /* Sheep should land at 1080 - 40 = 1040 */
     assert(new_y == 1040);
+
+    /* The contact classifier must honor the same disabled-window setting. */
+    EsheepSurfaceObject window = {
+        .x = 50, .y = 200, .width = 400, .height = 300,
+        .stack_order = 5, .taskbar = false
+    };
+    ctx.object_count = 1;
+    ctx.objects = &window;
+    ctx.pos_x = 100;
+    ctx.pos_y = 160;
+    esheep_classify_context(&ctx);
+    assert(ctx.surface == ESHEEP_SURFACE_FLOOR);
 }
 
 static void test_window_landing(void) {

@@ -13,6 +13,15 @@ void esheep_classify_context(EsheepContext *ctx) {
     /* When airborne (falling), prioritize landing surfaces over edges.
      * A falling sheep must continue falling until it hits a collision. */
     if (ctx->move == ESHEEP_MOVE_FALLING) {
+        /* Ordinary falling honors the window-landing setting. An explicit
+         * drag/drop landing remains enabled by its separate opt-in flag. Keep
+         * this consistent with the detailed fall-target query because the GTK
+         * tick loop uses this classifier before stepping. */
+        if (!ctx->window_landing_enabled && !ctx->drop_landing_enabled) {
+            ctx->surface = ESHEEP_SURFACE_FLOOR;
+            ctx->surface_y = ctx->bounds_y + ctx->bounds_height;
+            return;
+        }
         int bottom = ctx->pos_y + ctx->image_height;
         int top = ctx->pos_y;
         int best_stack_order = -1;
