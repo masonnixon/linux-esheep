@@ -162,6 +162,8 @@ at login; `make uninstall-autostart` removes that opt-in entry.
   monitor.
 - Screen-edge and detected-window-side climbing with top-surface traversal.
 - Mouse drag and a right-click pet menu with pause, hide, bring-to-front, and quit actions.
+- Double-clicking a single sheep exits it; in a multisheep group, double-click
+  triggers the authored jump animation.
 - Optional start-paused and start-hidden via the `ESHEEP_PAUSED` and `ESHEEP_HIDDEN`
   environment variables.
 - Multiple independent sheep with per-sheep movement and drag state.

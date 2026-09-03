@@ -696,6 +696,25 @@ static void test_group_animation_review_selection(void) {
     assert(!group_set_review_animation(&group, esheep_animation_count + 1));
 }
 
+static void test_double_click_closes_only_single_pet(void) {
+    App app;
+    GdkEventButton event;
+    memset(&app, 0, sizeof(app));
+    memset(&event, 0, sizeof(event));
+    event.button = 1;
+    event.type = GDK_2BUTTON_PRESS;
+
+    app.sibling_count = 1;
+    assert(closes_single_pet_on_double_click(&app, &event));
+
+    app.sibling_count = 2;
+    assert(!closes_single_pet_on_double_click(&app, &event));
+
+    app.sibling_count = 1;
+    app.dragging = TRUE;
+    assert(!closes_single_pet_on_double_click(&app, &event));
+}
+
 int main(void) {
     printf("Running behavior regression tests...\n");
 
@@ -800,6 +819,9 @@ int main(void) {
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
 
-    printf("\nAll 33 behavior regression tests PASSED\n");
+    test_double_click_closes_only_single_pet();
+    printf("  test_double_click_closes_only_single_pet: PASSED\n");
+
+    printf("\nAll 34 behavior regression tests PASSED\n");
     return 0;
 }

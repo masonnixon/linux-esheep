@@ -2604,12 +2604,21 @@ static void show_pet_menu(App *app, GdkEventButton *event) {
     gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
 }
 
+static gboolean closes_single_pet_on_double_click(const App *app,
+                                                  const GdkEventButton *event) {
+    return app && event && event->button == 1 &&
+           event->type == GDK_2BUTTON_PRESS &&
+           !app->dragging && app->sibling_count == 1;
+}
+
 static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data) {
     App *app = user_data;
     (void)widget;
 
-    if (event->button == 1 && event->type == GDK_2BUTTON_PRESS && !app->dragging) {
-        esheep_init(&app->state, 25); /* authored jump animation */
+    if (closes_single_pet_on_double_click(app, event)) {
+        gtk_main_quit();
+    } else if (event->button == 1 && event->type == GDK_2BUTTON_PRESS && !app->dragging) {
+        esheep_init(&app->state, 25); /* authored jump animation for groups */
     } else if (event->button == 1) {
         app->dragging = TRUE;
         app->drag_grab_x = (int)event->x;
