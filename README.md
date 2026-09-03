@@ -199,7 +199,7 @@ path always takes priority.
 **Package boundary**: a custom spritesheet uses the same 16×11 tile grid
 (176 tiles, 640×440 for sheep, 1280×880 for penguin). A custom behavior
 package loaded with `--package` is validated against the runtime expression
-vocabulary and supplies its own grid dimensions; provide a matching
+grammar and supplies its own grid dimensions; provide a matching
 spritesheet with `--sprite` or `spritesheet=`. Use
 `tests/test_spritesheet.py` as a reference for frame-coverage rules.
 
@@ -207,7 +207,7 @@ Custom characters (any `--character` value other than `sheep` or `penguin`) are
 accepted at the CLI and env/config level. A package can be selected with
 `--package PATH`, `ESHEEP_PACKAGE`, or `package=` in the config file. Package
 loading fails before window creation when the XML graph is malformed or uses
-unsupported expressions.
+uses invalid expressions.
 
 Exit codes from `esheep` relating to spritesheet loading:
 - `1` — spritesheet file could not be read (missing, unreadable, or not a

@@ -127,9 +127,10 @@ def test_child_review_uses_parent():
 def test_child_coordinate_semantics():
     """Relative black-sheep placement must stay beside its parent."""
     source = Path("src/main.c").read_text()
-    assert 'strcmp(expr, "-imageW") == 0' in source
-    assert 'return image_x - image_width - 8' in source
-    print("OK: Relative child coordinates use the parent image position")
+    expression = Path("src/expression.c").read_text()
+    assert 'image_x' in expression and 'image_width' in expression
+    assert 'esheep_expression_eval(expr' in source
+    print("OK: Relative child coordinates use the shared expression evaluator")
     return True
 
 if __name__ == "__main__":

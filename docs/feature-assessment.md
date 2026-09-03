@@ -123,7 +123,9 @@ gaps are listed below.
   complete.
 - Child movement, opacity, flipping, and lifetime are partly authored-driven;
   richer action variants and full lifetime semantics remain incomplete.
-- Runtime support for every authored expression without special-case parsing.
+- Shared arithmetic expression parsing and validation now cover literals,
+  variables, operators, parentheses, random values, and `Convert` expressions
+  for poses, spawns, and child coordinates.
 - Visual regression coverage for all 54 animations and all 96 reviewable
   transitions.
 

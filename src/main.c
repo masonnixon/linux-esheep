@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include "actor.h"
 #include "context.h"
+#include "expression.h"
 #include "interpreter.h"
 #include "pet_package.h"
 #include "renderer.h"
@@ -559,84 +560,24 @@ static guint clamp_sheep_count(guint requested) {
 }
 
 static int eval_spawn_expression(const char *expr, int area_width, int area_height,
-                                  int image_width, int image_height, int roll_0_99) {
-    if (!expr || !expr[0]) return 0;
-
-    /* Simple integer literal */
-    char *end = NULL;
-    long value = strtol(expr, &end, 10);
-    if (end != expr && *end == '\0') return (int)value;
-
-    /* screenW (width/area_width) with optional offset */
-    if (strcmp(expr, "screenW") == 0) return area_width;
-    if (strcmp(expr, "screenW+10") == 0) return area_width + 10;
-
-    /* areaH with offset */
-    if (strcmp(expr, "areaH-imageH") == 0) return area_height - image_height;
-    if (strcmp(expr, "areaH/2-imageH") == 0) return area_height / 2 - image_height;
-    if (strcmp(expr, "areaH/2") == 0) return area_height / 2;
-
-    /* -imageH, -imageH-N */
-    if (strcmp(expr, "-imageH-20") == 0) return -image_height - 20;
-
-    /* random*(screenW-imageW-50)/100+25 - spawn 2 y */
-    if (strstr(expr, "random*(screenW-imageW-50)/100+25")) {
-        int width = area_width - image_width - 50;
-        if (width > 0)
-            return (int)((roll_0_99 * width) / 100.0 + 0.5) + 25;
-        return 25;
-    }
-
-    /* areaH/2-(randS*areaH/2)/120-imageH - spawn 3 y */
-    if (strcmp(expr, "areaH/2-(randS*areaH/2)/120-imageH") == 0)
-        return area_height / 2 - (roll_0_99 * area_height / 2) / 120 - image_height;
-
-    return 0;
+                                 int image_width, int image_height, int roll_0_99) {
+    EsheepExpressionContext context = {
+        area_width, area_height, area_width, area_height,
+        image_width, image_height, 0, 0, roll_0_99
+    };
+    double value = 0.0;
+    return esheep_expression_eval(expr, &context, &value) ? (int)value : 0;
 }
 
 static int eval_child_expression(const char *expr, int area_width, int area_height,
                                  int image_width, int image_height, int image_x, int image_y,
                                  int roll_0_99) {
-    if (!expr || !expr[0]) return 0;
-
-    /* Simple integer literal */
-    char *end = NULL;
-    long value = strtol(expr, &end, 10);
-    if (end != expr && *end == '\0') return (int)value;
-
-    /* Custom packages may express child placement as a scale of the parent
-     * image dimensions. Keep this evaluator aligned with the package
-     * validator and with pose_value(), rather than silently treating those
-     * valid expressions as zero. */
-    double factor;
-    if (sscanf(expr, "-imageW*%lf", &factor) == 1)
-        return (int)(-image_width * factor - 0.5);
-    if (sscanf(expr, "imageW*%lf", &factor) == 1)
-        return (int)(image_width * factor + 0.5);
-    if (sscanf(expr, "-imageH*%lf", &factor) == 1)
-        return (int)(-image_height * factor - 0.5);
-    if (sscanf(expr, "imageH*%lf", &factor) == 1)
-        return (int)(image_height * factor + 0.5);
-
-    /* A negative image width is relative to the parent image. */
-    if (strcmp(expr, "-imageW") == 0) return image_x - image_width;
-    if (strcmp(expr, "-imageW-8") == 0) return image_x - image_width - 8;
-    if (strcmp(expr, "imageY") == 0) return image_y;
-    if (strcmp(expr, "imageX") == 0) return image_x;
-
-    /* imageX - imageW*0.9 (flower child at 26) */
-    if (strcmp(expr, "imageX-imageW*0.9") == 0) return image_x - (int)(image_width * 0.9);
-
-    /* areaH - imageH */
-    if (strcmp(expr, "areaH-imageH") == 0) return area_height - image_height;
-
-    /* Complex spawn 21 child: screenW+10-areaH/2-(randS*areaH/2)/120 */
-    if (strcmp(expr, "screenW+10-areaH/2-(randS*areaH/2)/120") == 0) {
-        return area_width + 10 - area_height / 2 - (roll_0_99 * area_height / 2) / 120;
-    }
-
-    /* Fall back to spawn expression handler */
-    return eval_spawn_expression(expr, area_width, area_height, image_width, image_height, roll_0_99);
+    EsheepExpressionContext context = {
+        area_width, area_height, area_width, area_height,
+        image_width, image_height, image_x, image_y, roll_0_99
+    };
+    double value = 0.0;
+    return esheep_expression_eval(expr, &context, &value) ? (int)value : 0;
 }
 
 static int select_spawn_animation(App *app, const EsheepSpawn *spawn) {
@@ -1548,20 +1489,12 @@ static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
 }
 
 static int pose_value(const char *expression, int image_width, int image_height) {
-    char *end = NULL;
-    long integer = strtol(expression, &end, 10);
-    if (end != expression && *end == '\0') return (int)integer;
-
-    double factor;
-    if (sscanf(expression, "-imageW*%lf", &factor) == 1)
-        return (int)(-image_width * factor - 0.5);
-    if (sscanf(expression, "imageW*%lf", &factor) == 1)
-        return (int)(image_width * factor + 0.5);
-    if (sscanf(expression, "-imageH*%lf", &factor) == 1)
-        return (int)(-image_height * factor - 0.5);
-    if (sscanf(expression, "imageH*%lf", &factor) == 1)
-        return (int)(image_height * factor + 0.5);
-    return 0;
+    EsheepExpressionContext context = {
+        image_width, image_height, image_width, image_height,
+        image_width, image_height, 0, 0, 0
+    };
+    double value = 0.0;
+    return esheep_expression_eval(expression, &context, &value) ? (int)value : 0;
 }
 
 static int pose_delta(const App *app, const EsheepAnimation *anim,

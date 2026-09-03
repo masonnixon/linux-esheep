@@ -1,5 +1,6 @@
 #include "pet_package.h"
 #include "animations_data.h"
+#include "expression.h"
 #include "renderer.h"
 #include <errno.h>
 #include <math.h>
@@ -135,60 +136,19 @@ static gboolean parse_double(const char *text, double *out) {
 }
 
 static gboolean valid_integer_or_image_factor(const char *text) {
-    int value;
-    if (parse_int(text, &value)) return TRUE;
-    if (g_str_has_prefix(text, "imageW*") || g_str_has_prefix(text, "imageH*")) {
-        double factor;
-        return parse_double(text + 7, &factor);
-    }
-    if (g_str_has_prefix(text, "-imageW*") || g_str_has_prefix(text, "-imageH*")) {
-        double factor;
-        return parse_double(text + 8, &factor);
-    }
-    return FALSE;
+    return esheep_expression_valid(text);
 }
 
 static gboolean valid_spawn_expression(const char *text) {
-    static const char *const exact[] = {
-        "screenW", "screenW+10", "areaH-imageH", "areaH/2-imageH",
-        "areaH/2", "-imageH-20",
-        "areaH/2-(randS*areaH/2)/120-imageH", NULL
-    };
-    int value;
-    if (parse_int(text, &value)) return TRUE;
-    for (int i = 0; exact[i]; i++)
-        if (strcmp(text, exact[i]) == 0) return TRUE;
-    return text && strcmp(text, "random*(screenW-imageW-50)/100+25") == 0;
+    return esheep_expression_valid(text);
 }
 
 static gboolean valid_repeat_expression(const char *text) {
-    int first, second, offset;
-    char trailing;
-    int value;
-    if (parse_int(text, &value)) return TRUE;
-    if (!text) return FALSE;
-    if (sscanf(text, "random/%d+%d%c", &first, &second, &trailing) == 2)
-        return first > 0;
-    if (sscanf(text, "%d+random/%d%c", &first, &second, &trailing) == 2)
-        return second > 0;
-    if (sscanf(text, "(areaH/2+(randS*areaH/2)/120-imageH-%d)/2%c",
-               &offset, &trailing) == 1)
-        return TRUE;
-    return strcmp(text, "(screenW/2)/30-6") == 0 ||
-           strcmp(text, "24+(Convert(screenW/2,System.Int32)%30)/7") == 0 ||
-           strcmp(text, "25+(Convert(screenW/2,System.Int32)%30)/7") == 0;
+    return esheep_expression_valid(text);
 }
 
 static gboolean valid_child_expression(const char *text) {
-    static const char *const exact[] = {
-        "imageX", "imageY", "-imageW", "-imageW-8",
-        "imageX-imageW*0.9", "areaH-imageH",
-        "screenW+10-areaH/2-(randS*areaH/2)/120", NULL
-    };
-    if (valid_spawn_expression(text)) return TRUE;
-    for (int i = 0; exact[i]; i++)
-        if (strcmp(text, exact[i]) == 0) return TRUE;
-    return FALSE;
+    return esheep_expression_valid(text);
 }
 
 static gboolean child_graph_has_cycle(const EsheepPetPackage *package,
