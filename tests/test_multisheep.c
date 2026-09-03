@@ -53,6 +53,18 @@ static void test_sheep_random_streams_are_independent(void) {
     assert(sheep[0].random_state != sheep[1].random_state);
 }
 
+static void test_monitor_seam_selection(void) {
+    const GdkRectangle monitors[] = {
+        { -1920, 0, 1920, 1080 },
+        { 0, 200, 1280, 880 },
+        { 1280, 0, 1920, 1080 },
+    };
+    assert(select_monitor_index(monitors, 3, &monitors[0], -1900, 500, -1) == 0);
+    assert(select_monitor_index(monitors, 3, &monitors[0], 1, 300, 1) == 1);
+    assert(select_monitor_index(monitors, 3, &monitors[1], 1279, 300, 1) == 1);
+    assert(select_monitor_index(monitors, 3, &monitors[1], 1281, 300, 1) == 2);
+}
+
 static void test_spawn_spacing_on_monitor(void) {
     App sheep[3];
     for (int i = 0; i < 3; i++) {
@@ -228,6 +240,7 @@ static void test_cleanup_is_per_instance(void) {
 int main(void) {
     test_count_bounds();
     test_sheep_random_streams_are_independent();
+    test_monitor_seam_selection();
     test_spawn_spacing_on_monitor();
     test_window_spawn_skips_taskbar_and_overlap();
     test_independent_child_instances();
