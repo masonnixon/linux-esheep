@@ -116,6 +116,7 @@ struct App {
     int child_frame_index;   /* current frame within child animation */
     int child_elapsed_ms;    /* elapsed time for child animation frame */
     int child_animation_ids[MAX_RUNTIME_CHILDREN];
+    int child_parent_animations[MAX_RUNTIME_CHILDREN];
     int child_frame_indices[MAX_RUNTIME_CHILDREN];
     int child_elapsed_ms_values[MAX_RUNTIME_CHILDREN];
     int child_pose_x[MAX_RUNTIME_CHILDREN];
@@ -933,6 +934,8 @@ static void cleanup_app(App *app) {
     app->child_frame_index = 0;
     app->child_elapsed_ms = 0;
     memset(app->child_animation_ids, 0, sizeof(app->child_animation_ids));
+    memset(app->child_parent_animations, 0,
+           sizeof(app->child_parent_animations));
     memset(app->child_frame_indices, 0, sizeof(app->child_frame_indices));
     memset(app->child_elapsed_ms_values, 0,
            sizeof(app->child_elapsed_ms_values));
@@ -1616,8 +1619,11 @@ static void update_child_animation(App *app) {
     bool child_visible[ESHEEP_RENDER_MAX_CHILDREN];
     int child_count = 0;
     int previous_child_ids[MAX_RUNTIME_CHILDREN];
+    int previous_child_parents[MAX_RUNTIME_CHILDREN];
     memcpy(previous_child_ids, app->child_animation_ids,
            sizeof(previous_child_ids));
+    memcpy(previous_child_parents, app->child_parent_animations,
+           sizeof(previous_child_parents));
     gboolean legacy_child_matches = FALSE;
     if (app->child_animation_id == 0 &&
         (app->child_frame_index != 0 || app->child_elapsed_ms != 0)) {
@@ -1662,15 +1668,19 @@ static void update_child_animation(App *app) {
                 record->next < 1 || record->next > esheep_animation_count)
                 continue;
             int slot = child_count++;
-        if (previous_child_ids[slot] != record->next) {
+        if (previous_child_ids[slot] != record->next ||
+            previous_child_parents[slot] != parent_animation) {
             esheep_init(&app->child_states[slot], record->next);
             esheep_set_environment(&app->child_states[slot],
                                    app->bounds.width, app->bounds.height,
                                    app->tile_size, app->tile_size);
             if (slot == 0 && app->child_frame_index > 0 &&
-                app->child_animation_id == record->next) {
+                app->child_animation_id == record->next &&
+                (previous_child_parents[0] == 0 ||
+                 previous_child_parents[0] == parent_animation)) {
                 app->child_states[slot].frame_index = app->child_frame_index;
             }
+            app->child_frame_indices[slot] = 0;
             app->child_elapsed_ms_values[slot] = 0;
             app->child_pose_x[slot] = 0;
             app->child_pose_y[slot] = 0;
@@ -1678,6 +1688,7 @@ static void update_child_animation(App *app) {
         int cid = app->child_states[slot].animation_id;
         if (cid < 1 || cid > esheep_animation_count) cid = record->next;
         app->child_animation_ids[slot] = cid;
+        app->child_parent_animations[slot] = parent_animation;
         const EsheepAnimation *canim = &esheep_animations[cid - 1];
         int frame = app->child_states[slot].frame_index;
         if (frame < 0 || frame >= canim->frame_count) frame = 0;
