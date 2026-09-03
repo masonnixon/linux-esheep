@@ -281,6 +281,26 @@ static void test_child_scene_is_removed_when_parent_leaves_record(void) {
     assert(app.child_animation_ids[0] == 0);
 }
 
+static void test_child_sequence_transition_survives_rebuild(void) {
+    App app;
+    init_stub_app(&app, 0, 0, 640, 360, 40);
+
+    esheep_init(&app.state, 21);
+    update_child_animation(&app);
+    assert(app.child_authored_animations[0] == 23);
+
+    /* Simulate the child having completed its own authored sequence. A scene
+     * rebuild must retain that current state while the parent record remains
+     * 21 -> 23. */
+    app.child_actors[0].state.animation_id = 24;
+    app.child_actors[0].state.frame_index = 12;
+    app.child_animation_ids[0] = 24;
+    update_child_animation(&app);
+    assert(app.child_authored_animations[0] == 23);
+    assert(app.child_actors[0].state.animation_id == 24);
+    assert(app.scene.tiles[1].tile_id == 147);
+}
+
 /* Test 10: Edge turn preserves direction orientation. */
 static void test_edge_turn_preserves_orientation(void) {
     App app;
@@ -702,6 +722,9 @@ int main(void) {
     test_child_scene_is_removed_when_parent_leaves_record();
     printf("  test_child_scene_is_removed_when_parent_leaves_record: PASSED\n");
 
+    test_child_sequence_transition_survives_rebuild();
+    printf("  test_child_sequence_transition_survives_rebuild: PASSED\n");
+
     test_edge_turn_preserves_orientation();
     printf("  test_edge_turn_preserves_orientation: PASSED\n");
 
@@ -753,6 +776,6 @@ int main(void) {
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
 
-    printf("\nAll 30 behavior regression tests PASSED\n");
+    printf("\nAll 31 behavior regression tests PASSED\n");
     return 0;
 }
