@@ -85,7 +85,10 @@ struct App {
     GtkWidget *window;
     EsheepRenderer scene; /* composited parent + children */
     GdkPixbuf *sheet;
-    EsheepState state;
+    union {
+        EsheepState state; /* compatibility view for the interpreter */
+        EsheepActor actor; /* authoritative root ownership and child links */
+    };
     int tile_size;
     GdkRectangle bounds; /* primary monitor geometry, the whole "world" for now */
     int pos_x, pos_y;    /* top-left of the sprite window, in screen coords */
@@ -948,6 +951,7 @@ static void cleanup_app(App *app) {
     memset(app->child_pose_y, 0, sizeof(app->child_pose_y));
     memset(app->child_render_x, 0, sizeof(app->child_render_x));
     memset(app->child_render_y, 0, sizeof(app->child_render_y));
+    esheep_actor_detach(&app->actor);
     for (int i = 0; i < MAX_RUNTIME_CHILDREN; i++)
         esheep_actor_detach(&app->child_actors[i]);
     memset(app->child_actors, 0, sizeof(app->child_actors));
@@ -1682,20 +1686,21 @@ static void update_child_animation(App *app) {
                               0, 0, app->direction);
             esheep_actor_set_random_source(&app->child_actors[slot],
                                            actor_random_source, app);
-            if (slot == 0 && app->child_frame_index > 0 &&
+            gboolean preserve_legacy_frame =
+                slot == 0 && app->child_frame_index > 0 &&
                 app->child_animation_id == record->next &&
                 (previous_child_parents[0] == 0 ||
-                 previous_child_parents[0] == parent_animation)) {
-                app->child_actors[slot].state.frame_index =
-                    app->child_frame_index;
-            }
-            if (parent_slot >= 0)
-                esheep_actor_add_child(&app->child_actors[parent_slot],
-                                       &app->child_actors[slot], record->next,
-                                       0, 0, app->direction);
+                 previous_child_parents[0] == parent_animation);
+            EsheepActor *parent_actor = parent_slot < 0 ? &app->actor :
+                                        &app->child_actors[parent_slot];
+            esheep_actor_add_child(parent_actor, &app->child_actors[slot],
+                                   record->next, 0, 0, app->direction);
             esheep_set_environment(&app->child_actors[slot].state,
                                    app->bounds.width, app->bounds.height,
                                    app->tile_size, app->tile_size);
+            if (preserve_legacy_frame)
+                app->child_actors[slot].state.frame_index =
+                    app->child_frame_index;
             app->child_frame_indices[slot] = 0;
             app->child_elapsed_ms_values[slot] = 0;
             app->child_pose_x[slot] = 0;
@@ -1790,7 +1795,7 @@ static void advance_child_animation(App *app, int dt_ms) {
         int animation_id = app->child_animation_ids[slot];
         if (animation_id < 1 || animation_id > esheep_animation_count)
             continue;
-        if (app->child_actors[slot].parent == NULL) {
+        if (app->child_actors[slot].parent == &app->actor) {
             esheep_actor_tick(&app->child_actors[slot], dt_ms, "none");
             accumulate_child_events(app, &app->child_actors[slot]);
         }
@@ -2868,7 +2873,9 @@ int main(int argc, char **argv) {
         app->siblings = sheep;
         app->sibling_count = (int)count;
         app->bounds = initial_bounds;
-        esheep_init(&app->state, ANIM_WALK);
+        esheep_actor_init(&app->actor, NULL, ANIM_WALK, app->pos_x,
+                          app->pos_y, app->direction);
+        esheep_actor_set_random_source(&app->actor, actor_random_source, app);
         setup_sheep_window(app, display,
                            gdk_display_get_monitor_at_point(display,
                                                             initial_bounds.x + initial_bounds.width / 2,
