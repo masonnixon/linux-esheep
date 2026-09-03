@@ -24,6 +24,7 @@ to fire, not just vacuously true for the current XML.  A final test
 regenerates the C tables into a disposable directory and compares them
 byte for byte with the checked-in generated files.
 """
+import math
 import re
 import subprocess
 import sys
@@ -240,9 +241,12 @@ def validate_xml_text(text, source="<memory>"):
                     if el is not None and el.text is not None and el.text.strip() != "":
                         raw = el.text.strip()
                         try:
-                            kind(raw)
+                            parsed = kind(raw)
                         except ValueError:
                             err(where, f"<{pose_name}> <{field}> {raw!r} is not a {kind.__name__}")
+                        else:
+                            if kind is float and not math.isfinite(parsed):
+                                err(where, f"<{pose_name}> <{field}> {raw!r} must be finite")
                 el = pose.find("e:offsety", NS)
                 if el is not None and el.text is not None and el.text.strip() != "":
                     raw = el.text.strip()
@@ -608,6 +612,12 @@ def test_nonfloat_opacity():
     _expect_error(xml, "is not a float")
 
 
+def test_nonfinite_opacity():
+    xml = _fixture("<start><x>-1</x><y>0</y><interval>100</interval></start>",
+                   "<start><x>-1</x><y>0</y><interval>100</interval><opacity>nan</opacity></start>")
+    _expect_error(xml, "must be finite")
+
+
 
 
 TESTS = [
@@ -641,6 +651,7 @@ TESTS = [
     test_noninteger_interval,
     test_noninteger_offsety,
     test_nonfloat_opacity,
+    test_nonfinite_opacity,
 ]
 
 
