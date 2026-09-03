@@ -157,7 +157,8 @@ at login; `make uninstall-autostart` removes that opt-in entry.
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
 - Sheep currently use the monitor workarea containing their center as their
   walking bounds. They do not cross monitor seams as one continuous floor.
-- Multiple sheep do not collide with or land on one another.
+- Multiple sheep have independent state, spawn spacing, and basic overlap
+  resolution; they do not yet land on one another as supporting surfaces.
 
 
 ## Custom sprites and characters
