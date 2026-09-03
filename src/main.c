@@ -133,6 +133,10 @@ typedef struct {
 } SheepGroup;
 
 static gboolean on_tick(gpointer user_data);
+static void update_child_animation(App *app);
+static void advance_child_animation(App *app, int elapsed_ms);
+static void sync_scene_window(App *app);
+static void set_sprite_input_region(App *app);
 
 static void group_set_paused(SheepGroup *group, gboolean paused) {
     if (!group || !group->sheep) return;
@@ -190,6 +194,28 @@ static void group_set_exclude_conky(SheepGroup *group, gboolean excluded) {
     for (guint i = 0; i < group->count; i++)
         group->sheep[i].exclude_conky = excluded;
     group->exclude_conky = excluded;
+}
+
+static gboolean group_set_review_animation(SheepGroup *group, int animation_id) {
+    if (!group || !group->sheep || animation_id < 1 ||
+        animation_id > esheep_animation_count) return FALSE;
+    for (guint i = 0; i < group->count; i++) {
+        App *app = &group->sheep[i];
+        esheep_init(&app->state, animation_id);
+        esheep_set_environment(&app->state, app->bounds.width,
+                               app->bounds.height, app->tile_size,
+                               app->tile_size);
+        esheep_set_walk_keep_probability(&app->state,
+                                         (int)group->walk_keep_probability);
+        update_child_animation(app);
+        advance_child_animation(app, 0);
+        if (app->window) {
+            sync_scene_window(app);
+            gtk_widget_queue_draw(app->window);
+            set_sprite_input_region(app);
+        }
+    }
+    return TRUE;
 }
 
 static gboolean env_bool(const char *name, gboolean fallback) {
@@ -1925,6 +1951,38 @@ static void on_group_front_activate(GtkMenuItem *item, gpointer user_data) {
     group_present(user_data);
 }
 
+static void on_review_response(GtkDialog *dialog, gint response,
+                               gpointer user_data) {
+    if (response == GTK_RESPONSE_OK) {
+        GtkSpinButton *spin = g_object_get_data(G_OBJECT(dialog), "animation-id");
+        group_set_review_animation(user_data,
+                                   gtk_spin_button_get_value_as_int(spin));
+    }
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+static void on_review_activate(GtkMenuItem *item, gpointer user_data) {
+    (void)item;
+    SheepGroup *group = user_data;
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        "Review Animation", NULL, GTK_DIALOG_MODAL,
+        "Cancel", GTK_RESPONSE_CANCEL, "Show", GTK_RESPONSE_OK, NULL);
+    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *grid = gtk_grid_new();
+    GtkWidget *spin = gtk_spin_button_new_with_range(1, esheep_animation_count, 1);
+    GtkWidget *label = gtk_label_new("Animation ID (see --list-animations)");
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+    gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), spin, 1, 0, 1, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), 1);
+    g_object_set_data(G_OBJECT(dialog), "animation-id", spin);
+    gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+    gtk_container_add(GTK_CONTAINER(content), grid);
+    g_signal_connect(dialog, "response", G_CALLBACK(on_review_response), group);
+    gtk_widget_show_all(dialog);
+}
+
 static void on_about_activate(GtkMenuItem *item, gpointer user_data) {
     (void)item;
     (void)user_data;
@@ -2029,6 +2087,7 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     GtkWidget *pause = gtk_menu_item_new_with_label(paused ? "Resume All" : "Pause All");
     GtkWidget *hide = gtk_menu_item_new_with_label(hidden ? "Show All" : "Hide All");
     GtkWidget *front = gtk_menu_item_new_with_label("Bring All to Front");
+    GtkWidget *review = gtk_menu_item_new_with_label("Review Animation");
     GtkWidget *settings = gtk_menu_item_new_with_label("Settings");
     GtkWidget *about = gtk_menu_item_new_with_label("About");
     GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
@@ -2036,12 +2095,14 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     g_signal_connect(pause, "activate", G_CALLBACK(on_group_pause_activate), group);
     g_signal_connect(hide, "activate", G_CALLBACK(on_group_hide_activate), group);
     g_signal_connect(front, "activate", G_CALLBACK(on_group_front_activate), group);
+    g_signal_connect(review, "activate", G_CALLBACK(on_review_activate), group);
     g_signal_connect(settings, "activate", G_CALLBACK(on_settings_activate), group);
     g_signal_connect(about, "activate", G_CALLBACK(on_about_activate), NULL);
     g_signal_connect(quit, "activate", G_CALLBACK(on_quit_activate), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), pause);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), hide);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), front);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), review);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), settings);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), about);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);

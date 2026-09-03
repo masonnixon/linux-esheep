@@ -558,6 +558,22 @@ static void test_swept_fall_lands_on_window(void) {
     assert(app.pos_y == 45);
 }
 
+static void test_group_animation_review_selection(void) {
+    App sheep[2];
+    init_stub_app(&sheep[0], 0, 0, 640, 360, 40);
+    init_stub_app(&sheep[1], 0, 0, 640, 360, 40);
+    SheepGroup group = {
+        .sheep = sheep,
+        .count = 2,
+        .walk_keep_probability = 90
+    };
+    assert(group_set_review_animation(&group, 26));
+    assert(sheep[0].state.animation_id == 26);
+    assert(sheep[1].state.animation_id == 26);
+    assert(sheep[0].child_animation_id == 27);
+    assert(!group_set_review_animation(&group, esheep_animation_count + 1));
+}
+
 int main(void) {
     printf("Running behavior regression tests...\n");
 
@@ -638,6 +654,9 @@ int main(void) {
     test_swept_fall_lands_on_window();
     printf("  test_swept_fall_lands_on_window: PASSED\n");
 
-    printf("\nAll 25 behavior regression tests PASSED\n");
+    test_group_animation_review_selection();
+    printf("  test_group_animation_review_selection: PASSED\n");
+
+    printf("\nAll 26 behavior regression tests PASSED\n");
     return 0;
 }
