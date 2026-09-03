@@ -19,8 +19,8 @@ The current implementation has these working foundations:
 - Generated C animation data derived from the authored XML.
 - Frame timing, frame sequences, repeat counts, repeat-from positions,
   sequence transitions, border transitions, and gravity transitions.
-- Authored sprite flipping, opacity, vertical offsets, and pose movement for
-  the supported expression forms.
+- Authored sprite flipping, opacity, vertical offsets, and pose movement using
+  the shared arithmetic expression evaluator.
 - Walking, running, falling, sleeping, peeing, dragging, jumping, edge
   climbing, and top-surface traversal.
 - X11 detection of visible application windows, panels, and taskbars.
@@ -56,8 +56,8 @@ The current implementation has these working foundations:
 
 ### Child animations
 
-The three authored child relationships are present and render in separate
-transparent windows:
+The three authored child relationships are present and render in the shared
+transparent scene:
 
 | Parent | Child | Purpose |
 | --- | --- | --- |
@@ -66,17 +66,14 @@ transparent windows:
 | 28 | 31 | Black-sheep companion |
 
 The current renderer supports all authored child records for a parent, with an
-independent frame clock per child slot. The platform-independent actor layer
-also supports recursively linked child trees and exposes the complete authored
-child-record set. The GTK runtime still materializes only authored direct-child
-records and does not yet apply child-specific sequence, border, or gravity
-transitions. A child is still tied to the lifetime of its immediate parent
-animation. This differs from the upstream model, which allows child-created
-subchildren and richer child lifetimes.
+independent frame clock per child slot. The GTK runtime materializes nested
+authored child records through the actor tree. Child props remain visual-only
+and inherit the parent scene lifetime; richer authored lifetime metadata remains
+unsupported.
 
-Child placement and stacking have received targeted fixes, but there is no
-automated screenshot or geometry test proving that every child remains beside
-or above its parent throughout its animation.
+Child placement and stacking have received targeted fixes. Deterministic scene
+coverage now validates every authored animation and all composed tile bounds;
+pixel-level screenshot comparison remains outstanding.
 
 ### Runtime behavior graph
 
@@ -116,14 +113,7 @@ gaps are listed below.
   children, bounded child-of-child trees, cycle/depth protection, and subtree
   cleanup. GTK's composed scene also resolves nested authored child records and
   resets child state when the parent animation changes.
-- The live GTK path still uses a bounded compatibility representation rather
-  than the actor engine as its authoritative runtime tree. Child lifetime and
-  authored sequence transitions therefore need one more integration pass.
-- Automatic recursive child creation from runtime package metadata is not yet
-  complete.
-- Child movement, opacity, flipping, and lifetime are partly authored-driven;
-  richer action variants and full lifetime semantics remain incomplete.
-- Shared arithmetic expression parsing and validation now cover literals,
+- Shared arithmetic expression parsing and validation cover literals,
   variables, operators, parentheses, random values, and `Convert` expressions
   for poses, spawns, and child coordinates.
 - Visual regression coverage for all 54 animations and all 96 reviewable
