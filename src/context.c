@@ -7,6 +7,99 @@ static inline bool rects_overlap_x(int x1, int w1, int x2, int w2) {
     return x1 < x2 + w2 && x1 + w1 > x2;
 }
 
+/* Shared landing detection helper for static position checks.
+ * Given the current position (bottom, top), returns the best landing target.
+ * If no landing target is found, returns false and leaves out unchanged.
+ * This is the single authoritative implementation for:
+ *   - window landing (bottom within 2px of surface top)
+ *   - drop landing (overlapping surface vertically and snapping up)
+ *   - taskbar priority (same stack order: taskbar wins over window)
+ */
+static bool find_landing_target(int pos_x, int pos_y, int image_width, int image_height,
+                                 int object_count, const EsheepSurfaceObject *objects,
+                                 bool drop_landing_enabled,
+                                 EsheepFallTarget *out) {
+    if (!out) return false;
+
+    int bottom = pos_y + image_height;
+    int top = pos_y;
+    int best_stack_order = -1;
+    EsheepSurface best_surface = ESHEEP_SURFACE_NONE;
+    int best_y = -1;
+    int best_idx = -1;
+
+    for (int i = 0; i < object_count; i++) {
+        const EsheepSurfaceObject *obj = &objects[i];
+        bool at_top = abs(bottom - obj->y) <= 2;
+        bool overlapping = drop_landing_enabled &&
+            top <= obj->y && bottom >= obj->y &&
+            top < obj->y + obj->height;
+        if ((at_top || overlapping) &&
+            rects_overlap_x(pos_x, image_width, obj->x, obj->width)) {
+            int priority = obj->taskbar ? 0 : 1;
+            if (obj->stack_order > best_stack_order ||
+                (obj->stack_order == best_stack_order && priority > (best_surface == ESHEEP_SURFACE_TASKBAR ? 1 : 0))) {
+                best_stack_order = obj->stack_order;
+                best_surface = obj->taskbar ? ESHEEP_SURFACE_TASKBAR : ESHEEP_SURFACE_WINDOW;
+                best_y = obj->y;
+                best_idx = i;
+            }
+        }
+    }
+
+    if (best_surface != ESHEEP_SURFACE_NONE) {
+        out->valid = true;
+        out->landed_y = best_y;
+        out->surface = best_surface;
+        out->object_index = best_idx;
+        return true;
+    }
+    return false;
+}
+
+/* Swept landing detection for esheep_apply_motion.
+ * Checks if the sprite crossed a surface top during its movement.
+ */
+static bool find_swept_landing_target(int pos_x, int previous_bottom, int current_bottom,
+                                       int image_width,
+                                       int object_count, const EsheepSurfaceObject *objects,
+                                       bool window_landing_enabled, bool drop_landing_enabled,
+                                       EsheepFallTarget *out) {
+    if (!out) return false;
+
+    int best_stack_order = -1;
+    EsheepSurface best_surface = ESHEEP_SURFACE_NONE;
+    int best_y = -1;
+    int best_idx = -1;
+
+    for (int i = 0; i < object_count; i++) {
+        const EsheepSurfaceObject *obj = &objects[i];
+        bool at_top = abs(current_bottom - obj->y) <= 2;
+        bool crossing = previous_bottom <= obj->y &&
+                        current_bottom >= obj->y &&
+                        pos_x + image_width > obj->x &&  /* horizontal overlap */
+                        pos_x < obj->x + obj->width;
+        if ((!at_top && !(crossing &&
+                          (window_landing_enabled || drop_landing_enabled))) ||
+            !rects_overlap_x(pos_x, image_width, obj->x, obj->width)) continue;
+        if (obj->stack_order >= best_stack_order) {
+            best_stack_order = obj->stack_order;
+            best_surface = obj->taskbar ? ESHEEP_SURFACE_TASKBAR : ESHEEP_SURFACE_WINDOW;
+            best_y = obj->y;
+            best_idx = i;
+        }
+    }
+
+    if (best_surface != ESHEEP_SURFACE_NONE) {
+        out->valid = true;
+        out->landed_y = best_y;
+        out->surface = best_surface;
+        out->object_index = best_idx;
+        return true;
+    }
+    return false;
+}
+
 const char *esheep_apply_motion(EsheepMotion *motion) {
     if (!motion) return "none";
     int previous_bottom = motion->pos_y + motion->image_height;
@@ -18,31 +111,16 @@ const char *esheep_apply_motion(EsheepMotion *motion) {
     if (motion->delta_y > 0 &&
         (motion->window_landing_enabled || motion->drop_landing_enabled)) {
         int current_bottom = motion->pos_y + motion->image_height;
-        int landing_y = -1;
-        int landing_stack = -1;
-        bool landing_taskbar = false;
-        for (int i = 0; i < motion->object_count; i++) {
-            const EsheepSurfaceObject *surface = &motion->objects[i];
-            bool at_top = abs(current_bottom - surface->y) <= 2;
-            bool crossing = previous_bottom <= surface->y &&
-                            current_bottom >= surface->y &&
-                            motion->pos_y < surface->y + surface->height;
-            if ((!at_top && !(crossing &&
-                              (motion->window_landing_enabled ||
-                               motion->drop_landing_enabled))) ||
-                !rects_overlap_x(motion->pos_x, motion->image_width,
-                                 surface->x, surface->width)) continue;
-            if (surface->stack_order >= landing_stack) {
-                landing_y = surface->y;
-                landing_stack = surface->stack_order;
-                landing_taskbar = surface->taskbar;
-            }
-        }
-        if (landing_y >= 0) {
-            motion->pos_y = landing_y - motion->image_height;
+        EsheepFallTarget target;
+        if (find_swept_landing_target(motion->pos_x, previous_bottom, current_bottom,
+                                       motion->image_width,
+                                       motion->object_count, motion->objects,
+                                       motion->window_landing_enabled, motion->drop_landing_enabled,
+                                       &target)) {
+            motion->pos_y = target.landed_y - motion->image_height;
             motion->drop_landing_enabled = false;
             landed = true;
-            result = landing_taskbar ? "taskbar" : "window";
+            result = target.surface == ESHEEP_SURFACE_TASKBAR ? "taskbar" : "window";
         }
     }
 
@@ -92,39 +170,13 @@ void esheep_classify_context(EsheepContext *ctx) {
             ctx->surface_y = ctx->bounds_y + ctx->bounds_height;
             return;
         }
-        int bottom = ctx->pos_y + ctx->image_height;
-        int top = ctx->pos_y;
-        int best_stack_order = -1;
-        EsheepSurface best_surface = ESHEEP_SURFACE_NONE;
-        int best_y = -1;
-
-        for (int i = 0; i < ctx->object_count; i++) {
-            const EsheepSurfaceObject *obj = &ctx->objects[i];
-            /* A surface supports the sprite when its top is within 2 pixels of
-             * the sprite bottom (the existing conky/panel tolerance), or, for
-             * a dropped sprite, when the sprite still overlaps the surface
-             * vertically and snaps up to its top. A sprite fully below the
-             * surface never matches, so a drop past a window keeps falling to
-             * the floor instead of teleporting onto it. */
-            bool at_top = abs(bottom - obj->y) <= 2;
-            bool overlapping = ctx->drop_landing_enabled &&
-                top <= obj->y && bottom >= obj->y &&
-                top < obj->y + obj->height;
-            if ((at_top || overlapping) &&
-                rects_overlap_x(ctx->pos_x, ctx->image_width, obj->x, obj->width)) {
-                int priority = obj->taskbar ? 0 : 1;
-                if (obj->stack_order > best_stack_order ||
-                    (obj->stack_order == best_stack_order && priority > (best_surface == ESHEEP_SURFACE_TASKBAR ? 1 : 0))) {
-                    best_stack_order = obj->stack_order;
-                    best_surface = obj->taskbar ? ESHEEP_SURFACE_TASKBAR : ESHEEP_SURFACE_WINDOW;
-                    best_y = obj->y;
-                }
-            }
-        }
-
-        if (best_surface != ESHEEP_SURFACE_NONE) {
-            ctx->surface = best_surface;
-            ctx->surface_y = best_y;
+        EsheepFallTarget target;
+        if (find_landing_target(ctx->pos_x, ctx->pos_y, ctx->image_width, ctx->image_height,
+                                 ctx->object_count, ctx->objects,
+                                 ctx->drop_landing_enabled,
+                                 &target)) {
+            ctx->surface = target.surface;
+            ctx->surface_y = target.landed_y;
             ctx->move = ESHEEP_MOVE_FALLING;
             return;
         }
@@ -179,40 +231,10 @@ bool esheep_classify_fall(const EsheepContext *ctx, EsheepFallTarget *out) {
     if (!ctx->window_landing_enabled || ctx->move != ESHEEP_MOVE_FALLING)
         return false;
 
-    int bottom = ctx->pos_y + ctx->image_height;
-    int top = ctx->pos_y;
-    int best_stack_order = -1;
-    EsheepSurface best_surface = ESHEEP_SURFACE_NONE;
-    int best_y = -1;
-    int best_idx = -1;
-
-    for (int i = 0; i < ctx->object_count; i++) {
-        const EsheepSurfaceObject *obj = &ctx->objects[i];
-        bool at_top = abs(bottom - obj->y) <= 2;
-        bool overlapping = ctx->drop_landing_enabled &&
-            top <= obj->y && bottom >= obj->y &&
-            top < obj->y + obj->height;
-        if ((at_top || overlapping) &&
-            rects_overlap_x(ctx->pos_x, ctx->image_width, obj->x, obj->width)) {
-            int priority = obj->taskbar ? 0 : 1;
-            if (obj->stack_order > best_stack_order ||
-                (obj->stack_order == best_stack_order && priority > (best_surface == ESHEEP_SURFACE_TASKBAR ? 1 : 0))) {
-                best_stack_order = obj->stack_order;
-                best_surface = obj->taskbar ? ESHEEP_SURFACE_TASKBAR : ESHEEP_SURFACE_WINDOW;
-                best_y = obj->y;
-                best_idx = i;
-            }
-        }
-    }
-
-    if (best_surface != ESHEEP_SURFACE_NONE) {
-        out->valid = true;
-        out->landed_y = best_y;
-        out->surface = best_surface;
-        out->object_index = best_idx;
-        return true;
-    }
-    return false;
+    return find_landing_target(ctx->pos_x, ctx->pos_y, ctx->image_width, ctx->image_height,
+                                 ctx->object_count, ctx->objects,
+                                 ctx->drop_landing_enabled,
+                                 out);
 }
 
 bool esheep_edges_tripped(const EsheepContext *ctx, bool *left, bool *right) {
