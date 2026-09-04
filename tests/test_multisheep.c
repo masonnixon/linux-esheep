@@ -178,6 +178,79 @@ static void test_shared_snapshot_consumption(void) {
     assert(!sheep[1].fullscreen_suppressed);
 }
 
+/* Restack target selection must run on cached snapshot data alone. This
+ * headless test pins the filters (stale, own, sibling, desktop,
+ * unviewable, non-overlapping) and the highest-stack-order-wins rule
+ * without any X11 access. */
+static void test_restack_selection_uses_cached_data_only(void) {
+    DesktopSnapshot snapshot = {0};
+    snapshot.restack_targets[0] = (RestackTarget){
+        .client = 101, .stack_window = 201,
+        .rect = (GdkRectangle){ 0, 0, 100, 100 },
+        .viewable = TRUE, .desktop = FALSE, .stack_order = 0 };
+    snapshot.restack_targets[1] = (RestackTarget){
+        .client = 102, .stack_window = 202,
+        .rect = (GdkRectangle){ 20, 20, 100, 100 },
+        .viewable = TRUE, .desktop = FALSE, .stack_order = 2 };
+    snapshot.restack_targets[2] = (RestackTarget){
+        .client = 103, .stack_window = 203,
+        .rect = (GdkRectangle){ 20, 20, 100, 100 },
+        .viewable = TRUE, .desktop = TRUE, .stack_order = 9 };
+    snapshot.restack_targets[3] = (RestackTarget){
+        .client = 104, .stack_window = None,
+        .rect = (GdkRectangle){ 20, 20, 100, 100 },
+        .viewable = TRUE, .desktop = FALSE, .stack_order = 9 };
+    snapshot.restack_targets[4] = (RestackTarget){
+        .client = 105, .stack_window = 205,
+        .rect = (GdkRectangle){ 500, 500, 10, 10 },
+        .viewable = TRUE, .desktop = FALSE, .stack_order = 9 };
+    snapshot.restack_targets[5] = (RestackTarget){
+        .client = 106, .stack_window = 206,
+        .rect = (GdkRectangle){ 20, 20, 100, 100 },
+        .viewable = FALSE, .desktop = FALSE, .stack_order = 9 };
+    snapshot.restack_target_count = 6;
+    snapshot.own_clients[0] = 107;
+    snapshot.own_stack[0] = 207;
+    snapshot.own_count = 1;
+
+    App sheep;
+    memset(&sheep, 0, sizeof(sheep));
+    sheep.xwindow = 107;
+    sheep.pos_x = 30;
+    sheep.pos_y = 30;
+    sheep.tile_size = 32;
+
+    /* Desktop, stale, unviewable, and non-overlapping entries carry the
+     * highest stack order but must lose to the best valid entry. */
+    assert(restack_select_cached_target(&sheep, &snapshot) == 202);
+
+    /* A sheep whose own root-level window is unknown (or that has no
+     * window at all) never restacks. */
+    sheep.xwindow = 999;
+    assert(restack_select_cached_target(&sheep, &snapshot) == None);
+    sheep.xwindow = 0;
+    assert(restack_select_cached_target(&sheep, &snapshot) == None);
+
+    /* A sibling's window is never an occluder, even with the best
+     * remaining stack order. */
+    sheep.xwindow = 107;
+    App sibling;
+    memset(&sibling, 0, sizeof(sibling));
+    sibling.xwindow = 102;
+    sheep.siblings = &sibling;
+    sheep.sibling_count = 1;
+    assert(restack_select_cached_target(&sheep, &snapshot) == 201);
+
+    /* If the sheep's own client ever appears in the target list it is
+     * skipped as well. */
+    sheep.siblings = NULL;
+    sheep.sibling_count = 0;
+    sheep.xwindow = 101;
+    snapshot.own_clients[0] = 101;
+    snapshot.own_stack[0] = 211;
+    assert(restack_select_cached_target(&sheep, &snapshot) == 202);
+}
+
 static void test_independent_child_instances(void) {
     const EsheepChild *child = find_child_test_record();
     App sheep[2];
@@ -350,6 +423,7 @@ int main(void) {
     test_spawn_spacing_on_monitor();
     test_window_spawn_skips_taskbar_and_overlap();
     test_shared_snapshot_consumption();
+    test_restack_selection_uses_cached_data_only();
     test_independent_child_instances();
     test_collision_breaks_deadlock();
     test_unresolved_edge_overlap_turns_inward();

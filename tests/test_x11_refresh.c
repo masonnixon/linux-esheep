@@ -109,6 +109,72 @@ static void test_group_snapshot_shares_one_refresh(App *lead) {
     for (int i = 1; i < 5; i++) assert(sheep[i].object_count == 0);
 }
 
+/* Anti-false-positive regression for the restack cache: the five-sheep
+ * consume cycle must act on the scan-time geometry, never on fresh X11
+ * discovery. The client is scanned while overlapping the sheep, then moved
+ * far away, and only then consumed: a consumer that re-queried geometry
+ * would see no overlap and skip the restack, while the cached consumer
+ * must put every sheep below the client at its scan-time position. The
+ * client starts below the sheep in the root stack, so only the restack
+ * request can reorder them. */
+static void test_consume_cycle_uses_cached_restack_geometry(void) {
+    GdkDisplay *gdk_display = gdk_display_get_default();
+    Display *display = gdk_x11_display_get_xdisplay(gdk_display);
+    Window root = DefaultRootWindow(display);
+    Atom client_list = XInternAtom(display, "_NET_CLIENT_LIST", False);
+
+    Window client = XCreateSimpleWindow(display, root, 100, 100, 200, 120, 0,
+                                        0, 0);
+    XMapWindow(display, client);
+
+    App sheep[5];
+    memset(sheep, 0, sizeof(sheep));
+    for (int i = 0; i < 5; i++) {
+        sheep[i].siblings = sheep;
+        sheep[i].sibling_count = 5;
+        sheep[i].tile_size = 32;
+        sheep[i].bounds = (GdkRectangle){ 0, 0, 1280, 720 };
+        sheep[i].window_landing = TRUE;
+        sheep[i].tick_ms = TICK_MS;
+        sheep[i].pos_x = 100;
+        sheep[i].pos_y = 100;
+        sheep[i].xwindow = XCreateSimpleWindow(display, root, 100, 100, 32,
+                                               32, 0, 0, 0);
+        XMapWindow(display, sheep[i].xwindow);
+    }
+    DesktopSnapshot snapshot;
+    memset(&snapshot, 0, sizeof(snapshot));
+    for (int i = 0; i < 5; i++) sheep[i].shared_snapshot = &snapshot;
+
+    set_client_list(display, root, client_list, client);
+    desktop_snapshot_scan(&snapshot, &sheep[0]);
+    assert(snapshot.refresh_count == 1);
+
+    /* Move the client where no sheep stands, then let the whole group
+     * consume the generation that was scanned before the move. */
+    XMoveResizeWindow(display, client, 1400, 600, 200, 120);
+    XSync(display, False);
+    for (int i = 0; i < 5; i++) desktop_snapshot_consume(&sheep[i], &snapshot);
+    for (int i = 0; i < 5; i++)
+        assert(root_child_index(display, root, sheep[i].xwindow) <
+               root_child_index(display, root, client));
+
+    /* The landing view is cached in the same generation: the sheep still
+     * see the scan-time position, and a second consume pass stays a no-op
+     * thanks to the generation gate (no rescan). */
+    for (int i = 0; i < 5; i++) {
+        assert(sheep[i].object_count == 1);
+        assert(sheep[i].objects[0].rect.x == 100);
+        assert(sheep[i].objects[0].rect.y == 100);
+        desktop_snapshot_consume(&sheep[i], &snapshot);
+    }
+    assert(snapshot.refresh_count == 1);
+
+    for (int i = 0; i < 5; i++) XDestroyWindow(display, sheep[i].xwindow);
+    XDestroyWindow(display, client);
+    XSync(display, False);
+}
+
 int main(int argc, char **argv) {
     assert(gtk_init_check(&argc, &argv));
     GdkDisplay *gdk_display = gdk_display_get_default();
@@ -274,6 +340,10 @@ int main(int argc, char **argv) {
     /* Group regression: all sheep in the group share one desktop snapshot
      * refresh per interval (the seam counts the rescans). */
     test_group_snapshot_shares_one_refresh(&app);
+
+    /* Anti-false-positive regression: the five-sheep consume cycle must
+     * restack from the cached scan, not a fresh discovery. */
+    test_consume_cycle_uses_cached_restack_geometry();
 
     cleanup_app(&app);
     return 0;

@@ -48,6 +48,21 @@ typedef struct {
     int stack_order;
 } DesktopObject;
 
+/* One restacking record per non-group _NET_CLIENT_LIST entry, filled
+ * during the single group scan so per-sheep consumption never re-queries
+ * X11. stack_window is the validated root-level sibling to pass to
+ * ConfigureWindow (the WM frame when the client is reparented, the client
+ * itself otherwise); None means the entry was already stale at scan time
+ * and must be skipped. */
+typedef struct {
+    Window client;      /* raw _NET_CLIENT_LIST entry */
+    Window stack_window;/* root-level occluder window, None if stale */
+    GdkRectangle rect;  /* direct frame (or client) in root coordinates */
+    gboolean viewable;  /* client was IsViewable at scan time */
+    gboolean desktop;   /* _NET_WM_WINDOW_TYPE_DESKTOP surface */
+    int stack_order;    /* _NET_CLIENT_LIST_STACKING index, -1 if absent */
+} RestackTarget;
+
 /* One shared X11 desktop snapshot per group of sheep.
  *
  * Ownership and invalidation rules:
@@ -71,7 +86,18 @@ typedef struct {
  *   later either way.
  * - Sheep copy the current generation into their own per-sheep view on
  *   consume; per-monitor fullscreen suppression is judged from the stored
- *   fullscreen rectangles against each sheep's own monitor. */
+ *   fullscreen rectangles against each sheep's own monitor.
+ * - The same scan caches everything restacking needs per client: the
+ *   validated root-level stack window, viewability, root geometry,
+ *   desktop classification, and stacking order (restack_targets). A
+ *   consuming sheep only selects an overlapping cached target and issues
+ *   the guarded ConfigureWindow; if the target (or the sheep's own window)
+ *   vanished since the scan, the request surfaces as BadWindow/BadMatch
+ *   under the scoped handler and is skipped, and the next group scan
+ *   rebuilds the cache.
+ * - Group members' own root-level windows are resolved during the scan
+ *   (own_clients/own_stack) so the per-sheep ConfigureWindow target is a
+ *   cache lookup as well. */
 typedef struct {
     Window clients[MAX_OBJECTS]; /* _NET_CLIENT_LIST, drives restacking */
     int client_count;
@@ -81,6 +107,11 @@ typedef struct {
     int object_count;
     GdkRectangle fullscreen_rects[MAX_OBJECTS]; /* root coordinates */
     int fullscreen_count;
+    RestackTarget restack_targets[MAX_OBJECTS]; /* per-client restack cache */
+    int restack_target_count;
+    Window own_clients[MAX_SHEEP]; /* group member client windows */
+    Window own_stack[MAX_SHEEP]; /* their root-level windows, None if stale */
+    int own_count;
     Atom window_type_atom;
     Atom desktop_type_atom;
     gboolean valid; /* stored data is the last complete scan */
@@ -1257,14 +1288,17 @@ static Window x11_top_level_window(Display *display, Window window,
  * standing on a different (possibly covered) client, explicitly put the
  * sheep immediately below the highest overlapping client.  This preserves
  * the useful "pet on a window" case while making foreground occlusion real.
- * The request is issued only while the refresh error handler is installed. */
-static void restack_below_occluding_window(App *app, Display *display,
-                                           const Window *windows,
-                                           unsigned long window_count,
-                                           const Window *stacking,
-                                           unsigned long stacking_count,
-                                           Atom window_type_atom,
-                                           Atom desktop_type_atom) {
+ * The request is issued only while the refresh error handler is installed.
+ * Shared-snapshot consumers no longer use this per-client discovery path;
+ * it remains the standalone restack test seam. */
+static void G_GNUC_UNUSED restack_below_occluding_window(App *app,
+                                                         Display *display,
+                                                         const Window *windows,
+                                                         unsigned long window_count,
+                                                         const Window *stacking,
+                                                         unsigned long stacking_count,
+                                                         Atom window_type_atom,
+                                                         Atom desktop_type_atom) {
     if (!app || !display || !windows || !stacking || !app->xwindow ||
         window_count == 0 || stacking_count == 0) return;
 
@@ -1385,6 +1419,70 @@ static void restack_below_occluding_window(App *app, Display *display,
     x11_refresh_sync(display);
 }
 
+/* The group member's root-level window from the scan's own-window table.
+ * Pure memory lookup, so consumption stays free of X11 queries. */
+static Window snapshot_own_stack_window(const DesktopSnapshot *snap,
+                                        Window client) {
+    if (!snap || !client) return None;
+    for (int i = 0; i < snap->own_count; i++)
+        if (snap->own_clients[i] == client) return snap->own_stack[i];
+    return None;
+}
+
+/* Pick the cached target to restack below. Pure selection over the one
+ * group scan's cached data: stale, own, sibling, desktop-background,
+ * unviewable, and non-overlapping entries are excluded and the highest
+ * stacking order wins, exactly as the old per-sheep discovery loop did. */
+static Window restack_select_cached_target(App *app,
+                                           const DesktopSnapshot *snap) {
+    if (!app || !snap || !app->xwindow) return None;
+    Window own_window = snapshot_own_stack_window(snap, app->xwindow);
+    if (!own_window) return None;
+    GdkRectangle sheep = { app->pos_x, app->pos_y, app->tile_size,
+                           app->tile_size };
+    int best_order = -1;
+    Window occluding = None;
+    for (int i = 0; i < snap->restack_target_count; i++) {
+        const RestackTarget *target = &snap->restack_targets[i];
+        if (!target->stack_window || target->stack_window == own_window)
+            continue;
+        if (target->client == app->xwindow) continue;
+        gboolean own_client = FALSE;
+        for (int sibling = 0; sibling < app->sibling_count; sibling++) {
+            if (target->client == app->siblings[sibling].xwindow) {
+                own_client = TRUE;
+                break;
+            }
+        }
+        if (own_client) continue;
+        if (target->desktop || !target->viewable) continue;
+        if (!rects_overlap(&sheep, &target->rect)) continue;
+        if (target->stack_order > best_order) {
+            best_order = target->stack_order;
+            occluding = target->stack_window;
+        }
+    }
+    return occluding;
+}
+
+/* The snapshot consumer's restack path: select the cached target and issue
+ * only the guarded ConfigureWindow. A target (or the sheep's own window)
+ * that vanished since the scan surfaces as BadWindow/BadMatch under the
+ * scoped handler and is skipped; the next group scan repairs the cache. */
+static void restack_below_cached_target(App *app, const DesktopSnapshot *snap,
+                                        Display *display) {
+    if (!app || !display || !snap) return;
+    Window own_window = snapshot_own_stack_window(snap, app->xwindow);
+    Window occluding = restack_select_cached_target(app, snap);
+    if (!own_window || !occluding) return;
+    x11_bad_window = FALSE;
+    XWindowChanges changes = {0};
+    changes.sibling = occluding;
+    changes.stack_mode = Below;
+    XConfigureWindow(display, own_window, CWSibling | CWStackMode, &changes);
+    x11_refresh_sync(display);
+}
+
 static GdkDisplay *app_x11_display(const App *app) {
     GdkDisplay *display = NULL;
     if (app && app->window)
@@ -1401,6 +1499,60 @@ static gint64 desktop_snapshot_interval_us(const App *driver) {
     return (gint64)OBJECT_REFRESH_INTERVAL_TICKS * (gint64)tick_ms * 1000;
 }
 
+/* One scan-time probe of a client's frame: everything the landing record
+ * and the restack cache need, gathered while the scoped error handler is
+ * installed so a stale window leaves the probe invalid instead of killing
+ * the process. The top-level walk may fail independently; that only
+ * invalidates the restack target, not the geometry. */
+typedef struct {
+    Window parent; /* client's direct parent, root when unparented */
+    Window top;    /* root-level ancestor of the frame, None if stale */
+    XWindowAttributes client;
+    XWindowAttributes frame;
+    int frame_x, frame_y; /* frame origin in root coordinates */
+    gboolean valid;
+} X11ClientProbe;
+
+static X11ClientProbe probe_client_geometry(Display *display, Window client,
+                                            Window root) {
+    X11ClientProbe probe = { .parent = root, .top = None, .valid = FALSE };
+    x11_bad_window = FALSE;
+    if (!XGetWindowAttributes(display, client, &probe.client)) {
+        x11_refresh_sync(display);
+        return probe;
+    }
+    x11_refresh_sync(display);
+    if (x11_bad_window) return probe;
+
+    Window tree_root, parent, *children = NULL;
+    unsigned int child_count = 0;
+    gboolean tree_ok = XQueryTree(display, client, &tree_root, &parent,
+                                  &children, &child_count);
+    x11_refresh_sync(display);
+    if (children) XFree(children);
+    if (x11_bad_window || !tree_ok) return probe;
+    probe.parent = parent;
+
+    Window frame = parent != root ? parent : client;
+    if (!XGetWindowAttributes(display, frame, &probe.frame)) {
+        x11_refresh_sync(display);
+        return probe;
+    }
+    x11_refresh_sync(display);
+    if (x11_bad_window) return probe;
+    Window translated_child;
+    if (!XTranslateCoordinates(display, frame, root, 0, 0, &probe.frame_x,
+                               &probe.frame_y, &translated_child)) {
+        x11_refresh_sync(display);
+        return probe;
+    }
+    x11_refresh_sync(display);
+    if (x11_bad_window) return probe;
+    probe.valid = TRUE;
+    probe.top = x11_top_level_window(display, frame, root);
+    return probe;
+}
+
 /* The group's single X11 desktop scan. Runs while the scoped X11 error
  * handler is installed so a stale client-list entry cannot escape into
  * GTK's fatal handler. On success the whole generation is committed to
@@ -1414,6 +1566,11 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
     GdkRectangle refreshed_fullscreen[MAX_OBJECTS];
     int refreshed_count = 0;
     int fullscreen_count = 0;
+    RestackTarget refreshed_targets[MAX_OBJECTS];
+    int refreshed_target_count = 0;
+    Window refreshed_own_clients[MAX_SHEEP];
+    Window refreshed_own_stack[MAX_SHEEP];
+    int refreshed_own_count = 0;
     /* Xlib reports invalid or disappearing client windows asynchronously.
      * Install the scoped handler before even querying the root properties so
      * a stale client-list entry cannot escape into GTK's fatal handler. */
@@ -1467,6 +1624,32 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
         stacking_count = 0;
     }
 
+    /* Resolve the group's own root-level windows once, so each sheep's
+     * ConfigureWindow target is a cache lookup at consume time. A member
+     * whose window is already gone records None and is skipped by the
+     * consumer until a later scan repairs it. */
+    {
+        Window members[MAX_SHEEP + 1];
+        int member_count = 0;
+        members[member_count++] = driver->xwindow;
+        for (int member = 0; member < driver->sibling_count &&
+             member_count < MAX_SHEEP + 1; member++)
+            members[member_count++] = driver->siblings[member].xwindow;
+        for (int member = 0; member < member_count &&
+             refreshed_own_count < MAX_SHEEP; member++) {
+            Window window = members[member];
+            if (!window) continue;
+            int duplicate = 0;
+            for (int seen = 0; seen < refreshed_own_count; seen++)
+                duplicate |= refreshed_own_clients[seen] == window;
+            if (duplicate) continue;
+            refreshed_own_clients[refreshed_own_count] = window;
+            refreshed_own_stack[refreshed_own_count] =
+                x11_top_level_window(display, window, root);
+            refreshed_own_count++;
+        }
+    }
+
     for (unsigned long i = 0; i < count && refreshed_count < MAX_OBJECTS; i++) {
         x11_bad_window = FALSE;
         gboolean own_window = windows[i] == driver->xwindow;
@@ -1479,6 +1662,31 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
             state_atom, fullscreen_state, strut_atom, strut_partial_atom,
             driver->exclude_conky);
         if (x11_bad_window) continue;
+
+        /* The restack cache covers every client, not just landing
+         * candidates, so per-sheep consumption can filter without any
+         * X11 round trip. The landing record below reuses the same probe. */
+        RestackTarget *target = refreshed_target_count < MAX_OBJECTS ?
+            &refreshed_targets[refreshed_target_count] : NULL;
+        X11ClientProbe probe = {0};
+        if (target || refreshed_count < MAX_OBJECTS) {
+            probe = probe_client_geometry(display, windows[i], root);
+            if (target) {
+                target->client = windows[i];
+                target->stack_window = probe.top;
+                target->rect = probe.valid ?
+                    (GdkRectangle){ probe.frame_x, probe.frame_y,
+                                    probe.frame.width, probe.frame.height } :
+                    (GdkRectangle){ 0, 0, 0, 0 };
+                target->viewable = probe.valid &&
+                                   probe.client.map_state == IsViewable;
+                target->desktop = traits.desktop_surface;
+                target->stack_order = stacking_order(stacking, stacking_count,
+                                                     windows[i]);
+                refreshed_target_count++;
+            }
+        }
+
         if (traits.fullscreen_surface) {
             XWindowAttributes fullscreen_attributes;
             if (XGetWindowAttributes(display, windows[i], &fullscreen_attributes)) {
@@ -1499,51 +1707,24 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
             x11_refresh_sync(display);
             continue;
         }
-        if (!x11_surface_is_landing_candidate(&traits)) continue;
-        XWindowAttributes attributes;
-        gboolean attributes_ok = XGetWindowAttributes(display, windows[i], &attributes);
-        x11_refresh_sync(display);
-        if (x11_bad_window || !attributes_ok ||
-            attributes.map_state != IsViewable || attributes.class != InputOutput ||
-            attributes.width <= 1 || attributes.height <= 1) continue;
+        if (!x11_surface_is_landing_candidate(&traits) ||
+            refreshed_count >= MAX_OBJECTS)
+            continue;
+        if (!probe.valid || probe.client.map_state != IsViewable ||
+            probe.client.class != InputOutput || probe.client.width <= 1 ||
+            probe.client.height <= 1 || probe.frame.width <= 1 ||
+            probe.frame.height <= 1)
+            continue;
 
         /* _NET_CLIENT_LIST contains client windows.  Their origin starts
          * below the window-manager title bar, so use the parent frame for
          * collision geometry when one exists. */
-        Window tree_root, parent, *children = NULL;
-        unsigned int child_count = 0;
-        Window geometry_window = windows[i];
-        gboolean tree_ok = XQueryTree(display, windows[i], &tree_root, &parent,
-                                      &children, &child_count);
-        x11_refresh_sync(display);
-        if (x11_bad_window) {
-            if (children) XFree(children);
-            continue;
-        }
-        if (tree_ok) {
-            if (parent != root) geometry_window = parent;
-            if (children) XFree(children);
-        }
-
-        XWindowAttributes geometry;
-        gboolean geometry_ok = XGetWindowAttributes(display, geometry_window,
-                                                    &geometry);
-        x11_refresh_sync(display);
-        if (x11_bad_window || !geometry_ok ||
-            geometry.width <= 1 || geometry.height <= 1) continue;
-        int root_x, root_y;
-        Window child;
-        gboolean translated = XTranslateCoordinates(display, geometry_window,
-                                                     root, 0, 0, &root_x,
-                                                     &root_y, &child);
-        x11_refresh_sync(display);
-        if (x11_bad_window || !translated) continue;
-
         DesktopObject *object = &refreshed_objects[refreshed_count++];
-        object->rect = (GdkRectangle){ root_x, root_y, geometry.width,
-                                       geometry.height };
+        object->rect = (GdkRectangle){ probe.frame_x, probe.frame_y,
+                                       probe.frame.width, probe.frame.height };
         object->taskbar = FALSE;
-        object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
+        object->stack_order = stacking_order(stacking, stacking_count,
+                                             windows[i]);
     }
     x11_refresh_sync(display);
     XSetErrorHandler(x11_previous_error_handler);
@@ -1564,6 +1745,14 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
     memcpy(snap->fullscreen_rects, refreshed_fullscreen,
            (size_t)fullscreen_count * sizeof(snap->fullscreen_rects[0]));
     snap->fullscreen_count = fullscreen_count;
+    memcpy(snap->restack_targets, refreshed_targets,
+           (size_t)refreshed_target_count * sizeof(snap->restack_targets[0]));
+    snap->restack_target_count = refreshed_target_count;
+    memcpy(snap->own_clients, refreshed_own_clients,
+           (size_t)refreshed_own_count * sizeof(snap->own_clients[0]));
+    memcpy(snap->own_stack, refreshed_own_stack,
+           (size_t)refreshed_own_count * sizeof(snap->own_stack[0]));
+    snap->own_count = refreshed_own_count;
     snap->window_type_atom = window_type;
     snap->desktop_type_atom = desktop_type;
     snap->valid = TRUE;
@@ -1605,12 +1794,7 @@ static void desktop_snapshot_apply(App *app, const DesktopSnapshot *snap,
         Display *display = gdk_x11_display_get_xdisplay(gdk_display);
         x11_previous_error_handler = XSetErrorHandler(x11_refresh_error_handler);
         x11_bad_window = FALSE;
-        restack_below_occluding_window(app, display, snap->clients,
-                                       (unsigned long)snap->client_count,
-                                       snap->stacking,
-                                       (unsigned long)snap->stacking_count,
-                                       snap->window_type_atom,
-                                       snap->desktop_type_atom);
+        restack_below_cached_target(app, snap, display);
         x11_refresh_sync(display);
         XSetErrorHandler(x11_previous_error_handler);
     }
