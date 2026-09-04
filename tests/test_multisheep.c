@@ -123,6 +123,61 @@ static void test_window_spawn_skips_taskbar_and_overlap(void) {
     assert(!apps_overlap(&sheep[0], &sheep[1]));
 }
 
+/* Group sheep share one desktop snapshot. This headless test pins the
+ * consume/invalidation rules: a generation is applied once per sheep,
+ * mutations of a consumed generation are invisible, and fullscreen
+ * suppression is judged against each sheep's own monitor. */
+static void test_shared_snapshot_consumption(void) {
+    App sheep[5];
+    DesktopSnapshot snapshot = {0};
+    for (int i = 0; i < 5; i++) {
+        init_stub_app(&sheep[i], sheep, 5, i, 0, 0, 640, 360, 64);
+        sheep[i].shared_snapshot = &snapshot;
+    }
+
+    /* No X display in this binary: a due deadline must not rescan or
+     * corrupt, and an unconsumed snapshot leaves the sheep unchanged. */
+    desktop_snapshot_tick(&sheep[0]);
+    assert(snapshot.refresh_count == 0);
+    assert(sheep[0].object_count == 0);
+    for (int i = 0; i < 5; i++) desktop_snapshot_consume(&sheep[i], &snapshot);
+    for (int i = 0; i < 5; i++) assert(sheep[i].object_count == 0);
+
+    /* One completed generation: all five sheep consume the same surfaces. */
+    snapshot.objects[0].rect = (GdkRectangle){ 12, 34, 400, 80 };
+    snapshot.objects[0].stack_order = 3;
+    snapshot.object_count = 1;
+    snapshot.valid = TRUE;
+    snapshot.refresh_count = 1;
+    for (int i = 0; i < 5; i++) desktop_snapshot_consume(&sheep[i], &snapshot);
+    for (int i = 0; i < 5; i++) {
+        assert(sheep[i].object_count == 1);
+        assert(sheep[i].objects[0].rect.x == 12);
+        assert(sheep[i].objects[0].stack_order == 3);
+    }
+
+    /* Mutating the generation the sheep already consumed is invisible until
+     * a new generation is published. */
+    snapshot.objects[0].rect.x = 999;
+    for (int i = 0; i < 5; i++) desktop_snapshot_consume(&sheep[i], &snapshot);
+    for (int i = 0; i < 5; i++) assert(sheep[i].objects[0].rect.x == 12);
+
+    snapshot.refresh_count = 2;
+    for (int i = 0; i < 5; i++) desktop_snapshot_consume(&sheep[i], &snapshot);
+    for (int i = 0; i < 5; i++) assert(sheep[i].objects[0].rect.x == 999);
+
+    /* Fullscreen suppression is per sheep: only monitors actually covered
+     * by the fullscreen surface are suppressed. */
+    snapshot.fullscreen_rects[0] = (GdkRectangle){ 0, 0, 640, 360 };
+    snapshot.fullscreen_count = 1;
+    snapshot.refresh_count = 3;
+    desktop_snapshot_consume(&sheep[0], &snapshot);
+    assert(sheep[0].fullscreen_suppressed);
+    sheep[1].bounds = (GdkRectangle){ 1000, 0, 640, 360 };
+    desktop_snapshot_consume(&sheep[1], &snapshot);
+    assert(!sheep[1].fullscreen_suppressed);
+}
+
 static void test_independent_child_instances(void) {
     const EsheepChild *child = find_child_test_record();
     App sheep[2];
@@ -294,6 +349,7 @@ int main(void) {
     test_monitor_seam_selection();
     test_spawn_spacing_on_monitor();
     test_window_spawn_skips_taskbar_and_overlap();
+    test_shared_snapshot_consumption();
     test_independent_child_instances();
     test_collision_breaks_deadlock();
     test_unresolved_edge_overlap_turns_inward();

@@ -33,10 +33,11 @@
 #define MAX_OBJECTS 128
 #define MAX_SHEEP 32
 /* Ticks between refresh_objects() X11 rescans per sheep (see on_tick). At
- * the default 33ms tick, 5 is ~165ms -- responsive enough for window
- * landing, far enough apart that a multi-sheep group's combined X11 round
- * trips per tick can't starve GTK's redraw queue the way doing this every
- * single tick does. */
+ * the group's X11 desktop rescans (see desktop_snapshot_tick). At the
+ * default 33ms tick, 5 is ~165ms -- responsive enough for window landing,
+ * far enough apart that a multi-sheep group's combined X11 round trips
+ * per tick can't starve GTK's redraw queue the way doing this every single
+ * tick does. */
 #define OBJECT_REFRESH_INTERVAL_TICKS 5
 #define MAX_RUNTIME_CHILDREN (ESHEEP_RENDER_MAX_CHILDREN - 1)
 
@@ -46,6 +47,47 @@ typedef struct {
     gboolean fullscreen;
     int stack_order;
 } DesktopObject;
+
+/* One shared X11 desktop snapshot per group of sheep.
+ *
+ * Ownership and invalidation rules:
+ * - Every sheep in a group points shared_snapshot at the same storage,
+ *   stack-allocated in main for the whole gtk_main run. Nothing here is
+ *   heap owned, so there is nothing to free, and no background thread ever
+ *   touches the snapshot: scans and consumption happen on the GTK main
+ *   thread only, from tick and input handlers.
+ * - Exactly one X11 rescan happens per group refresh interval: the first
+ *   sheep whose tick finds next_refresh_at_us in the past performs the
+ *   scan and pushes the deadline forward; the other sheep consume the
+ *   stored generation without their own X11 property/tree/geometry
+ *   round trips. Forced refreshes (drag release, initial spawn) bypass
+ *   the deadline.
+ * - A complete scan replaces the stored client list, stacking, landing
+ *   candidates, and fullscreen rectangles in one step and bumps
+ *   refresh_count, the generation counter the regression tests count. An
+ *   incomplete scan (malformed _NET_CLIENT_LIST, missing stacking data)
+ *   leaves the stored generation untouched, so the group keeps the last
+ *   complete desktop picture; the next attempt is scheduled one interval
+ *   later either way.
+ * - Sheep copy the current generation into their own per-sheep view on
+ *   consume; per-monitor fullscreen suppression is judged from the stored
+ *   fullscreen rectangles against each sheep's own monitor. */
+typedef struct {
+    Window clients[MAX_OBJECTS]; /* _NET_CLIENT_LIST, drives restacking */
+    int client_count;
+    Window stacking[MAX_OBJECTS]; /* _NET_CLIENT_LIST_STACKING */
+    int stacking_count;
+    DesktopObject objects[MAX_OBJECTS]; /* landing candidates */
+    int object_count;
+    GdkRectangle fullscreen_rects[MAX_OBJECTS]; /* root coordinates */
+    int fullscreen_count;
+    Atom window_type_atom;
+    Atom desktop_type_atom;
+    gboolean valid; /* stored data is the last complete scan */
+    gboolean refresh_failed; /* last scan attempt was incomplete */
+    int refresh_count; /* completed scans (generation counter) */
+    gint64 next_refresh_at_us; /* monotonic deadline of the group rescan */
+} DesktopSnapshot;
 
 typedef enum {
     DESKTOP_BACKEND_X11 = 0,
@@ -122,6 +164,8 @@ struct App {
     gboolean hidden;
     gboolean fullscreen_suppressed;
     int object_refresh_countdown; /* ticks until the next X11 desktop rescan */
+    int snapshot_epoch; /* shared-snapshot generation this sheep consumed */
+    DesktopSnapshot *shared_snapshot; /* group-owned snapshot, or NULL */
     App *siblings;
     int sibling_count;
     int child_animation_id;  /* active child animation id, or 0 if none */
@@ -158,6 +202,7 @@ typedef struct {
     gboolean exclude_conky;
     int review_animation;
     char spawn_mode[16];
+    DesktopSnapshot *desktop_snapshot;
 } SheepGroup;
 
 static int clamp_pos_x(const App *app, int pos_x);
@@ -985,6 +1030,8 @@ static void cleanup_app(App *app) {
     }
     app->xwindow = 0;
     app->object_count = 0;
+    app->snapshot_epoch = 0;
+    app->shared_snapshot = NULL;
     app->dragging = FALSE;
     app->edge_dispatched = FALSE;
     app->child_animation_id = 0;
@@ -1338,20 +1385,35 @@ static void restack_below_occluding_window(App *app, Display *display,
     x11_refresh_sync(display);
 }
 
-static void refresh_objects(App *app) {
-    if (!app->window_landing) {
-        app->object_count = 0;
-        app->fullscreen_suppressed = FALSE;
-        return;
+static GdkDisplay *app_x11_display(const App *app) {
+    GdkDisplay *display = NULL;
+    if (app && app->window)
+        display = gtk_widget_get_display(app->window);
+    if (!GDK_IS_X11_DISPLAY(display)) {
+        GdkDisplay *fallback = gdk_display_get_default();
+        if (GDK_IS_X11_DISPLAY(fallback)) display = fallback;
     }
-    GdkDisplay *gdk_display = gtk_widget_get_display(app->window);
-    if (!GDK_IS_X11_DISPLAY(gdk_display)) return;
+    return display;
+}
 
+static gint64 desktop_snapshot_interval_us(const App *driver) {
+    guint tick_ms = driver && driver->tick_ms > 0 ? driver->tick_ms : TICK_MS;
+    return (gint64)OBJECT_REFRESH_INTERVAL_TICKS * (gint64)tick_ms * 1000;
+}
+
+/* The group's single X11 desktop scan. Runs while the scoped X11 error
+ * handler is installed so a stale client-list entry cannot escape into
+ * GTK's fatal handler. On success the whole generation is committed to
+ * snap in one step; an incomplete scan leaves the stored generation
+ * untouched and flags refresh_failed. */
+static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
+                                          GdkDisplay *gdk_display) {
     Display *display = gdk_x11_display_get_xdisplay(gdk_display);
     Window root = DefaultRootWindow(display);
     DesktopObject refreshed_objects[MAX_OBJECTS];
+    GdkRectangle refreshed_fullscreen[MAX_OBJECTS];
     int refreshed_count = 0;
-    gboolean refreshed_fullscreen_suppressed = FALSE;
+    int fullscreen_count = 0;
     /* Xlib reports invalid or disappearing client windows asynchronously.
      * Install the scoped handler before even querying the root properties so
      * a stale client-list entry cannot escape into GTK's fatal handler. */
@@ -1380,7 +1442,8 @@ static void refresh_objects(App *app) {
         actual_type != XA_WINDOW) {
         if (windows) XFree(windows);
         XSetErrorHandler(x11_previous_error_handler);
-        return;
+        snap->refresh_failed = TRUE;
+        return FALSE;
     }
 
     x11_bad_window = FALSE;
@@ -1394,7 +1457,8 @@ static void refresh_objects(App *app) {
         if (stacking) XFree(stacking);
         XFree(windows);
         XSetErrorHandler(x11_previous_error_handler);
-        return;
+        snap->refresh_failed = TRUE;
+        return FALSE;
     }
     if (result != Success || !stacking || format != 32 ||
         actual_type != XA_WINDOW) {
@@ -1405,15 +1469,15 @@ static void refresh_objects(App *app) {
 
     for (unsigned long i = 0; i < count && refreshed_count < MAX_OBJECTS; i++) {
         x11_bad_window = FALSE;
-        gboolean own_window = windows[i] == app->xwindow;
-        for (int sibling = 0; !own_window && sibling < app->sibling_count;
+        gboolean own_window = windows[i] == driver->xwindow;
+        for (int sibling = 0; !own_window && sibling < driver->sibling_count;
              sibling++)
-            own_window = windows[i] == app->siblings[sibling].xwindow;
+            own_window = windows[i] == driver->siblings[sibling].xwindow;
         if (own_window) continue;
         DesktopSurfaceTraits traits = inspect_x11_surface_traits(
             display, windows[i], window_type, dock_type, desktop_type,
             state_atom, fullscreen_state, strut_atom, strut_partial_atom,
-            app->exclude_conky);
+            driver->exclude_conky);
         if (x11_bad_window) continue;
         if (traits.fullscreen_surface) {
             XWindowAttributes fullscreen_attributes;
@@ -1423,13 +1487,13 @@ static void refresh_objects(App *app) {
                 if (XTranslateCoordinates(display, windows[i], root, 0, 0,
                                            &fullscreen_x, &fullscreen_y,
                                            &fullscreen_child)) {
-                    GdkRectangle fullscreen_rect = {
-                        fullscreen_x, fullscreen_y,
-                        fullscreen_attributes.width, fullscreen_attributes.height
-                    };
-                    if (fullscreen_covers_monitor(&app->bounds,
-                                                  &fullscreen_rect))
-                        refreshed_fullscreen_suppressed = TRUE;
+                    /* Coverage is judged per sheep at consume time, because
+                     * different sheep can stand on different monitors. */
+                    if (fullscreen_count < MAX_OBJECTS)
+                        refreshed_fullscreen[fullscreen_count++] =
+                            (GdkRectangle){ fullscreen_x, fullscreen_y,
+                                            fullscreen_attributes.width,
+                                            fullscreen_attributes.height };
                 }
             }
             x11_refresh_sync(display);
@@ -1481,16 +1545,126 @@ static void refresh_objects(App *app) {
         object->taskbar = FALSE;
         object->stack_order = stacking_order(stacking, stacking_count, windows[i]);
     }
-    restack_below_occluding_window(app, display, windows, count, stacking,
-                                   stacking_count, window_type, desktop_type);
     x11_refresh_sync(display);
     XSetErrorHandler(x11_previous_error_handler);
+    memcpy(snap->clients, windows, (size_t)count * sizeof(snap->clients[0]));
     XFree(windows);
-    if (stacking) XFree(stacking);
-    memcpy(app->objects, refreshed_objects,
-           (size_t)refreshed_count * sizeof(refreshed_objects[0]));
-    app->object_count = refreshed_count;
-    app->fullscreen_suppressed = refreshed_fullscreen_suppressed;
+    if (stacking) {
+        memcpy(snap->stacking, stacking,
+               (size_t)stacking_count * sizeof(snap->stacking[0]));
+        snap->stacking_count = (int)stacking_count;
+        XFree(stacking);
+    } else {
+        snap->stacking_count = 0;
+    }
+    snap->client_count = (int)count;
+    memcpy(snap->objects, refreshed_objects,
+           (size_t)refreshed_count * sizeof(snap->objects[0]));
+    snap->object_count = refreshed_count;
+    memcpy(snap->fullscreen_rects, refreshed_fullscreen,
+           (size_t)fullscreen_count * sizeof(snap->fullscreen_rects[0]));
+    snap->fullscreen_count = fullscreen_count;
+    snap->window_type_atom = window_type;
+    snap->desktop_type_atom = desktop_type;
+    snap->valid = TRUE;
+    snap->refresh_failed = FALSE;
+    snap->refresh_count++;
+    return TRUE;
+}
+
+/* Schedule the group rescan on behalf of one sheep. The deadline advances
+ * after every attempt, so the group retries at most once per interval even
+ * when a scan comes back incomplete. */
+static void desktop_snapshot_scan(DesktopSnapshot *snap, App *driver) {
+    if (!snap || !driver || !driver->window_landing) return;
+    GdkDisplay *gdk_display = app_x11_display(driver);
+    if (!gdk_display) return;
+    (void)x11_scan_desktop_snapshot(snap, driver, gdk_display);
+    snap->next_refresh_at_us = g_get_monotonic_time() +
+                               desktop_snapshot_interval_us(driver);
+}
+
+/* Push one stored generation into a sheep's own surface view and issue its
+ * restack request while the scoped X11 error handler is installed, as the
+ * old combined refresh path did. */
+static void desktop_snapshot_apply(App *app, const DesktopSnapshot *snap,
+                                   GdkDisplay *gdk_display) {
+    memcpy(app->objects, snap->objects,
+           (size_t)snap->object_count * sizeof(snap->objects[0]));
+    app->object_count = snap->object_count;
+    gboolean suppressed = FALSE;
+    for (int i = 0; i < snap->fullscreen_count; i++) {
+        if (fullscreen_covers_monitor(&app->bounds,
+                                      &snap->fullscreen_rects[i])) {
+            suppressed = TRUE;
+            break;
+        }
+    }
+    app->fullscreen_suppressed = suppressed;
+    if (gdk_display) {
+        Display *display = gdk_x11_display_get_xdisplay(gdk_display);
+        x11_previous_error_handler = XSetErrorHandler(x11_refresh_error_handler);
+        x11_bad_window = FALSE;
+        restack_below_occluding_window(app, display, snap->clients,
+                                       (unsigned long)snap->client_count,
+                                       snap->stacking,
+                                       (unsigned long)snap->stacking_count,
+                                       snap->window_type_atom,
+                                       snap->desktop_type_atom);
+        x11_refresh_sync(display);
+        XSetErrorHandler(x11_previous_error_handler);
+    }
+}
+
+/* Consume the shared snapshot from one sheep's point of view. The
+ * generation gate keeps it a single memcpy until the group publishes a new
+ * scan, so the per-tick cost is one comparison. */
+static void desktop_snapshot_consume(App *app, const DesktopSnapshot *snap) {
+    if (!app || !snap || app->snapshot_epoch == snap->refresh_count) return;
+    app->snapshot_epoch = snap->refresh_count;
+    if (!snap->valid) return;
+    desktop_snapshot_apply(app, snap, app_x11_display(app));
+}
+
+/* Per-tick entry point for a sheep that belongs to a group. Rescans only
+ * once the group deadline has passed; then the sheep consumes the stored
+ * generation. */
+static void desktop_snapshot_tick(App *app) {
+    if (!app) return;
+    if (!app->window_landing) {
+        app->object_count = 0;
+        app->fullscreen_suppressed = FALSE;
+        return;
+    }
+    DesktopSnapshot *snap = app->shared_snapshot;
+    if (!snap) return;
+    if (g_get_monotonic_time() >= snap->next_refresh_at_us)
+        desktop_snapshot_scan(snap, app);
+    desktop_snapshot_consume(app, snap);
+}
+
+/* Refresh this sheep's desktop surface view. Group members share one
+ * snapshot: the call forces the group rescan (drag release, initial spawn)
+ * and pushes the new generation into this sheep. Standalone sheep (test
+ * instances without a shared snapshot) scan directly. */
+static void refresh_objects(App *app) {
+    if (!app) return;
+    if (!app->window_landing) {
+        app->object_count = 0;
+        app->fullscreen_suppressed = FALSE;
+        return;
+    }
+    if (app->shared_snapshot) {
+        desktop_snapshot_scan(app->shared_snapshot, app);
+        desktop_snapshot_consume(app, app->shared_snapshot);
+        return;
+    }
+    GdkDisplay *gdk_display = app_x11_display(app);
+    if (!gdk_display) return;
+    DesktopSnapshot local;
+    memset(&local, 0, sizeof(local));
+    if (!x11_scan_desktop_snapshot(&local, app, gdk_display)) return;
+    desktop_snapshot_apply(app, &local, gdk_display);
 }
 
 static void build_context(App *app, EsheepContext *ctx) {
@@ -2112,22 +2286,20 @@ static gboolean on_tick(gpointer user_data) {
     }
 
     update_monitor_bounds(app);
-    /* refresh_objects() does several synchronous X11 round trips (an
-     * explicit XSync after nearly every XGetWindowProperty/XQueryTree/
-     * XGetWindowAttributes/XTranslateCoordinates call, for prompt
-     * bad-window detection) for every window in _NET_CLIENT_LIST -- on a
-     * desktop with dozens of real windows open, that easily adds up to a
-     * couple hundred round trips per sheep per call. Doing that every
-     * single tick for every sheep in a multi-sheep group starves the GTK
-     * main loop: it's always got a just-fired, default-priority tick
-     * timeout ready to run, so the idle-priority redraw it queues never
-     * gets serviced and nothing ever actually paints, even though the
-     * window is mapped and every other piece of per-sheep state looks
-     * perfectly normal. Rescanning every few ticks instead of every tick
-     * cuts that cost by the same factor and is imperceptible for window
-     * landing, which only needs to react to windows opening/closing/moving,
-     * not to a 33ms cadence. */
-    if (app->object_refresh_countdown <= 0) {
+    /* The group shares one desktop snapshot (see DesktopSnapshot): the
+     * first sheep whose deadline has passed performs the group's X11
+     * rescan for this interval (several synchronous round trips over every
+     * window in _NET_CLIENT_LIST, which on a busy desktop used to starve
+     * the GTK main loop when every sheep did it every tick), and every
+     * other sheep consumes the stored generation without X11 round trips
+     * of its own. Rescanning every few ticks instead of every tick is
+     * imperceptible for window landing, which only needs to react to
+     * windows opening/closing/moving, not to a 33ms cadence. Standalone
+     * sheep (hand-built test instances without a shared snapshot) keep
+     * the per-sheep countdown. */
+    if (app->shared_snapshot) {
+        desktop_snapshot_tick(app);
+    } else if (app->object_refresh_countdown <= 0) {
         refresh_objects(app);
         app->object_refresh_countdown = OBJECT_REFRESH_INTERVAL_TICKS;
     } else {
@@ -3296,6 +3468,11 @@ int main(int argc, char **argv) {
      * would let the sheep spawn flush with the physical bottom edge of the
      * screen, which on most desktops means directly underneath (and fully
      * hidden by) a bottom panel. */
+    /* One shared desktop snapshot for the whole group; ownership and
+     * invalidation rules live with the DesktopSnapshot type. Stack storage
+     * for the gtk_main run, so group teardown needs nothing. */
+    DesktopSnapshot group_snapshot;
+    memset(&group_snapshot, 0, sizeof(group_snapshot));
     App sheep[MAX_SHEEP] = {0};
     for (guint i = 0; i < count; i++) {
         App *app = &sheep[i];
@@ -3315,6 +3492,7 @@ int main(int argc, char **argv) {
         app->siblings = sheep;
         app->sibling_count = (int)count;
         app->bounds = initial_bounds;
+        app->shared_snapshot = &group_snapshot;
         esheep_actor_init(&app->actor, NULL, ANIM_WALK, app->pos_x,
                           app->pos_y, app->direction);
         esheep_actor_set_random_source(&app->actor, actor_random_source, app);
@@ -3333,7 +3511,10 @@ int main(int argc, char **argv) {
     for (guint i = 0; i < count; i++) {
         App *app = &sheep[i];
         if (GDK_IS_X11_DISPLAY(display)) {
-            refresh_objects(app);
+            if (i == 0)
+                refresh_objects(app); /* one group-wide rescan for the spawn pass */
+            else
+                desktop_snapshot_consume(app, app->shared_snapshot);
         }
         configure_initial_spawn(app);
         gtk_window_move(GTK_WINDOW(app->window),
@@ -3372,6 +3553,7 @@ int main(int argc, char **argv) {
         .window_landing = window_landing,
         .exclude_conky = exclude_conky,
         .review_animation = review_animation,
+        .desktop_snapshot = &group_snapshot,
     };
     g_strlcpy(group.character, character ? character : "sheep",
               sizeof(group.character));

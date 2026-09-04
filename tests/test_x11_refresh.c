@@ -35,6 +35,80 @@ static int root_child_index(Display *display, Window root, Window needle) {
     return result;
 }
 
+/* The group regression: five sheep sharing one desktop snapshot must
+ * produce exactly one X11 client-list rescan per refresh interval, no
+ * matter how many sheep tick. refresh_count is the seam that counts the
+ * completed group rescans, not the equivalence of the data the sheep
+ * eventually see. */
+static void test_group_snapshot_shares_one_refresh(App *lead) {
+    GdkDisplay *gdk_display = gdk_display_get_default();
+    Display *display = gdk_x11_display_get_xdisplay(gdk_display);
+    Window root = DefaultRootWindow(display);
+    Atom client_list = XInternAtom(display, "_NET_CLIENT_LIST", False);
+
+    App sheep[5];
+    memset(sheep, 0, sizeof(sheep));
+    sheep[0] = *lead;
+    for (int i = 0; i < 5; i++) {
+        sheep[i].siblings = sheep;
+        sheep[i].sibling_count = 5;
+        sheep[i].tile_size = lead->tile_size;
+        sheep[i].bounds = lead->bounds;
+        sheep[i].window_landing = TRUE;
+        sheep[i].exclude_conky = lead->exclude_conky;
+        sheep[i].tick_ms = TICK_MS;
+        sheep[i].pos_x = lead->pos_x;
+        sheep[i].pos_y = lead->pos_y;
+        sheep[i].xwindow = 0; /* copies must not restack the real window */
+    }
+    DesktopSnapshot snapshot;
+    memset(&snapshot, 0, sizeof(snapshot));
+    for (int i = 0; i < 5; i++) sheep[i].shared_snapshot = &snapshot;
+
+    Window client = XCreateSimpleWindow(display, root, 100, 100, 400, 200, 0,
+                                        0, 0);
+    XMapWindow(display, client);
+    set_client_list(display, root, client_list, client);
+
+    /* Group tick 1: the deadline is due, so exactly one of the five sheep
+     * performs the X11 rescan; the rest consume the stored generation. */
+    for (int i = 0; i < 5; i++) desktop_snapshot_tick(&sheep[i]);
+    assert(snapshot.refresh_count == 1);
+
+    /* Four more full group ticks inside the same refresh interval must not
+     * rescan, and every sheep must hold the same snapshot data. */
+    for (int t = 0; t < 4; t++) {
+        for (int i = 0; i < 5; i++) desktop_snapshot_tick(&sheep[i]);
+    }
+    assert(snapshot.refresh_count == 1);
+    for (int i = 0; i < 5; i++) {
+        assert(sheep[i].object_count == 1);
+        assert(sheep[i].objects[0].rect.x == 100);
+        assert(sheep[i].objects[0].rect.y == 100);
+        assert(sheep[i].objects[0].rect.width == 400);
+        assert(sheep[i].objects[0].rect.height == 200);
+        assert(sheep[i].objects[0].stack_order == 0);
+    }
+
+    /* The snapshot must not stay stale: once the deadline passes again the
+     * group performs its next rescan. */
+    snapshot.next_refresh_at_us = 0;
+    for (int i = 0; i < 5; i++) desktop_snapshot_tick(&sheep[i]);
+    assert(snapshot.refresh_count == 2);
+    for (int i = 0; i < 5; i++) assert(sheep[i].object_count == 1);
+
+    /* The drag-release path forces an immediate group rescan. Model a real
+     * refresh race by leaving the destroyed ID in _NET_CLIENT_LIST. */
+    set_client_list(display, root, client_list, client);
+    XDestroyWindow(display, client);
+    XSync(display, False);
+    refresh_objects(&sheep[0]);
+    assert(snapshot.refresh_count == 3);
+    assert(sheep[0].object_count == 0);
+    for (int i = 1; i < 5; i++) desktop_snapshot_consume(&sheep[i], &snapshot);
+    for (int i = 1; i < 5; i++) assert(sheep[i].object_count == 0);
+}
+
 int main(int argc, char **argv) {
     assert(gtk_init_check(&argc, &argv));
     GdkDisplay *gdk_display = gdk_display_get_default();
@@ -196,6 +270,10 @@ int main(int argc, char **argv) {
     XDestroyWindow(display, desktop_sheep_frame);
     XDestroyWindow(display, desktop_frame);
     XSync(display, False);
+
+    /* Group regression: all sheep in the group share one desktop snapshot
+     * refresh per interval (the seam counts the rescans). */
+    test_group_snapshot_shares_one_refresh(&app);
 
     cleanup_app(&app);
     return 0;
