@@ -1560,6 +1560,126 @@
 <next probability="100" only="none">1</next>
 </sequence>
 </animation>
+<!-- Deterministic art-completeness extensions for filled tiles absent from
+     the recovered original behavior graph.  Original records 1-54 above are
+     preserved byte-for-byte in behavior and frame order. -->
+<animation id="55">
+<name>face_turn_extension</name>
+<start><x>0</x><y>0</y><interval>160</interval></start>
+<end><x>0</x><y>0</y><interval>160</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>11</frame><frame>14</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="56">
+<name>hand_to_mouth_extension</name>
+<start><x>0</x><y>0</y><interval>140</interval></start>
+<end><x>0</x><y>0</y><interval>140</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>22</frame><frame>26</frame><frame>27</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="57">
+<name>glasses_reaction_extension</name>
+<start><x>0</x><y>0</y><interval>120</interval></start>
+<end><x>0</x><y>0</y><interval>120</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>52</frame><frame>53</frame><frame>54</frame><frame>55</frame><frame>56</frame><frame>57</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="58">
+<name>hand_wave_extension</name>
+<start><x>0</x><y>0</y><interval>120</interval></start>
+<end><x>0</x><y>0</y><interval>120</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>71</frame><frame>72</frame><frame>73</frame><frame>74</frame><frame>75</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="59">
+<name>tumble_extension</name>
+<start><x>0</x><y>0</y><interval>110</interval></start>
+<end><x>0</x><y>0</y><interval>110</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>83</frame><frame>84</frame><frame>85</frame><frame>86</frame><frame>87</frame><frame>88</frame><frame>89</frame><frame>90</frame><frame>91</frame><frame>92</frame><frame>93</frame><frame>94</frame><frame>95</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="60">
+<name>tumble_recover_extension</name>
+<start><x>0</x><y>0</y><interval>110</interval></start>
+<end><x>0</x><y>0</y><interval>110</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>99</frame><frame>100</frame><frame>101</frame><frame>102</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="61">
+<name>meteorite_extension</name>
+<start><x>0</x><y>0</y><interval>90</interval></start>
+<end><x>0</x><y>0</y><interval>90</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>109</frame><frame>110</frame><frame>111</frame><frame>112</frame><frame>113</frame><frame>114</frame><frame>115</frame><frame>116</frame><frame>117</frame><frame>118</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="62">
+<name>comet_extension</name>
+<start><x>0</x><y>0</y><interval>90</interval></start>
+<end><x>0</x><y>0</y><interval>90</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>120</frame><frame>121</frame><frame>122</frame><frame>123</frame><frame>124</frame><frame>125</frame><frame>126</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="63">
+<name>falling_body_extension</name>
+<start><x>0</x><y>0</y><interval>100</interval></start>
+<end><x>0</x><y>0</y><interval>100</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>131</frame><frame>132</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="64">
+<name>atmospheric_reentry</name>
+<start><x>0</x><y>0</y><interval>70</interval></start>
+<end><x>0</x><y>0</y><interval>70</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>133</frame><frame>134</frame><frame>135</frame><frame>136</frame><frame>137</frame><frame>138</frame><frame>139</frame><frame>140</frame><frame>141</frame><frame>142</frame><frame>143</frame><frame>144</frame><frame>145</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="65">
+<name>spacecraft_flight</name>
+<start><x>0</x><y>0</y><interval>100</interval></start>
+<end><x>0</x><y>0</y><interval>100</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>158</frame><frame>159</frame><frame>160</frame><frame>161</frame><frame>162</frame><frame>163</frame><frame>164</frame><frame>165</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="66">
+<name>spacecraft_pilot</name>
+<start><x>0</x><y>0</y><interval>100</interval></start>
+<end><x>0</x><y>0</y><interval>100</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>166</frame><frame>167</frame><frame>168</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
+<animation id="67">
+<name>grid_overlay_extension</name>
+<start><x>0</x><y>0</y><interval>100</interval></start>
+<end><x>0</x><y>0</y><interval>100</interval></end>
+<sequence repeat="0" repeatfrom="0">
+<frame>172</frame>
+<next probability="100" only="none">1</next>
+</sequence>
+</animation>
 </animations>
 <childs>
 <child animationid="21">
@@ -1572,12 +1692,16 @@
 <y>imageY</y>
 <next>27</next>
 </child>
+<!-- Keep the validated local UFO spacing used by the runtime behavior tests. -->
 <child animationid="28">
 <x>-imageW-8</x>
 <y>imageY</y>
 <next>31</next>
 </child>
+<child animationid="65">
+<x>-imageW-8</x>
+<y>imageY</y>
+<next>66</next>
+</child>
 </childs>
 </animations>
-
-

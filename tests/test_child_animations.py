@@ -106,11 +106,13 @@ def test_generated_child_data():
     count_match = re.search(r"const int esheep_default_child_count = (\d+);", anim_data_c)
     assert count_match, "Generated data missing esheep_child_count"
     child_count = int(count_match.group(1))
-    assert child_count == 3, f"Expected 3 child records, got {child_count}"
+    assert child_count == 4, f"Expected 4 child records, got {child_count}"
 
     # Verify the eating-to-flower mapping is in generated data
     assert re.search(r"26.*\"imageX-imageW\*0\.9\".*\"imageY\".*27", anim_data_c), \
         "Generated data missing eating-to-flower child record"
+    assert re.search(r"65.*\"-imageW-8\".*\"imageY\".*66", anim_data_c), \
+        "Generated data missing spacecraft-to-pilot child record"
 
     print(f"OK: Generated C data has {child_count} child records")
     return True

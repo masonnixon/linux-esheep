@@ -77,6 +77,49 @@ REPEAT_RANDOM_B = re.compile(r"([0-9]+)\+random/([0-9]+)")
 REPEAT_AREA = re.compile(r"\(areaH/2\+\(randS\*areaH/2\)/120-imageH-([0-9]+)\)/2")
 IMAGE_FACTOR = re.compile(r"[+-]?image[WH]\*([0-9]+(?:\.[0-9]+)?)")
 
+# Inventory copied from the original eSheep64 animations.xml source.  The
+# names and IDs are part of the authored behavior graph, not display labels
+# invented by this project.
+ORIGINAL_ANIMATION_NAMES = {
+    1: "walk", 2: "rotate1a", 3: "rotate1b", 4: "drag", 5: "fall",
+    6: "fall fast", 7: "run", 8: "boing", 9: "fall soft", 10: "fall hard",
+    11: "pissa", 12: "pissb", 13: "kill", 14: "sync", 15: "sleep1a",
+    16: "sleep1b", 17: "sleep2a", 18: "sleep2b", 19: "sleep3a", 20: "sleep3b",
+    21: "batha", 22: "bathb", 23: "bathw", 24: "bathz", 25: "jump",
+    26: "eat", 27: "flower", 28: "blacksheepa", 29: "blacksheepb",
+    30: "blacksheepc", 31: "blacksheepv", 32: "blacksheepw", 33: "blacksheepy",
+    34: "blacksheepz", 35: "run_begin", 36: "run_end", 37: "vertical_walk_up",
+    38: "top_walk", 39: "top_walk2", 40: "top_walk3", 41: "vertical_walk_down",
+    42: "vertical_walk_over", 43: "look_down", 44: "jump_down", 45: "jump_down2",
+    46: "jump_down3", 47: "bathc", 48: "bathd", 49: "walk_win2", 50: "walk_task2",
+    51: "fall_wina", 52: "fall_winb", 53: "fall_winc", 54: "fall_wind",
+}
+
+# The original source has exactly these three multi-sprite compositions.  The
+# expressions preserve absolute bath placement and relative flower/UFO
+# placement.  The UFO keeps this checkout's validated -8 spacing adjustment.
+ORIGINAL_CHILD_RECORDS = (
+    (21, "screenW+10-areaH/2-(randS*areaH/2)/120", "areaH-imageH", 23),
+    (26, "imageX-imageW*0.9", "imageY", 27),
+    (28, "-imageW-8", "imageY", 31),
+)
+
+EXTENSION_ANIMATIONS = {
+    55: ("face_turn_extension", (11, 14)),
+    56: ("hand_to_mouth_extension", (22, 26, 27)),
+    57: ("glasses_reaction_extension", (52, 53, 54, 55, 56, 57)),
+    58: ("hand_wave_extension", (71, 72, 73, 74, 75)),
+    59: ("tumble_extension", tuple(range(83, 96))),
+    60: ("tumble_recover_extension", (99, 100, 101, 102)),
+    61: ("meteorite_extension", tuple(range(109, 119))),
+    62: ("comet_extension", tuple(range(120, 127))),
+    63: ("falling_body_extension", (131, 132)),
+    64: ("atmospheric_reentry", tuple(range(133, 146))),
+    65: ("spacecraft_flight", tuple(range(158, 166))),
+    66: ("spacecraft_pilot", (166, 167, 168)),
+    67: ("grid_overlay_extension", (172,)),
+}
+
 
 def _is_int(value):
     return value is not None and re.fullmatch(r"[+-]?[0-9]+", value) is not None
@@ -106,6 +149,56 @@ def valid_pose_expression(expr):
     if _is_int(expr):
         return True
     return IMAGE_FACTOR.fullmatch(expr) is not None
+
+
+def test_original_animation_inventory():
+    root = ET.parse(REPO_ROOT / "tools" / "esheep_animations.xml").getroot()
+    actual = {
+        int(an.get("id")): an.findtext("e:name", default="", namespaces=NS)
+        for an in root.findall("e:animations/e:animation", NS)
+        if int(an.get("id")) <= 54
+    }
+    assert actual == ORIGINAL_ANIMATION_NAMES, (
+        "authored animation inventory drifted: "
+        f"expected {len(ORIGINAL_ANIMATION_NAMES)} original records, got {len(actual)}"
+    )
+    assert set(actual) == set(range(1, 55))
+    print(f"OK: original animation inventory has {len(actual)} records")
+
+
+def test_original_child_inventory():
+    root = ET.parse(REPO_ROOT / "tools" / "esheep_animations.xml").getroot()
+    actual = []
+    for child in root.findall("e:childs/e:child", NS):
+        if int(child.get("animationid")) > 54:
+            continue
+        actual.append((
+            int(child.get("animationid")),
+            child.findtext("e:x", default="", namespaces=NS),
+            child.findtext("e:y", default="", namespaces=NS),
+            int(child.findtext("e:next", default="0", namespaces=NS)),
+        ))
+    assert tuple(actual) == ORIGINAL_CHILD_RECORDS
+    print(f"OK: original child inventory has {len(actual)} compositions")
+
+
+def test_art_completeness_extensions():
+    root = ET.parse(REPO_ROOT / "tools" / "esheep_animations.xml").getroot()
+    actual = {}
+    for an in root.findall("e:animations/e:animation", NS):
+        aid = int(an.get("id"))
+        if aid >= 55:
+            actual[aid] = (
+                an.findtext("e:name", default="", namespaces=NS),
+                tuple(int(frame.text) for frame in an.findall("e:sequence/e:frame", NS)),
+            )
+    assert actual == EXTENSION_ANIMATIONS
+    assert tuple(
+        (int(child.get("animationid")), int(child.findtext("e:next", namespaces=NS)))
+        for child in root.findall("e:childs/e:child", NS)
+        if int(child.get("animationid")) >= 55
+    ) == ((65, 66),)
+    print(f"OK: art-completeness inventory has {len(actual)} extension records")
 
 
 def valid_spawn_expression(expr):
@@ -621,6 +714,9 @@ def test_nonfinite_opacity():
 
 
 TESTS = [
+    test_original_animation_inventory,
+    test_original_child_inventory,
+    test_art_completeness_extensions,
     test_authored_xml_is_valid,
     test_base_fixture_is_valid,
     test_generation_is_reproducible,

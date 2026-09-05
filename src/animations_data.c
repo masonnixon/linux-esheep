@@ -643,6 +643,149 @@ static const EsheepTransition anim54_gravity_next[] = {
     { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
 };
 
+static const int anim55_frames[] = { 11, 14 };
+static const EsheepTransition anim55_seq_next[] = {
+    { 922746881u, 100, "none", 1 },
+};
+static const EsheepTransition anim55_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim55_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim56_frames[] = { 22, 26, 27 };
+static const EsheepTransition anim56_seq_next[] = {
+    { 939524097u, 100, "none", 1 },
+};
+static const EsheepTransition anim56_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim56_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim57_frames[] = { 52, 53, 54, 55, 56, 57 };
+static const EsheepTransition anim57_seq_next[] = {
+    { 956301313u, 100, "none", 1 },
+};
+static const EsheepTransition anim57_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim57_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim58_frames[] = { 71, 72, 73, 74, 75 };
+static const EsheepTransition anim58_seq_next[] = {
+    { 973078529u, 100, "none", 1 },
+};
+static const EsheepTransition anim58_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim58_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim59_frames[] = { 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95 };
+static const EsheepTransition anim59_seq_next[] = {
+    { 989855745u, 100, "none", 1 },
+};
+static const EsheepTransition anim59_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim59_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim60_frames[] = { 99, 100, 101, 102 };
+static const EsheepTransition anim60_seq_next[] = {
+    { 1006632961u, 100, "none", 1 },
+};
+static const EsheepTransition anim60_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim60_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim61_frames[] = { 109, 110, 111, 112, 113, 114, 115, 116, 117, 118 };
+static const EsheepTransition anim61_seq_next[] = {
+    { 1023410177u, 100, "none", 1 },
+};
+static const EsheepTransition anim61_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim61_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim62_frames[] = { 120, 121, 122, 123, 124, 125, 126 };
+static const EsheepTransition anim62_seq_next[] = {
+    { 1040187393u, 100, "none", 1 },
+};
+static const EsheepTransition anim62_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim62_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim63_frames[] = { 131, 132 };
+static const EsheepTransition anim63_seq_next[] = {
+    { 1056964609u, 100, "none", 1 },
+};
+static const EsheepTransition anim63_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim63_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim64_frames[] = { 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145 };
+static const EsheepTransition anim64_seq_next[] = {
+    { 1073741825u, 100, "none", 1 },
+};
+static const EsheepTransition anim64_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim64_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim65_frames[] = { 158, 159, 160, 161, 162, 163, 164, 165 };
+static const EsheepTransition anim65_seq_next[] = {
+    { 1090519041u, 100, "none", 1 },
+};
+static const EsheepTransition anim65_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim65_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim66_frames[] = { 166, 167, 168 };
+static const EsheepTransition anim66_seq_next[] = {
+    { 1107296257u, 100, "none", 1 },
+};
+static const EsheepTransition anim66_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim66_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
+static const int anim67_frames[] = { 172 };
+static const EsheepTransition anim67_seq_next[] = {
+    { 1124073473u, 100, "none", 1 },
+};
+static const EsheepTransition anim67_border_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+static const EsheepTransition anim67_gravity_next[] = {
+    { 0u, 0, NULL, 0 }, /* unused placeholder, count is 0 */
+};
+
 const EsheepAnimation esheep_default_animations[] = {
     {
         1, "walk",
@@ -1238,8 +1381,151 @@ const EsheepAnimation esheep_default_animations[] = {
         anim54_border_next, 0,
         anim54_gravity_next, 0,
     },
+    {
+        55, "face_turn_extension",
+        { "0", "0", 160, "0", 1.0 },
+        { "0", "0", 160, "0", 1.0 },
+        "0", "0",
+        anim55_frames, 2,
+        0,
+        anim55_seq_next, 1,
+        anim55_border_next, 0,
+        anim55_gravity_next, 0,
+    },
+    {
+        56, "hand_to_mouth_extension",
+        { "0", "0", 140, "0", 1.0 },
+        { "0", "0", 140, "0", 1.0 },
+        "0", "0",
+        anim56_frames, 3,
+        0,
+        anim56_seq_next, 1,
+        anim56_border_next, 0,
+        anim56_gravity_next, 0,
+    },
+    {
+        57, "glasses_reaction_extension",
+        { "0", "0", 120, "0", 1.0 },
+        { "0", "0", 120, "0", 1.0 },
+        "0", "0",
+        anim57_frames, 6,
+        0,
+        anim57_seq_next, 1,
+        anim57_border_next, 0,
+        anim57_gravity_next, 0,
+    },
+    {
+        58, "hand_wave_extension",
+        { "0", "0", 120, "0", 1.0 },
+        { "0", "0", 120, "0", 1.0 },
+        "0", "0",
+        anim58_frames, 5,
+        0,
+        anim58_seq_next, 1,
+        anim58_border_next, 0,
+        anim58_gravity_next, 0,
+    },
+    {
+        59, "tumble_extension",
+        { "0", "0", 110, "0", 1.0 },
+        { "0", "0", 110, "0", 1.0 },
+        "0", "0",
+        anim59_frames, 13,
+        0,
+        anim59_seq_next, 1,
+        anim59_border_next, 0,
+        anim59_gravity_next, 0,
+    },
+    {
+        60, "tumble_recover_extension",
+        { "0", "0", 110, "0", 1.0 },
+        { "0", "0", 110, "0", 1.0 },
+        "0", "0",
+        anim60_frames, 4,
+        0,
+        anim60_seq_next, 1,
+        anim60_border_next, 0,
+        anim60_gravity_next, 0,
+    },
+    {
+        61, "meteorite_extension",
+        { "0", "0", 90, "0", 1.0 },
+        { "0", "0", 90, "0", 1.0 },
+        "0", "0",
+        anim61_frames, 10,
+        0,
+        anim61_seq_next, 1,
+        anim61_border_next, 0,
+        anim61_gravity_next, 0,
+    },
+    {
+        62, "comet_extension",
+        { "0", "0", 90, "0", 1.0 },
+        { "0", "0", 90, "0", 1.0 },
+        "0", "0",
+        anim62_frames, 7,
+        0,
+        anim62_seq_next, 1,
+        anim62_border_next, 0,
+        anim62_gravity_next, 0,
+    },
+    {
+        63, "falling_body_extension",
+        { "0", "0", 100, "0", 1.0 },
+        { "0", "0", 100, "0", 1.0 },
+        "0", "0",
+        anim63_frames, 2,
+        0,
+        anim63_seq_next, 1,
+        anim63_border_next, 0,
+        anim63_gravity_next, 0,
+    },
+    {
+        64, "atmospheric_reentry",
+        { "0", "0", 70, "0", 1.0 },
+        { "0", "0", 70, "0", 1.0 },
+        "0", "0",
+        anim64_frames, 13,
+        0,
+        anim64_seq_next, 1,
+        anim64_border_next, 0,
+        anim64_gravity_next, 0,
+    },
+    {
+        65, "spacecraft_flight",
+        { "0", "0", 100, "0", 1.0 },
+        { "0", "0", 100, "0", 1.0 },
+        "0", "0",
+        anim65_frames, 8,
+        0,
+        anim65_seq_next, 1,
+        anim65_border_next, 0,
+        anim65_gravity_next, 0,
+    },
+    {
+        66, "spacecraft_pilot",
+        { "0", "0", 100, "0", 1.0 },
+        { "0", "0", 100, "0", 1.0 },
+        "0", "0",
+        anim66_frames, 3,
+        0,
+        anim66_seq_next, 1,
+        anim66_border_next, 0,
+        anim66_gravity_next, 0,
+    },
+    {
+        67, "grid_overlay_extension",
+        { "0", "0", 100, "0", 1.0 },
+        { "0", "0", 100, "0", 1.0 },
+        "0", "0",
+        anim67_frames, 1,
+        0,
+        anim67_seq_next, 1,
+        anim67_border_next, 0,
+        anim67_gravity_next, 0,
+    },
 };
-const int esheep_default_animation_count = 54;
+const int esheep_default_animation_count = 67;
 
 const EsheepChild esheep_default_childs[] = {
     {
@@ -1251,8 +1537,11 @@ const EsheepChild esheep_default_childs[] = {
     {
         28, "-imageW-8", "imageY", 31
     },
+    {
+        65, "-imageW-8", "imageY", 66
+    },
 };
-const int esheep_default_child_count = 3;
+const int esheep_default_child_count = 4;
 
 int esheep_tiles_x = esheep_default_tiles_x;
 int esheep_tiles_y = esheep_default_tiles_y;

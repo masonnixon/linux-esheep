@@ -2,8 +2,8 @@
 """Actually render each authored <child> (multi-sprite) scene and check that
 both the parent and the child are visible on screen, separated by a real gap.
 
-The three authored child records (21->23 "batha"/bathw, 26->27 "eat"/flower,
-28->31 "blacksheepa"/blacksheepv) each looked fine in `tests/test_child_animations.py`,
+The four authored child records (21->23 "batha"/bathw, 26->27 "eat"/flower,
+28->31 "blacksheepa"/blacksheepv, and 65->66 spacecraft/pilot) each looked fine in `tests/test_child_animations.py`,
 which only checks the XML/generated data -- names, IDs, expression strings are
 non-empty. Neither of the following two real bugs showed up in the data, only
 in what actually got composited on screen:
@@ -31,6 +31,7 @@ to be both tiles at their authored position. This test renders each scene
 for real under Xvfb and checks the actual on-screen footprint against that.
 """
 import os
+import select
 import subprocess
 import sys
 import shutil
@@ -50,7 +51,9 @@ CHILD_SCENES = {
     21: "batha -> bathw",
     26: "eat -> flower",
     28: "blacksheepa -> blacksheepv",
+    65: "spacecraft_flight -> spacecraft_pilot",
 }
+X11_UNAVAILABLE = False
 
 
 def render_scene(animation_id, out_path):
@@ -66,6 +69,10 @@ def render_scene(animation_id, out_path):
     looks like without being racy about it. Returns None if the environment
     can't run the check at all (not the same as the scene failing it).
     """
+    global X11_UNAVAILABLE
+    if X11_UNAVAILABLE:
+        return None
+
     # In strict mode, missing prerequisites should fail explicitly
     # rather than silently skipping
     if not shutil.which("Xvfb") or not shutil.which("import"):
@@ -77,8 +84,6 @@ def render_scene(animation_id, out_path):
         print("SKIP: Xvfb or ImageMagick 'import' not available", file=sys.stderr)
         return None
 
-    # Use xvfb-run with auto display allocation to avoid conflicts
-    # xvfb-run handles display allocation and cleanup automatically
     env = os.environ.copy()
     env["ESHEEP_AUTOQUIT_MS"] = "1200"
     # Fix the random stream (spawn direction, per-tick rolls) so the
@@ -87,14 +92,27 @@ def render_scene(animation_id, out_path):
     # of depending on which way the sheep happened to face this run.
     env["ESHEEP_SEED"] = "12345"
     
-    # We need to run xvfb-run in background and take screenshots from it
-    # But xvfb-run runs the command and exits. We need Xvfb to stay running.
-    # Let's use Xvfb directly with a random display number
-    import random
-    display_num = random.randint(100, 999)
+    # Ask Xvfb to allocate a genuinely free display. Fixed/random display
+    # numbers collide with stale sockets left by other test invocations.
+    xvfb = subprocess.Popen(
+        ["Xvfb", "-displayfd", "1", "-screen", "0",
+         f"{SCREEN_W}x{SCREEN_H}x24"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    ready, _, _ = select.select([xvfb.stdout], [], [], 3)
+    display_num = xvfb.stdout.readline().strip() if ready else ""
+    if not display_num:
+        error = xvfb.stderr.read().strip()
+        if xvfb.poll() is None:
+            xvfb.terminate()
+        xvfb.wait(timeout=5)
+        strict = os.environ.get("ESHEEP_TEST_STRICT", "").lower() in ("1", "true", "yes")
+        if strict:
+            raise RuntimeError(f"Xvfb could not allocate a display: {error}")
+        X11_UNAVAILABLE = True
+        print(f"SKIP: Xvfb could not allocate a display: {error}", file=sys.stderr)
+        return None
     display = f":{display_num}"
-    xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0",
-                              f"{SCREEN_W}x{SCREEN_H}x24"])
     try:
         env["DISPLAY"] = display
         proc = subprocess.Popen(

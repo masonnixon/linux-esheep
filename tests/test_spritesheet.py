@@ -28,6 +28,30 @@ BLANK_TILES = {174}
 
 SHEETS = ("sheep_spritesheet.png", "penguin_ice_blue_spritesheet.png")
 
+# Complete source-of-truth status for the 16x11 original sheet. Every filled
+# cell is reachable from an authored animation; 174 is an authored blank beat
+# and 173/175 are transparent padding.
+ORIGINAL_REFERENCED_TILES = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16, 17, 18, 19, 20,
+    21, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+    41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 58, 59, 60, 61, 62, 63,
+    64, 65, 66, 67, 68, 69, 70, 76, 77, 78, 79, 80, 81, 82, 96, 97, 98,
+    103, 104, 105, 106, 107, 108, 119, 127, 128, 129, 130, 133, 134, 135,
+    136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+    150, 151, 152, 153, 154, 155, 156, 157, 169, 170, 171, 174,
+}
+EXTENSION_REVIEWED_TILES = set(range(173)) - ORIGINAL_REFERENCED_TILES
+ORIGINAL_TILE_STATUS = {
+    index: (
+        "referenced-blank" if index == 174 else
+        "referenced" if index in ORIGINAL_REFERENCED_TILES else
+        "transparent-padding" if index in (173, 175) else
+        "extension-reachable" if index in EXTENSION_REVIEWED_TILES else
+        "unused-original-art"
+    )
+    for index in range(COLS * ROWS)
+}
+
 
 def referenced_frames():
     """Every tile index reachable from esheep_animations[], from the C source."""
@@ -65,6 +89,16 @@ def main():
 
     if not used:
         failures.append("parsed no frame indices out of src/animations_data.c")
+
+    if set(ORIGINAL_TILE_STATUS) != set(range(COLS * ROWS)):
+        failures.append("original tile inventory does not cover the complete sheet")
+
+    expected_used = set(range(173)) | BLANK_TILES
+    if used != expected_used:
+        failures.append(
+            "animation references do not match the original tile inventory: "
+            f"missing={sorted(expected_used - used)}, extra={sorted(used - expected_used)}"
+        )
 
     for index in used:
         if index >= COLS * ROWS:
@@ -109,7 +143,7 @@ def main():
             print("FAIL: %s" % line)
         return 1
 
-    print("All tests passed (%d referenced frames, %d filled cells, %d sheets)"
+    print("All tests passed (%d referenced tiles, %d filled cells, %d sheets)"
           % (len(used), len(filled.get(SHEETS[0], ())), len(SHEETS)))
     return 0
 
