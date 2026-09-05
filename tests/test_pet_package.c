@@ -167,6 +167,71 @@ int main(void) {
                            "animation repeat expression");
     g_free(range_xml);
 
+    /* Test malformed XML with unfinished transition (missing closing next tag) */
+    package = (EsheepPetPackage *)0x1;
+    const char *unfinished_next_path = "/tmp/esheep-test-unfinished-next.xml";
+    const char *unfinished_next_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame><next probability=\"100\">2"
+        "</sequence></animation></animations></animations>";
+    assert(g_file_set_contents(unfinished_next_path, unfinished_next_xml, -1,
+                               &error));
+    assert(!esheep_pet_package_load(unfinished_next_path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    g_clear_error(&error);
+    remove(unfinished_next_path);
+
+    /* Test malformed XML with unfinished transition (missing next content) */
+    package = NULL;
+    const char *empty_next_path = "/tmp/esheep-test-empty-next.xml";
+    const char *empty_next_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame><next probability=\"100\"></next>"
+        "</sequence></animation></animations></animations>";
+    assert(g_file_set_contents(empty_next_path, empty_next_xml, -1,
+                               &error));
+    assert(!esheep_pet_package_load(empty_next_path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    g_clear_error(&error);
+    remove(empty_next_path);
+
+    /* Test malformed XML with unfinished child */
+    package = NULL;
+    const char *unfinished_child_path = "/tmp/esheep-test-unfinished-child.xml";
+    const char *unfinished_child_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame></sequence></animation>"
+        "</animations><childs><child animationid=\"1\"><x>0</x><y>0</y>"
+        "</animations></animations>";
+    assert(g_file_set_contents(unfinished_child_path, unfinished_child_xml, -1,
+                               &error));
+    assert(!esheep_pet_package_load(unfinished_child_path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    g_clear_error(&error);
+    remove(unfinished_child_path);
+
+    /* Test malformed XML with missing animation closing tag */
+    package = NULL;
+    const char *unclosed_animation_path = "/tmp/esheep-test-unclosed-animation.xml";
+    const char *unclosed_animation_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame></sequence>"
+        "</animations></animations>";
+    assert(g_file_set_contents(unclosed_animation_path, unclosed_animation_xml, -1,
+                               &error));
+    assert(!esheep_pet_package_load(unclosed_animation_path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    g_clear_error(&error);
+    remove(unclosed_animation_path);
+
     puts("All pet package tests passed");
     return 0;
 }

@@ -101,6 +101,19 @@ typedef struct {
     GArray *transition_destination;
 } ParseState;
 
+static void parse_state_clear(ParseState *state) {
+    if (state->text) {
+        g_string_free(state->text, TRUE);
+        state->text = NULL;
+    }
+    if (state->pending_next) {
+        g_free(state->pending_next->only);
+        g_string_free(state->pending_next->text, TRUE);
+        g_free(state->pending_next);
+        state->pending_next = NULL;
+    }
+}
+
 static void set_error(ParseState *state, const char *message) {
     if (state->error && !*state->error)
         g_set_error(state->error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT,
@@ -529,6 +542,7 @@ gboolean esheep_pet_package_load(const char *path, EsheepPetPackage **out,
                                  GError **error) {
     gchar *contents = NULL;
     gsize length = 0;
+    if (out) *out = NULL;
     if (!out || !path || !g_file_get_contents(path, &contents, &length, error)) return FALSE;
     EsheepPetPackage *package = g_new0(EsheepPetPackage, 1);
     package->tiles_x = 16; package->tiles_y = 11;
@@ -543,7 +557,12 @@ gboolean esheep_pet_package_load(const char *path, EsheepPetPackage **out,
                   g_markup_parse_context_end_parse(context, error) && validate_package(package, error);
     g_markup_parse_context_free(context);
     g_free(contents);
-    if (!ok) { esheep_pet_package_free(package); return FALSE; }
+    if (!ok) {
+        parse_state_clear(&state);
+        esheep_pet_package_free(package);
+        return FALSE;
+    }
+    parse_state_clear(&state);
     if (package->spritesheet && package->spritesheet[0] &&
         !g_path_is_absolute(package->spritesheet)) {
         gchar *directory = g_path_get_dirname(path);
