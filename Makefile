@@ -77,6 +77,17 @@ test-visual-catalog:
 	test -s /tmp/esheep-animation-catalog.png
 	rm -f /tmp/esheep-animation-catalog.png
 
+gen-animations:
+	python3 tools/gen_animations.py tools/esheep_animations.xml src
+
+test-animation-sync:
+	@set -eu; tmp=$$(mktemp -d /tmp/esheep-animation-sync.XXXXXX); trap 'rm -rf "$$tmp"' EXIT; \
+	python3 tools/gen_animations.py tools/esheep_animations.xml "$$tmp"; \
+	if ! diff -q src/animations_data.c "$$tmp/animations_data.c" || ! diff -q src/animations_data.h "$$tmp/animations_data.h"; then \
+		echo "Generated animation data is out of sync. Run 'make gen-animations' to update." >&2; \
+		exit 1; \
+	fi
+
 test-animation-data:
 	python3 tests/test_animation_data.py
 
@@ -103,9 +114,9 @@ test-context:
 	/tmp/esheep_test_context
 
 # Strict mode for CI: fails if Xvfb/ImageMagick are missing instead of skipping
-test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
+test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering test-man test-install test-gui test-cli
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering test-man test-install test-gui test-cli
 
 esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
@@ -134,6 +145,6 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean
+.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_expression /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
