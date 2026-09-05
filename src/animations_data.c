@@ -1538,7 +1538,7 @@ const EsheepChild esheep_default_childs[] = {
         28, "-imageW-8", "imageY", 31
     },
     {
-        65, "-imageW-8", "imageY", 66
+        65, "0", "imageH", 66
     },
 };
 const int esheep_default_child_count = 4;

@@ -12,9 +12,9 @@ paired with the shipped 16×11 sprite sheets. `tests/test_animation_data.py`
 asserts every original ID/name and child composition. `tests/test_spritesheet.py`
 asserts the status of all 176 cells on both sheets.
 
-- `./esheep --list-animations` — the 54 IDs and names, straight from the
+- `./esheep --list-animations` — the 67 IDs and names, straight from the
   active behavior graph (built-in or a `--package` override).
-- `./esheep --list-transitions` — all 96 transitions: index, stable ID,
+- `./esheep --list-transitions` — all 110 transitions: index, stable ID,
   source animation, kind (`sequence`/`border`/`gravity`/`child`), context,
   probability, and target. This is what `tools/review_transitions.py` reads
   to drive playback; see "Reviewing a scene" below.
@@ -82,21 +82,23 @@ the contiguous 109–118 and 120–126 runs. They are clearly labeled extensions
 and do not alter the original 1–54 records.
 
 The original UFO child keeps the repository's validated `-imageW-8` local
-spacing. The new spacecraft child uses an explicit `(0, 0)` placement so both
-spacecraft and pilot frames are reviewable together.
+spacing. The spacecraft child uses `(0, imageH)`: the sprite sheet places the
+pilot tile directly below each spacecraft tile, and the renderer interprets
+child coordinates as local offsets from the parent tile.
 
 ## Multi-sprite (child) scenes
 
-Most animations render one sprite. Three authored `<child>` records
+Most animations render one sprite. Four authored `<child>` records
 additionally spawn a second, independently-animated sprite alongside the
 parent — these are the `kind == "child"` rows in `--list-transitions`
-(currently transition indices 94-96):
+(currently transition indices 107-110):
 
 | Parent | Child | What it is | Positioning |
 | --- | --- | --- | --- |
 | `eat`(26) | `flower`(27) | A flower grows where the sheep is grazing | Relative to the parent (`imageX`/`imageY` in the expression) |
 | `blacksheepa`(28) | `blacksheepv`(31) | The UFO/companion in the black-sheep gag | Relative to the parent, and keeps moving further away each tick per its own authored animation |
 | `batha`(21) | `bathw`(23) | The bath prop | **Absolute**, monitor-scale position (`screenW`/`areaH` in the expression) — enters from off the right edge of the screen independent of where the parent is, the same convention `<spawn>` points use |
+| `spacecraft_flight`(65) | `spacecraft_pilot`(66) | The pilot below the spacecraft | Local `(0,imageH)` tile offset; the authored artwork places the pilot in the tile below the spacecraft |
 
 `src/main.c`'s `update_child_animation()` distinguishes these two placement
 styles by whether the expression references a monitor-scale variable
@@ -123,7 +125,7 @@ Pass `--package PATH` (and optionally `--sprite PATH`) to review a custom
 behavior package instead of the built-in graph.
 
 `tests/test_child_scene_rendering.py` is the automated version of this for
-the three child scenes: it actually renders each one under Xvfb and checks
+the four child scenes: it actually renders each one under Xvfb and checks
 that both sprites land on screen at a sane size and position, rather than
 only validating the authored XML/generated data (which is what
 `tests/test_child_animations.py` covers).

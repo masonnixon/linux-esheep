@@ -25,6 +25,11 @@ NEW_ANIMATIONS = {
     67: ("grid_overlay_extension", (172,)),
 }
 
+NEW_POSES = {
+    55: 160, 56: 140, 57: 120, 58: 120, 59: 110, 60: 110,
+    61: 90, 62: 90, 63: 100, 64: 70, 65: 100, 66: 100, 67: 100,
+}
+
 
 def authored_rows():
     root = ET.parse(ROOT / "tools/esheep_animations.xml").getroot()
@@ -75,6 +80,27 @@ def test_new_animation_definitions():
         actual = tuple(int(frame.text) for frame in
                        animation.findall("e:sequence/e:frame", NS))
         assert actual == frames, f"animation {animation_id} frame sequence changed"
+        for pose_name in ("start", "end"):
+            pose = animation.find(f"e:{pose_name}", NS)
+            assert (pose.findtext("e:x", namespaces=NS),
+                    pose.findtext("e:y", namespaces=NS),
+                    pose.findtext("e:interval", namespaces=NS)) == (
+                        "0", "0", str(NEW_POSES[animation_id]))
+        sequence = animation.find("e:sequence", NS)
+        assert (sequence.get("repeat"), sequence.get("repeatfrom")) == ("0", "0")
+        assert sequence.find("e:action", NS) is None
+        nxt = sequence.find("e:next", NS)
+        assert (nxt.get("probability"), nxt.get("only"),
+                int(nxt.text.strip())) == ("100", "none", 1)
+
+
+def test_new_child_placement():
+    root = ET.parse(ROOT / "tools/esheep_animations.xml").getroot()
+    child = root.find("e:childs/e:child[@animationid='65']", NS)
+    assert child is not None
+    assert (child.findtext("e:x", namespaces=NS),
+            child.findtext("e:y", namespaces=NS),
+            int(child.findtext("e:next", namespaces=NS))) == ("0", "imageH", 66)
 
 
 def main():
@@ -93,10 +119,19 @@ def main():
         assert 1 <= probability <= 100
 
     test_new_animation_definitions()
+    test_new_child_placement()
     new_rows = [row for row in exported if row[1] >= 55]
     assert len(new_rows) == 14, f"expected 14 new transition rows, got {len(new_rows)}"
-    assert all(row[2:] == ("sequence", "none", 100, 1)
-               for row in new_rows[:13])
+    assert exported[93:106] == [
+        (index, animation_id, "sequence", "none", 100, 1)
+        for index, animation_id in zip(range(94, 107), range(55, 68))
+    ]
+    assert exported[106:110] == [
+        (107, 21, "child", "any", 100, 23),
+        (108, 26, "child", "any", 100, 27),
+        (109, 28, "child", "any", 100, 31),
+        (110, 65, "child", "any", 100, 66),
+    ]
     assert new_rows[-1][1:] == (65, "child", "any", 100, 66)
     print("All 110 transitions match authored data; new transitions 94-110 verified")
 

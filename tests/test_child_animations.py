@@ -111,11 +111,23 @@ def test_generated_child_data():
     # Verify the eating-to-flower mapping is in generated data
     assert re.search(r"26.*\"imageX-imageW\*0\.9\".*\"imageY\".*27", anim_data_c), \
         "Generated data missing eating-to-flower child record"
-    assert re.search(r"65.*\"-imageW-8\".*\"imageY\".*66", anim_data_c), \
+    assert re.search(r"65.*\"0\".*\"imageH\".*66", anim_data_c), \
         "Generated data missing spacecraft-to-pilot child record"
 
     print(f"OK: Generated C data has {child_count} child records")
     return True
+
+def test_spacecraft_child_placement():
+    """The pilot tile follows the spacecraft tile in the authored artwork."""
+    import xml.etree.ElementTree as ET
+    root = ET.parse("tools/esheep_animations.xml").getroot()
+    ns = {"e": "https://esheep.petrucci.ch/"}
+    child = root.find("e:childs/e:child[@animationid='65']", ns)
+    assert child is not None
+    assert child.findtext("e:x", namespaces=ns) == "0"
+    assert child.findtext("e:y", namespaces=ns) == "imageH"
+    assert child.findtext("e:next", namespaces=ns) == "66"
+    print("OK: Spacecraft pilot is placed in the tile below the spacecraft")
 
 def test_child_review_uses_parent():
     """The visual review must launch a child transition from its parent."""
@@ -142,6 +154,7 @@ if __name__ == "__main__":
         test_child_records_valid()
         test_eating_animation_has_flower()
         test_generated_child_data()
+        test_spacecraft_child_placement()
         test_child_review_uses_parent()
         test_child_coordinate_semantics()
         print("\nAll child animation tests passed!")

@@ -61,6 +61,7 @@ CHILD_EXPRESSIONS = {
     "-imageW",
     "-imageW-8",
     "imageY",
+    "imageH",
     "imageX",
     "imageX-imageW*0.9",
     "areaH-imageH",
@@ -198,6 +199,10 @@ def test_art_completeness_extensions():
         for child in root.findall("e:childs/e:child", NS)
         if int(child.get("animationid")) >= 55
     ) == ((65, 66),)
+    spacecraft = root.find("e:childs/e:child[@animationid='65']", NS)
+    assert spacecraft is not None
+    assert spacecraft.findtext("e:x", namespaces=NS) == "0"
+    assert spacecraft.findtext("e:y", namespaces=NS) == "imageH"
     print(f"OK: art-completeness inventory has {len(actual)} extension records")
 
 
