@@ -66,22 +66,37 @@ def render_scene(animation_id, out_path):
     looks like without being racy about it. Returns None if the environment
     can't run the check at all (not the same as the scene failing it).
     """
+    # In strict mode, missing prerequisites should fail explicitly
+    # rather than silently skipping
     if not shutil.which("Xvfb") or not shutil.which("import"):
+        strict = os.environ.get("ESHEEP_TEST_STRICT", "").lower() in ("1", "true", "yes")
+        if strict:
+            raise RuntimeError(
+                "Strict mode requires Xvfb and ImageMagick 'import' to be available"
+            )
         print("SKIP: Xvfb or ImageMagick 'import' not available", file=sys.stderr)
         return None
 
-    display = ":97"
+    # Use xvfb-run with auto display allocation to avoid conflicts
+    # xvfb-run handles display allocation and cleanup automatically
+    env = os.environ.copy()
+    env["ESHEEP_AUTOQUIT_MS"] = "1200"
+    # Fix the random stream (spawn direction, per-tick rolls) so the
+    # scene's early trajectory -- and therefore whether this sampling
+    # window catches both sprites on screen -- is reproducible instead
+    # of depending on which way the sheep happened to face this run.
+    env["ESHEEP_SEED"] = "12345"
+    
+    # We need to run xvfb-run in background and take screenshots from it
+    # But xvfb-run runs the command and exits. We need Xvfb to stay running.
+    # Let's use Xvfb directly with a random display number
+    import random
+    display_num = random.randint(100, 999)
+    display = f":{display_num}"
     xvfb = subprocess.Popen(["Xvfb", display, "-screen", "0",
                               f"{SCREEN_W}x{SCREEN_H}x24"])
     try:
-        env = os.environ.copy()
         env["DISPLAY"] = display
-        env["ESHEEP_AUTOQUIT_MS"] = "1200"
-        # Fix the random stream (spawn direction, per-tick rolls) so the
-        # scene's early trajectory -- and therefore whether this sampling
-        # window catches both sprites on screen -- is reproducible instead
-        # of depending on which way the sheep happened to face this run.
-        env["ESHEEP_SEED"] = "12345"
         proc = subprocess.Popen(
             [PROGRAM, "--review-parent", str(animation_id),
              "--spawn", "bottom", "--no-window-landing"],

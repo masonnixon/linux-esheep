@@ -87,6 +87,10 @@ test-child-scene-rendering: esheep
 	command -v xvfb-run >/dev/null || command -v Xvfb >/dev/null
 	python3 tests/test_child_scene_rendering.py
 
+test-child-scene-rendering-strict: esheep
+	command -v xvfb-run >/dev/null || command -v Xvfb >/dev/null
+	ESHEEP_TEST_STRICT=1 python3 tests/test_child_scene_rendering.py
+
 test-man:
 	command -v groff >/dev/null
 	groff -T utf8 -man packaging/esheep.1 >/dev/null
@@ -97,6 +101,9 @@ test-install:
 test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
 	/tmp/esheep_test_context
+
+# Strict mode for CI: fails if Xvfb/ImageMagick are missing instead of skipping
+test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
 
 test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering test-man test-install test-gui test-cli
 
