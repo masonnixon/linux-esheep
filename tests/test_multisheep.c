@@ -150,6 +150,10 @@ static void test_monitor_topology_uses_geometry_and_workarea(void) {
                &selected) == 1);
     assert(memcmp(&selected, &workarea[1], sizeof(selected)) == 0);
     assert(select_monitor_workarea_from_topology(
+               geometry, workarea, 4, &workarea[0], 500, 500, 1,
+               &selected) == 0);
+    assert(memcmp(&selected, &workarea[0], sizeof(selected)) == 0);
+    assert(select_monitor_workarea_from_topology(
                geometry, workarea, 4, &workarea[1], 2001, 500, 1,
                &selected) == 2);
     assert(select_monitor_workarea_from_topology(

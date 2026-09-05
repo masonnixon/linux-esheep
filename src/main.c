@@ -544,8 +544,10 @@ static int select_monitor_workarea_from_topology(
          * Require an XRandR seam, so a panel-reserved workarea does not
          * become a teleport, while a real desktop gap still reverses. */
         if ((direction > 0 && x < seam) ||
-            (direction < 0 && x >= seam))
+            (direction < 0 && x >= seam)) {
+            *out = workareas[current_index];
             return current_index;
+        }
         for (int i = 0; i < monitor_count; i++) {
             if (i == current_index ||
                 !monitors_overlap_vertically(geometry, &geometries[i]) ||
