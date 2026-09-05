@@ -28,6 +28,21 @@ static const char PACKAGE_XML[] =
     "<child animationid=\"1\"><x>1</x><y>0</y><next>2</next></child></childs>"
     "</animations>";
 
+static void assert_invalid_package(const char *path, const char *xml,
+                                   const char *message) {
+    GError *error = NULL;
+    EsheepPetPackage *package = NULL;
+
+    assert(g_file_set_contents(path, xml, -1, &error));
+    assert(error == NULL);
+    assert(!esheep_pet_package_load(path, &package, &error));
+    assert(package == NULL);
+    assert(error != NULL);
+    if (message) assert(strstr(error->message, message) != NULL);
+    g_clear_error(&error);
+    remove(path);
+}
+
 int main(void) {
     const char *path = "/tmp/esheep-test-package.xml";
     GError *error = NULL;
@@ -122,9 +137,35 @@ int main(void) {
     assert(!esheep_pet_package_load(invalid_expression_path, &package, &error));
     assert(package == NULL);
     assert(error != NULL);
-    assert(strstr(error->message, "unsupported animation expression") != NULL);
+    assert(strstr(error->message, "finite 32-bit integer") != NULL);
     g_clear_error(&error);
     remove(invalid_expression_path);
+
+    const char *range_prefix =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<animations><animation id=\"1\"><start><x>%s</x></start>"
+        "<end/><sequence repeat=\"%s\"><frame>%s</frame></sequence>"
+        "</animation></animations></animations>";
+    char *range_xml = g_strdup_printf(range_prefix, "2147483648", "0", "0");
+    assert_invalid_package("/tmp/esheep-test-position-range.xml", range_xml,
+                           "animation pose expression");
+    g_free(range_xml);
+
+    range_xml = g_strdup_printf(range_prefix, "0", "2147483648", "0");
+    assert_invalid_package("/tmp/esheep-test-repeat-range.xml", range_xml,
+                           "animation repeat expression");
+    g_free(range_xml);
+
+    range_xml = g_strdup_printf(range_prefix, "0", "0", "2147483648");
+    assert_invalid_package("/tmp/esheep-test-frame-range.xml", range_xml,
+                           "frame index");
+    g_free(range_xml);
+
+    range_xml = g_strdup_printf(range_prefix, "0",
+                                "Convert(2147483648,System.Int32)", "0");
+    assert_invalid_package("/tmp/esheep-test-convert-range.xml", range_xml,
+                           "animation repeat expression");
+    g_free(range_xml);
 
     puts("All pet package tests passed");
     return 0;

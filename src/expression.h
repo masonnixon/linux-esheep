@@ -25,4 +25,16 @@ gboolean esheep_expression_eval(const char *expression,
 /* Validate syntax without depending on a particular screen size. */
 gboolean esheep_expression_valid(const char *expression);
 
+/* Evaluate the expression and additionally confirm the result is a finite
+ * double that lies inside the inclusive 32-bit signed integer range.  This
+ * is the only safe narrowing primitive for positions, repeats, and frame
+ * indices; callers must not cast a raw `esheep_expression_eval` result to
+ * `int`.  On success `*result` holds the converted value; on failure the
+ * caller-visible `*result` is zero.  Negative values are preserved when
+ * they fall inside the representable range, matching the grammar that
+ * authored packages already use. */
+gboolean esheep_expression_eval_int(const char *expression,
+                                     const EsheepExpressionContext *context,
+                                     int *result);
+
 #endif

@@ -43,6 +43,18 @@ static double variable_value(Parser *parser, const char *name, size_t length) {
 
 static double parse_additive(Parser *parser);
 
+/* Inclusive bounds for any double that may be safely narrowed to a 32-bit
+ * signed integer.  Keep these as double literals so the compiler folds them
+ * into the surrounding comparisons at the call site. */
+#define ESHEEP_EXPRESSION_INT32_MIN (-2147483648.0)
+#define ESHEEP_EXPRESSION_INT32_MAX  2147483647.0
+
+static gboolean double_in_int32_range(double value) {
+    return isfinite(value) &&
+           value >= ESHEEP_EXPRESSION_INT32_MIN &&
+           value <= ESHEEP_EXPRESSION_INT32_MAX;
+}
+
 static double parse_primary(Parser *parser) {
     skip_space(parser);
     if (take(parser, '(')) {
@@ -84,6 +96,15 @@ static double parse_primary(Parser *parser) {
                 strncmp(type, "System.Int32", 12) != 0)
                 parser->failed = TRUE;
             if (!take(parser, ')')) parser->failed = TRUE;
+            /* Convert(x, System.Int32) is the authored spelling for an
+             * explicit 32-bit narrowing.  Reject non-finite or out-of-range
+             * values so callers never observe the result of an undefined
+             * double-to-int cast.  The grammar permits negatives, so the
+             * lower bound is the most-negative representable int. */
+            if (!double_in_int32_range(value)) {
+                parser->failed = TRUE;
+                return 0.0;
+            }
             return (double)(int)value;
         }
         return variable_value(parser, name, length);
@@ -140,6 +161,18 @@ gboolean esheep_expression_eval(const char *expression,
     skip_space(&parser);
     if (parser.failed || *parser.cursor != '\0' || !isfinite(value)) return FALSE;
     *result = value;
+    return TRUE;
+}
+
+gboolean esheep_expression_eval_int(const char *expression,
+                                     const EsheepExpressionContext *context,
+                                     int *result) {
+    if (!result) return FALSE;
+    *result = 0;
+    double value = 0.0;
+    if (!esheep_expression_eval(expression, context, &value)) return FALSE;
+    if (!double_in_int32_range(value)) return FALSE;
+    *result = (int)value;
     return TRUE;
 }
 

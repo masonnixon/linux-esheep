@@ -129,7 +129,9 @@ def test_child_coordinate_semantics():
     source = Path("src/main.c").read_text()
     expression = Path("src/expression.c").read_text()
     assert 'image_x' in expression and 'image_width' in expression
-    assert 'esheep_expression_eval(expr' in source
+    # Child coordinates use the range-checked integer wrapper so malformed
+    # package expressions cannot trigger an unsafe narrowing conversion.
+    assert 'esheep_expression_eval_int(expr' in source
     print("OK: Relative child coordinates use the shared expression evaluator")
     return True
 

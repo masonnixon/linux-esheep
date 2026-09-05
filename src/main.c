@@ -9,6 +9,8 @@
 #include <X11/Xlib.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <limits.h>
+#include <math.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
@@ -644,23 +646,30 @@ static guint clamp_sheep_count(guint requested) {
 
 static int eval_spawn_expression(const char *expr, int area_width, int area_height,
                                  int image_width, int image_height, int roll_0_99) {
+    /* The package loader already rejects authored expressions whose default
+     * result is not representable as a 32-bit signed integer; this defensive
+     * re-check prevents undefined behavior if a runtime monitor size produces
+     * a context that overflows the range.  A failed narrowing yields the same
+     * 0 fallback that a parse failure has historically returned. */
     EsheepExpressionContext context = {
         area_width, area_height, area_width, area_height,
         image_width, image_height, 0, 0, roll_0_99
     };
-    double value = 0.0;
-    return esheep_expression_eval(expr, &context, &value) ? (int)value : 0;
+    int result = 0;
+    return esheep_expression_eval_int(expr, &context, &result) ? result : 0;
 }
 
 static int eval_child_expression(const char *expr, int area_width, int area_height,
                                  int image_width, int image_height, int image_x, int image_y,
                                  int roll_0_99) {
+    /* See eval_spawn_expression: the safe narrowing here guards against any
+     * future package that bypasses the parser-level range check. */
     EsheepExpressionContext context = {
         area_width, area_height, area_width, area_height,
         image_width, image_height, image_x, image_y, roll_0_99
     };
-    double value = 0.0;
-    return esheep_expression_eval(expr, &context, &value) ? (int)value : 0;
+    int result = 0;
+    return esheep_expression_eval_int(expr, &context, &result) ? result : 0;
 }
 
 static int select_spawn_animation(App *app, const EsheepSpawn *spawn) {
@@ -1107,6 +1116,7 @@ static gboolean has_horizontal_movement(const EsheepAnimation *anim) {
 static int horizontal_delta(const App *app, const EsheepAnimation *anim,
                             int delta) {
     if (!has_horizontal_movement(anim)) return delta;
+    if (delta == INT_MIN) return 0;
     return app->direction < 0 ? delta : -delta;
 }
 
@@ -1930,12 +1940,27 @@ static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
 }
 
 static int pose_value(const char *expression, int image_width, int image_height) {
+    /* Safe narrowing; see eval_spawn_expression for the rationale. */
     EsheepExpressionContext context = {
         image_width, image_height, image_width, image_height,
         image_width, image_height, 0, 0, 0
     };
-    double value = 0.0;
-    return esheep_expression_eval(expression, &context, &value) ? (int)value : 0;
+    int result = 0;
+    return esheep_expression_eval_int(expression, &context, &result) ? result : 0;
+}
+
+static int rounded_int(double value) {
+    if (!isfinite(value) || value < (double)INT_MIN ||
+        value > (double)INT_MAX) return 0;
+    value += value >= 0.0 ? 0.5 : -0.5;
+    if (value < (double)INT_MIN || value > (double)INT_MAX) return 0;
+    return (int)value;
+}
+
+static int bounded_int(double value) {
+    if (!isfinite(value) || value < (double)INT_MIN ||
+        value > (double)INT_MAX) return 0;
+    return (int)value;
 }
 
 static int pose_delta(const App *app, const EsheepAnimation *anim,
@@ -1955,11 +1980,12 @@ static int pose_delta(const App *app, const EsheepAnimation *anim,
     double progress = (double)frame_index / (double)(anim->frame_count - 1);
     double previous_progress = (double)(frame_index - 1) /
                                (double)(anim->frame_count - 1);
-    double current = start_value + (end_value - start_value) * progress;
-    double previous = start_value +
-                      (end_value - start_value) * previous_progress;
+    double current = (double)start_value +
+                     ((double)end_value - (double)start_value) * progress;
+    double previous = (double)start_value +
+                      ((double)end_value - (double)start_value) * previous_progress;
     double delta = current - previous;
-    int result = (int)(delta + (delta >= 0.0 ? 0.5 : -0.5));
+    int result = rounded_int(delta);
     return x_axis ? horizontal_delta(app, anim, result) : result;
 }
 
@@ -1974,8 +2000,8 @@ static int pose_offset_y(const EsheepAnimation *anim, int frame_index) {
     double progress = pose_progress(anim, frame_index);
     double start = (double)atoi(anim->start.offsety);
     double end = (double)atoi(anim->end.offsety);
-    return (int)(start + (end - start) * progress +
-                 (progress >= 0.5 ? 0.5 : -0.5));
+    return bounded_int(start + (end - start) * progress +
+                       (progress >= 0.5 ? 0.5 : -0.5));
 }
 
 static gboolean is_airborne_animation(int animation_id) {

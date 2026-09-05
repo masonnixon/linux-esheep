@@ -3,6 +3,7 @@
 #include "expression.h"
 #include "renderer.h"
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -118,8 +119,8 @@ static gboolean parse_int(const char *text, int *out) {
     if (!text || !*text) return FALSE;
     errno = 0;
     value = strtol(text, &end, 10);
-    if (errno || end == text || *end != '\0' || value < -2147483647L ||
-        value > 2147483647L) return FALSE;
+    if (errno || end == text || *end != '\0' || value < INT_MIN ||
+        value > INT_MAX) return FALSE;
     if (out) *out = (int)value;
     return TRUE;
 }
@@ -135,20 +136,12 @@ static gboolean parse_double(const char *text, double *out) {
     return TRUE;
 }
 
-static gboolean valid_integer_or_image_factor(const char *text) {
-    return esheep_expression_valid(text);
-}
-
-static gboolean valid_spawn_expression(const char *text) {
-    return esheep_expression_valid(text);
-}
-
-static gboolean valid_repeat_expression(const char *text) {
-    return esheep_expression_valid(text);
-}
-
-static gboolean valid_child_expression(const char *text) {
-    return esheep_expression_valid(text);
+/* Evaluate against a deterministic, non-zero context so package expressions
+ * are known to produce a finite value that fits the runtime integer fields.
+ * Runtime evaluation repeats this check with the live monitor dimensions. */
+static gboolean evaluate_int_expression(const char *text, int *result) {
+    EsheepExpressionContext context = { 1, 1, 1, 1, 1, 1, 0, 0, 0 };
+    return esheep_expression_eval_int(text, &context, result);
 }
 
 static gboolean child_graph_has_cycle(const EsheepPetPackage *package,
@@ -346,13 +339,15 @@ static void finish_text(ParseState *state) {
         else if (state->field == FIELD_POSE_Y) pose->y = owned_string(state->package, value);
         else if (state->field == FIELD_POSE_INTERVAL && (!parse_int(value, &integer) || integer < 1)) set_error(state, "pose interval must be positive");
         else if (state->field == FIELD_POSE_INTERVAL) pose->interval_ms = integer;
+        else if (state->field == FIELD_POSE_OFFSET_Y && !parse_int(value, &integer))
+            set_error(state, "pose offset must be a representable integer");
         else if (state->field == FIELD_POSE_OFFSET_Y) pose->offsety = owned_string(state->package, value);
         else if (state->field == FIELD_POSE_OPACITY && !parse_double(value, &pose->opacity)) set_error(state, "pose opacity must be numeric");
         else if (state->field == FIELD_REPEAT) a->value.repeat = owned_string(state->package, value);
         else if (state->field == FIELD_REPEAT_FROM) a->value.repeat_from = owned_string(state->package, value);
         else if (state->field == FIELD_ACTION && strcmp(value, "flip") == 0) a->value.flip = 1;
         else if (state->field == FIELD_ACTION) set_error(state, "unsupported animation action");
-        else if (state->field == FIELD_FRAME && (!parse_int(value, &integer) || integer < 0)) set_error(state, "frame must be a non-negative integer");
+        else if (state->field == FIELD_FRAME && (!parse_int(value, &integer) || integer < 0)) set_error(state, "frame index must be a non-negative representable integer");
         else if (state->field == FIELD_FRAME) g_array_append_val(a->frames, integer);
     } else if (state->spawn) {
         if (state->field == FIELD_SPAWN_X) state->spawn->value.x = owned_string(state->package, value);
@@ -408,10 +403,27 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
         if (build->value.id != i + 1 || !build->has_start || !build->has_end ||
             !build->has_sequence || build->frames->len == 0)
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "animation IDs must be contiguous and every animation needs start, end, and sequence data"), FALSE;
-        if (!valid_integer_or_image_factor(build->value.start.x) || !valid_integer_or_image_factor(build->value.start.y) ||
-            !valid_integer_or_image_factor(build->value.end.x) || !valid_integer_or_image_factor(build->value.end.y) ||
-            !valid_repeat_expression(build->value.repeat) || !valid_repeat_expression(build->value.repeat_from))
-            return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "unsupported animation expression"), FALSE;
+        const char *pose_int_fields[] = {
+            build->value.start.x, build->value.start.y,
+            build->value.end.x, build->value.end.y
+        };
+        for (guint k = 0; k < G_N_ELEMENTS(pose_int_fields); k++) {
+            int dummy;
+            if (!evaluate_int_expression(pose_int_fields[k], &dummy)) {
+                return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT,
+                                   "animation pose expression must be a finite 32-bit integer"), FALSE;
+            }
+        }
+        const char *repeat_int_fields[] = {
+            build->value.repeat, build->value.repeat_from
+        };
+        for (guint k = 0; k < G_N_ELEMENTS(repeat_int_fields); k++) {
+            int dummy;
+            if (!evaluate_int_expression(repeat_int_fields[k], &dummy)) {
+                return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT,
+                                   "animation repeat expression must be a finite 32-bit integer"), FALSE;
+            }
+        }
         if (build->value.start.opacity < 0.0 || build->value.start.opacity > 1.0 ||
             build->value.end.opacity < 0.0 || build->value.end.opacity > 1.0)
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "pose opacity must be between 0 and 1"), FALSE;
@@ -453,10 +465,18 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
     for (int i = 0; i < package->spawn_count; i++) {
         SpawnBuild *build = g_ptr_array_index(package->spawn_builds, i);
         if (build->value.id != i + 1 || build->value.probability < 1 ||
-            build->value.probability > 100 ||
-            !valid_spawn_expression(build->value.x) ||
-            !valid_spawn_expression(build->value.y))
+            build->value.probability > 100)
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid spawn definition"), FALSE;
+        const char *spawn_int_fields[] = {
+            build->value.x, build->value.y
+        };
+        for (guint k = 0; k < G_N_ELEMENTS(spawn_int_fields); k++) {
+            int dummy;
+            if (!evaluate_int_expression(spawn_int_fields[k], &dummy)) {
+                return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT,
+                                   "spawn position expression must be a finite 32-bit integer"), FALSE;
+            }
+        }
         for (guint j = 0; j < build->next->len; j++) {
             EsheepTransition transition = g_array_index(build->next, EsheepTransition, j);
             transition.stable_id = transition_stable_id(
@@ -482,9 +502,16 @@ static gboolean validate_package(EsheepPetPackage *package, GError **error) {
     for (int i = 0; i < package->child_count; i++) {
         EsheepChild child = g_array_index(package->child_builds, EsheepChild, i);
         if (child.animation_id < 1 || child.animation_id > package->animation_count ||
-            child.next < 1 || child.next > package->animation_count ||
-            !valid_child_expression(child.x) || !valid_child_expression(child.y))
+            child.next < 1 || child.next > package->animation_count)
             return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT, "invalid child definition"), FALSE;
+        const char *child_int_fields[] = { child.x, child.y };
+        for (guint k = 0; k < G_N_ELEMENTS(child_int_fields); k++) {
+            int dummy;
+            if (!evaluate_int_expression(child_int_fields[k], &dummy)) {
+                return g_set_error(error, G_MARKUP_ERROR, G_MARKUP_ERROR_INVALID_CONTENT,
+                                   "child position expression must be a finite 32-bit integer"), FALSE;
+            }
+        }
         package->childs[i] = child;
     }
     /* Multiple child records may share a parent. Reject cycles so a package

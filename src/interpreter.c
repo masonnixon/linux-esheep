@@ -1,4 +1,7 @@
 #include "interpreter.h"
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,29 +22,39 @@ static int repeat_value(const EsheepState *state, const char *repeat_str,
                         int roll_0_99) {
     if (!repeat_str) return 0;
     char *end = NULL;
+    errno = 0;
     long value = strtol(repeat_str, &end, 10);
-    if (end != repeat_str && *end == '\0') return (int)value;
+    if (end != repeat_str && *end == '\0' && errno == 0 &&
+        value >= INT_MIN && value <= INT_MAX)
+        return (int)value;
 
-    /* The source data uses a small expression vocabulary for random repeat
-     * counts.  Keep the evaluator deterministic by deriving random from the
-     * tick's supplied 0..99 roll. */
-    int divisor = 0;
-    int addend = 0;
-    if (sscanf(repeat_str, "random/%d+%d", &divisor, &addend) == 2 &&
-        divisor > 0)
-        return roll_0_99 / divisor + addend;
-    if (sscanf(repeat_str, "%d+random/%d", &addend, &divisor) == 2 &&
-        divisor > 0)
-        return addend + roll_0_99 / divisor;
-    int offset;
+    /* These are the repeat expression forms used by the authored package.
+     * Parse into long values and narrow only after checking the result. */
+    long divisor = 0;
+    long addend = 0;
+    if (sscanf(repeat_str, "random/%ld+%ld", &divisor, &addend) == 2 &&
+        divisor > 0) {
+        int64_t result = (int64_t)roll_0_99 / divisor + addend;
+        if (result >= INT_MIN && result <= INT_MAX) return (int)result;
+    }
+    if (sscanf(repeat_str, "%ld+random/%ld", &addend, &divisor) == 2 &&
+        divisor > 0) {
+        int64_t result = addend + (int64_t)roll_0_99 / divisor;
+        if (result >= INT_MIN && result <= INT_MAX) return (int)result;
+    }
+    long offset = 0;
     if (sscanf(repeat_str,
-               "(areaH/2+(randS*areaH/2)/120-imageH-%d)/2", &offset) == 1 &&
-        state->area_height > 0)
-        return (state->area_height / 2 +
-                (roll_0_99 * state->area_height / 2) / 120 -
-                state->image_height - offset) / 2;
-    if (strcmp(repeat_str, "(screenW/2)/30-6") == 0 && state->area_width > 0)
-        return (state->area_width / 2) / 30 - 6;
+               "(areaH/2+(randS*areaH/2)/120-imageH-%ld)/2", &offset) == 1 &&
+        state->area_height > 0) {
+        int64_t result = ((int64_t)state->area_height / 2 +
+                          ((int64_t)roll_0_99 * state->area_height / 2) / 120 -
+                          state->image_height - offset) / 2;
+        if (result >= INT_MIN && result <= INT_MAX) return (int)result;
+    }
+    if (strcmp(repeat_str, "(screenW/2)/30-6") == 0 && state->area_width > 0) {
+        int64_t result = ((int64_t)state->area_width / 2) / 30 - 6;
+        if (result >= INT_MIN && result <= INT_MAX) return (int)result;
+    }
     if (strcmp(repeat_str,
                "24+(Convert(screenW/2,System.Int32)%30)/7") == 0 &&
         state->area_width > 0)
