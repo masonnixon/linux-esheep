@@ -504,9 +504,90 @@ static gboolean seam_direction_matches(const GdkRectangle *current,
            monitors_share_vertical_seam(current, candidate);
 }
 
-static int select_monitor_index(const GdkRectangle *monitors, int monitor_count,
-                                const GdkRectangle *current, int x, int y,
-                                int direction) {
+/* GDK exposes the XRandR monitor geometry separately from the workarea left
+ * after panels.  Geometry determines whether two monitors are neighbors;
+ * workarea remains the movement and landing rectangle. */
+static int select_monitor_workarea_from_topology(
+    const GdkRectangle *geometries, const GdkRectangle *workareas,
+    int monitor_count, const GdkRectangle *current, int x, int y,
+    int direction, GdkRectangle *out) {
+    int current_index = -1;
+
+    if (!geometries || !workareas || !out || monitor_count <= 0)
+        return -1;
+
+    if (current) {
+        for (int i = 0; i < monitor_count; i++) {
+            if (memcmp(&workareas[i], current, sizeof(*current)) == 0) {
+                current_index = i;
+                break;
+            }
+        }
+    }
+
+    if (current_index < 0) {
+        for (int i = 0; i < monitor_count; i++) {
+            if (monitor_contains_global_point(&workareas[i], x, y)) {
+                current_index = i;
+                break;
+            }
+        }
+    }
+
+    if (current_index >= 0 && current && direction != 0) {
+        const GdkRectangle *geometry = &geometries[current_index];
+        int seam = direction > 0 ? monitor_right(&workareas[current_index]) :
+                   workareas[current_index].x;
+        int candidate_index = -1;
+
+        /* The actor is deliberately probed just beyond its workarea edge.
+         * Require an XRandR seam, so a panel-reserved workarea does not
+         * become a teleport, while a real desktop gap still reverses. */
+        if ((direction > 0 && x < seam) ||
+            (direction < 0 && x >= seam))
+            return current_index;
+        for (int i = 0; i < monitor_count; i++) {
+            if (i == current_index ||
+                !monitors_overlap_vertically(geometry, &geometries[i]) ||
+                y < MAX(geometry->y, geometries[i].y) ||
+                y >= MIN(monitor_bottom(geometry),
+                         monitor_bottom(&geometries[i])))
+                continue;
+            if (direction > 0 && monitor_right(geometry) == geometries[i].x) {
+                if (candidate_index < 0 || geometries[i].x <
+                    geometries[candidate_index].x)
+                    candidate_index = i;
+            } else if (direction < 0 &&
+                       monitor_right(&geometries[i]) == geometry->x) {
+                if (candidate_index < 0 || geometries[i].x >
+                    geometries[candidate_index].x)
+                    candidate_index = i;
+            }
+        }
+        if (candidate_index >= 0) {
+            *out = workareas[candidate_index];
+            return candidate_index;
+        }
+        return -1;
+    }
+
+    if (current_index >= 0) {
+        *out = workareas[current_index];
+        return current_index;
+    }
+    for (int i = 0; i < monitor_count; i++) {
+        if (monitor_contains_global_point(&workareas[i], x, y)) {
+            *out = workareas[i];
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int __attribute__((unused))
+select_monitor_index(const GdkRectangle *monitors, int monitor_count,
+                     const GdkRectangle *current, int x, int y,
+                     int direction) {
     int best_index = -1;
     gint64 best_distance = G_MAXINT64;
 
@@ -569,22 +650,29 @@ static gboolean select_monitor_workarea(GdkDisplay *display,
                                         int x, int y, int direction,
                                         GdkRectangle *out) {
     int monitor_count = gdk_display_get_n_monitors(display);
-    GdkRectangle monitors[32];
+    GdkRectangle geometries[32];
+    GdkRectangle workareas[32];
 
     if (!display || !out || monitor_count <= 0) return FALSE;
-    if (monitor_count > (int)G_N_ELEMENTS(monitors))
-        monitor_count = (int)G_N_ELEMENTS(monitors);
+    if (monitor_count > (int)G_N_ELEMENTS(geometries))
+        monitor_count = (int)G_N_ELEMENTS(geometries);
 
     for (int i = 0; i < monitor_count; i++) {
         GdkMonitor *monitor = gdk_display_get_monitor(display, i);
         if (!monitor) return FALSE;
-        gdk_monitor_get_workarea(monitor, &monitors[i]);
+        gdk_monitor_get_geometry(monitor, &geometries[i]);
+        gdk_monitor_get_workarea(monitor, &workareas[i]);
+        if (env_equals("ESHEEP_DEBUG_MONITORS", "1"))
+            g_printerr("monitor[%d] geometry=(%d,%d %dx%d) workarea=(%d,%d %dx%d)\n",
+                       i, geometries[i].x, geometries[i].y,
+                       geometries[i].width, geometries[i].height,
+                       workareas[i].x, workareas[i].y,
+                       workareas[i].width, workareas[i].height);
     }
 
-    int selected = select_monitor_index(monitors, monitor_count, current, x, y,
-                                        direction);
+    int selected = select_monitor_workarea_from_topology(
+        geometries, workareas, monitor_count, current, x, y, direction, out);
     if (selected < 0) return FALSE;
-    *out = monitors[selected];
     return TRUE;
 }
 

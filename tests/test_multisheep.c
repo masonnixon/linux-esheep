@@ -132,6 +132,52 @@ static void test_monitor_seam_selection(void) {
     assert(select_monitor_index(monitors, 3, &monitors[1], 1281, 300, 1) == 2);
 }
 
+static void test_monitor_topology_uses_geometry_and_workarea(void) {
+    const GdkRectangle geometry[] = {
+        { 0, 0, 1000, 1080 }, { 1000, 0, 1000, 1080 },
+        { 2000, 0, 1000, 1080 }, { 3000, 0, 1000, 1080 },
+    };
+    const GdkRectangle workarea[] = {
+        { 0, 24, 980, 1056 }, { 1000, 0, 1000, 1080 },
+        { 2000, 0, 1000, 1080 }, { 3000, 0, 1000, 1080 },
+    };
+    GdkRectangle selected;
+
+    /* A panel shrinks the first workarea, but the XRandR seam is still
+     * continuous.  Each boundary tick selects exactly one next monitor. */
+    assert(select_monitor_workarea_from_topology(
+               geometry, workarea, 4, &workarea[0], 981, 500, 1,
+               &selected) == 1);
+    assert(memcmp(&selected, &workarea[1], sizeof(selected)) == 0);
+    assert(select_monitor_workarea_from_topology(
+               geometry, workarea, 4, &workarea[1], 2001, 500, 1,
+               &selected) == 2);
+    assert(select_monitor_workarea_from_topology(
+               geometry, workarea, 4, &workarea[2], 1001, 500, -1,
+               &selected) == 1);
+    assert(select_monitor_workarea_from_topology(
+               geometry, workarea, 4, &workarea[1], 1, 500, -1,
+               &selected) == 0);
+    assert(selected.y == 24);
+
+    /* A real geometry gap is not a seam, even if workareas touch in a
+     * fixture.  A vertical mismatch is likewise not a seam. */
+    GdkRectangle gap_geometry[] = {
+        { 0, 0, 100, 600 }, { 140, 0, 100, 600 }
+    };
+    GdkRectangle gap_workarea[] = {
+        { 0, 0, 100, 600 }, { 100, 0, 100, 600 }
+    };
+    assert(select_monitor_workarea_from_topology(
+               gap_geometry, gap_workarea, 2, &gap_workarea[0], 101, 200, 1,
+               &selected) == -1);
+    gap_geometry[1].x = 100;
+    gap_geometry[1].y = 700;
+    assert(select_monitor_workarea_from_topology(
+               gap_geometry, gap_workarea, 2, &gap_workarea[0], 101, 200, 1,
+               &selected) == -1);
+}
+
 static void test_spawn_spacing_on_monitor(void) {
     App sheep[3];
     for (int i = 0; i < 3; i++) {
@@ -475,6 +521,7 @@ int main(void) {
     test_bath_scene_publication_survives_child_transition();
     test_seed_reproduces_a_sheep_stream();
     test_monitor_seam_selection();
+    test_monitor_topology_uses_geometry_and_workarea();
     test_spawn_spacing_on_monitor();
     test_window_spawn_skips_taskbar_and_overlap();
     test_shared_snapshot_consumption();
