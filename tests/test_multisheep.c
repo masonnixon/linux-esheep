@@ -43,6 +43,30 @@ static void test_count_bounds(void) {
     assert(clamp_sheep_count(MAX_SHEEP + 9) == MAX_SHEEP);
 }
 
+static void test_group_tick_scales_without_timer_multiplication(void) {
+    const int counts[] = { 1, 5, 10 };
+    for (int case_index = 0; case_index < 3; case_index++) {
+        int count = counts[case_index];
+        App sheep[MAX_SHEEP] = {0};
+        SheepGroup group = { .sheep = sheep, .count = (guint)count };
+        for (int i = 0; i < count; i++) {
+            sheep[i].paused = TRUE;
+            sheep[i].tick_ms = TICK_MS;
+            sheep[i].group = &group;
+        }
+
+        for (int tick = 0; tick < 3; tick++)
+            assert(group_tick(&group) == G_SOURCE_CONTINUE);
+
+        /* One callback services the group. This catches a benchmark that
+         * only measures equivalent output while leaving one timer per sheep. */
+        assert(group.group_tick_count == 3);
+        assert(group.sheep_tick_count == (guint)(3 * count));
+        for (int i = 0; i < count; i++)
+            assert(sheep[i].tick_source_id == 0);
+    }
+}
+
 static void test_sheep_random_streams_are_independent(void) {
     App sheep[2];
     memset(sheep, 0, sizeof(sheep));
@@ -51,6 +75,35 @@ static void test_sheep_random_streams_are_independent(void) {
     (void)app_random_0_99(&sheep[0]);
     (void)app_random_0_99(&sheep[1]);
     assert(sheep[0].random_state != sheep[1].random_state);
+}
+
+static void test_bath_scene_publication_survives_child_transition(void) {
+    App app;
+    memset(&app, 0, sizeof(app));
+    app.tile_size = 40;
+    app.direction = 1;
+    app.bounds = (GdkRectangle){ 0, 0, 1920, 1080 };
+    esheep_init(&app.state, 21); /* batha; authored child is bathw */
+    esheep_renderer_init(&app.scene, app.tile_size, app.tile_size);
+
+    update_child_animation(&app);
+    assert(app.scene.count == 2);
+    assert(app.scene_changed);
+
+    /* An unchanged rebuild must not keep requesting work forever. */
+    app.scene_changed = FALSE;
+    update_child_animation(&app);
+    assert(!app.scene_changed);
+
+    /* This is the second rebuild performed by on_tick after advancing the
+     * child actor. A real transition must leave a publication request
+     * pending. */
+    EsheepRenderer before_transition = app.scene;
+    esheep_init(&app.state, 23); /* bathw */
+    update_child_animation(&app);
+    assert(app.scene.count == 1);
+    assert(!renderers_equal(&before_transition, &app.scene));
+    assert(app.scene_changed);
 }
 
 static void test_seed_reproduces_a_sheep_stream(void) {
@@ -417,7 +470,9 @@ static void test_cleanup_is_per_instance(void) {
 
 int main(void) {
     test_count_bounds();
+    test_group_tick_scales_without_timer_multiplication();
     test_sheep_random_streams_are_independent();
+    test_bath_scene_publication_survives_child_transition();
     test_seed_reproduces_a_sheep_stream();
     test_monitor_seam_selection();
     test_spawn_spacing_on_monitor();

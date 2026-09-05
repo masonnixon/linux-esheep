@@ -144,6 +144,7 @@ typedef struct {
 } DesktopSurfaceTraits;
 
 typedef struct App App;
+typedef struct SheepGroup SheepGroup;
 
 static int x11_bad_window;
 static XErrorHandler x11_previous_error_handler;
@@ -182,6 +183,7 @@ struct App {
     int object_count;
     guint tick_ms;
     guint tick_source_id;
+    SheepGroup *group;
     gboolean window_landing;
     gboolean exclude_conky;
     gboolean spawn_on_window;
@@ -216,9 +218,10 @@ struct App {
     EsheepActor child_actors[MAX_RUNTIME_CHILDREN];
     int scene_origin_x;
     int scene_origin_y;
+    gboolean scene_changed;
 };
 
-typedef struct {
+struct SheepGroup {
     App *sheep;
     guint count;
     GdkDisplay *display;
@@ -236,7 +239,10 @@ typedef struct {
     int review_animation;
     char spawn_mode[16];
     DesktopSnapshot *desktop_snapshot;
-} SheepGroup;
+    guint tick_source_id;
+    guint group_tick_count;
+    guint sheep_tick_count;
+};
 
 static int clamp_pos_x(const App *app, int pos_x);
 static int floor_pos_y(const App *app);
@@ -257,10 +263,28 @@ static int actor_random_source(void *context) {
 }
 
 static gboolean on_tick(gpointer user_data);
+static gboolean group_tick(gpointer user_data);
 static void update_child_animation(App *app);
 static void advance_child_animation(App *app, int elapsed_ms);
 static void sync_scene_window(App *app);
 static void set_sprite_input_region(App *app);
+
+static gboolean renderers_equal(const EsheepRenderer *a,
+                                const EsheepRenderer *b) {
+    if (!a || !b || a->surface_width != b->surface_width ||
+        a->surface_height != b->surface_height || a->count != b->count)
+        return FALSE;
+    for (int i = 0; i < ESHEEP_RENDER_MAX_CHILDREN; i++) {
+        const EsheepRenderTile *left = &a->tiles[i];
+        const EsheepRenderTile *right = &b->tiles[i];
+        if (left->tile_id != right->tile_id || left->x != right->x ||
+            left->y != right->y || left->width != right->width ||
+            left->height != right->height || left->opacity != right->opacity ||
+            left->flipped != right->flipped || left->visible != right->visible)
+            return FALSE;
+    }
+    return TRUE;
+}
 
 static void group_set_paused(SheepGroup *group, gboolean paused) {
     if (!group || !group->sheep) return;
@@ -288,14 +312,12 @@ static void group_present(SheepGroup *group) {
 
 static void group_set_tick_ms(SheepGroup *group, guint tick_ms) {
     if (!group || !group->sheep || tick_ms < 10 || tick_ms > 1000) return;
-    for (guint i = 0; i < group->count; i++) {
-        App *app = &group->sheep[i];
-        if (app->tick_source_id != 0)
-            g_source_remove(app->tick_source_id);
-        app->tick_ms = tick_ms;
-        app->tick_source_id = g_timeout_add(app->tick_ms, on_tick, app);
-    }
+    if (group->tick_source_id != 0)
+        g_source_remove(group->tick_source_id);
+    for (guint i = 0; i < group->count; i++)
+        group->sheep[i].tick_ms = tick_ms;
     group->tick_ms = tick_ms;
+    group->tick_source_id = g_timeout_add(group->tick_ms, group_tick, group);
 }
 
 static void group_set_walk_keep_probability(SheepGroup *group, guint probability) {
@@ -372,6 +394,7 @@ static gboolean group_set_review_animation(SheepGroup *group, int animation_id) 
             sync_scene_window(app);
             gtk_widget_queue_draw(app->window);
             set_sprite_input_region(app);
+            app->scene_changed = FALSE;
         }
     }
     group->review_animation = animation_id == ANIM_WALK ? 0 : animation_id;
@@ -1059,10 +1082,6 @@ static gboolean child_tiles_use_parent_input(const App *app) {
 
 static void cleanup_app(App *app) {
     if (!app || app->cleaned_up) return;
-    if (app->tick_source_id != 0 &&
-        g_main_context_find_source_by_id(NULL, app->tick_source_id)) {
-        g_source_remove(app->tick_source_id);
-    }
     app->tick_source_id = 0;
     if (app->window) {
         gtk_widget_destroy(app->window);
@@ -2230,6 +2249,7 @@ static int frame_interval(const EsheepAnimation *anim, int frame_index) {
 static void update_child_animation(App *app) {
     /* Build the composed scene into app->scene. Parent tile 0 is drawn first;
      * every authored child record gets an independent renderer slot. */
+    EsheepRenderer previous_scene = app->scene;
     int child_tile_ids[ESHEEP_RENDER_MAX_CHILDREN];
     int child_x[ESHEEP_RENDER_MAX_CHILDREN];
     int child_y[ESHEEP_RENDER_MAX_CHILDREN];
@@ -2408,6 +2428,12 @@ static void update_child_animation(App *app) {
     app->scene.tiles[0].y = pose_offset_y(
         &esheep_animations[app->state.animation_id - 1],
         app->state.frame_index);
+    /* A tick can rebuild twice: once before child actors advance and once
+     * after. Keep the publication request pending if either rebuild changed
+     * the composed scene, so a short-lived transition (batha -> bathw in
+     * particular) cannot be lost by the second rebuild. */
+    app->scene_changed = app->scene_changed ||
+                         !renderers_equal(&previous_scene, &app->scene);
     if (getenv("ESHEEP_DEBUG_SCENE")) {
         g_printerr("scene anim=%d frame=%d pos=(%d,%d) count=%d\n",
                    app->state.animation_id, app->state.frame_index,
@@ -2490,8 +2516,11 @@ static gboolean on_tick(gpointer user_data) {
         advance_child_animation(app, (int)app->tick_ms);
         update_child_animation(app);
         sync_scene_window(app);
-        gtk_widget_queue_draw(app->window);
-        set_sprite_input_region(app);
+        if (app->scene_changed) {
+            gtk_widget_queue_draw(app->window);
+            set_sprite_input_region(app);
+            app->scene_changed = FALSE;
+        }
         return G_SOURCE_CONTINUE;
     }
 
@@ -2668,8 +2697,24 @@ static gboolean on_tick(gpointer user_data) {
     gtk_window_move(GTK_WINDOW(app->window),
                     app->pos_x - app->scene_origin_x,
                     app->pos_y - app->scene_origin_y);
-    gtk_widget_queue_draw(app->window);
-    set_sprite_input_region(app);
+    if (app->scene_changed) {
+        gtk_widget_queue_draw(app->window);
+        set_sprite_input_region(app);
+        app->scene_changed = FALSE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/* One GLib source owns the group cadence. Its callback stays on GTK's main
+ * thread and preserves each sheep's independent state and configured tick. */
+static gboolean group_tick(gpointer user_data) {
+    SheepGroup *group = user_data;
+    if (!group || !group->sheep) return G_SOURCE_REMOVE;
+    group->group_tick_count++;
+    for (guint i = 0; i < group->count; i++) {
+        group->sheep_tick_count++;
+        on_tick(&group->sheep[i]);
+    }
     return G_SOURCE_CONTINUE;
 }
 
@@ -3684,6 +3729,30 @@ int main(int argc, char **argv) {
     DesktopSnapshot group_snapshot;
     memset(&group_snapshot, 0, sizeof(group_snapshot));
     App sheep[MAX_SHEEP] = {0};
+    SheepGroup group = {
+        .sheep = sheep,
+        .count = count,
+        .display = display,
+        .monitor_index = active_monitor_index,
+        .configured_count = count,
+        .config = config,
+        .config_path = config_override,
+        .tick_ms = tick_ms,
+        .walk_keep_probability = walk_keep_probability,
+        .window_landing = window_landing,
+        .exclude_conky = exclude_conky,
+        .review_animation = review_animation,
+        .desktop_snapshot = &group_snapshot,
+    };
+    g_strlcpy(group.character, character ? character : "sheep",
+              sizeof(group.character));
+    g_strlcpy(group.spritesheet, sheet_path, sizeof(group.spritesheet));
+    if (package_path)
+        g_strlcpy(group.package, package_path, sizeof(group.package));
+    g_strlcpy(group.spawn_mode,
+              spawn_override ? spawn_override :
+              (getenv("ESHEEP_SPAWN") ? getenv("ESHEEP_SPAWN") : "bottom"),
+              sizeof(group.spawn_mode));
     for (guint i = 0; i < count; i++) {
         App *app = &sheep[i];
         app->sheet = sheet;
@@ -3691,6 +3760,7 @@ int main(int argc, char **argv) {
         app->ordinal = (int)i;
         app->direction = app_random_0_99(app) < 50 ? -1 : 1;
         app->tick_ms = tick_ms;
+        app->group = &group;
         app->window_landing = window_landing;
         app->exclude_conky = exclude_conky;
         app->spawn_on_window = spawn_override ?
@@ -3731,8 +3801,8 @@ int main(int argc, char **argv) {
                         app->pos_x - app->scene_origin_x,
                         app->pos_y - app->scene_origin_y);
         set_sprite_input_region(app);
-        app->tick_source_id = g_timeout_add(app->tick_ms, on_tick, app);
     }
+    group.tick_source_id = g_timeout_add(group.tick_ms, group_tick, &group);
 
     if (env_bool("ESHEEP_PAUSED", FALSE)) {
         for (guint i = 0; i < count; i++)
@@ -3750,33 +3820,12 @@ int main(int argc, char **argv) {
         g_timeout_add((guint)atoi(autoquit), on_autoquit, NULL);
     }
 
-    SheepGroup group = {
-        .sheep = sheep,
-        .count = count,
-        .display = display,
-        .monitor_index = active_monitor_index,
-        .configured_count = count,
-        .config = config,
-        .config_path = config_override,
-        .tick_ms = tick_ms,
-        .walk_keep_probability = walk_keep_probability,
-        .window_landing = window_landing,
-        .exclude_conky = exclude_conky,
-        .review_animation = review_animation,
-        .desktop_snapshot = &group_snapshot,
-    };
-    g_strlcpy(group.character, character ? character : "sheep",
-              sizeof(group.character));
-    g_strlcpy(group.spritesheet, sheet_path, sizeof(group.spritesheet));
-    if (package_path)
-        g_strlcpy(group.package, package_path, sizeof(group.package));
-    g_strlcpy(group.spawn_mode,
-              spawn_override ? spawn_override :
-              (getenv("ESHEEP_SPAWN") ? getenv("ESHEEP_SPAWN") : "bottom"),
-              sizeof(group.spawn_mode));
     GtkStatusIcon *tray_icon = create_tray_icon(&group);
 
     gtk_main();
+
+    if (group.tick_source_id != 0)
+        g_source_remove(group.tick_source_id);
 
     if (tray_icon) {
         G_GNUC_BEGIN_IGNORE_DEPRECATIONS
