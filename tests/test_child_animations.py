@@ -111,7 +111,7 @@ def test_generated_child_data():
     # Verify the eating-to-flower mapping is in generated data
     assert re.search(r"26.*\"imageX-imageW\*0\.9\".*\"imageY\".*27", anim_data_c), \
         "Generated data missing eating-to-flower child record"
-    assert re.search(r"65.*\"0\".*\"imageH\".*66", anim_data_c), \
+    assert re.search(r"65.*\"-imageW-8\".*\"imageY\".*66", anim_data_c), \
         "Generated data missing spacecraft-to-pilot child record"
 
     print(f"OK: Generated C data has {child_count} child records")
@@ -127,7 +127,7 @@ def test_spacecraft_child_placement():
     assert child.findtext("e:x", namespaces=ns) == "-imageW-8"
     assert child.findtext("e:y", namespaces=ns) == "imageY"
     assert child.findtext("e:next", namespaces=ns) == "66"
-    print("OK: Spacecraft pilot is placed in the tile below the spacecraft")
+    print("OK: Spacecraft pilot is placed beside the spacecraft")
 
 def test_child_review_uses_parent():
     """The visual review must launch a child transition from its parent."""
