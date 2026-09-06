@@ -154,3 +154,9 @@ uninstall:
 .PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_expression /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
+
+# P7: Real X11 WM integration test - opt-in, skips if prerequisites absent
+test-x11-wm-integration:
+	command -v xvfb-run >/dev/null
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_wm_integration tests/test_x11_wm_integration.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	/tmp/esheep_test_x11_wm_integration || [ $$? -eq 77 ]

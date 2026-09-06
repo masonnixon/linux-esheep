@@ -100,7 +100,7 @@ def test_new_child_placement():
     assert child is not None
     assert (child.findtext("e:x", namespaces=NS),
             child.findtext("e:y", namespaces=NS),
-            int(child.findtext("e:next", namespaces=NS))) == ("0", "imageH", 66)
+            int(child.findtext("e:next", namespaces=NS))) == ("-imageW-8", "imageY", 66)
 
 
 def main():

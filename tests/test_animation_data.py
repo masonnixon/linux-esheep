@@ -201,8 +201,8 @@ def test_art_completeness_extensions():
     ) == ((65, 66),)
     spacecraft = root.find("e:childs/e:child[@animationid='65']", NS)
     assert spacecraft is not None
-    assert spacecraft.findtext("e:x", namespaces=NS) == "0"
-    assert spacecraft.findtext("e:y", namespaces=NS) == "imageH"
+    assert spacecraft.findtext("e:x", namespaces=NS) == "-imageW-8"
+    assert spacecraft.findtext("e:y", namespaces=NS) == "imageY"
     print(f"OK: art-completeness inventory has {len(actual)} extension records")
 
 

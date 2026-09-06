@@ -1699,8 +1699,8 @@
 <next>31</next>
 </child>
 <child animationid="65">
-<x>0</x>
-<y>imageH</y>
+<x>-imageW-8</x>
+<y>imageY</y>
 <next>66</next>
 </child>
 </childs>
