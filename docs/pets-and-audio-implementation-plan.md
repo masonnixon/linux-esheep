@@ -13,6 +13,26 @@ embed their spritesheet and icon as base64; sound-bearing packages embed MP3
 audio as base64 in `<sounds>`. This is an asset/data migration as well as a
 runtime feature, not just a new character-name switch.
 
+## Design constraints
+
+- Use one immutable, reference-counted/owned package representation with
+  explicit destruction; do not copy package fields into `App` or create
+  pet-specific runtime structs.
+- Keep generated built-in data separate from runtime-loaded packages. Generated
+  files are produced only by the generator and checked with a drift gate.
+- Preserve all authored records, including repeated sound animation IDs, in
+  source order. Do not deduplicate or silently reinterpret upstream data.
+- Keep decoding and playback asynchronous and bounded. Audio must never run on
+  the GTK animation tick or block package loading indefinitely.
+- Store provenance, upstream revision, SHA-256 hashes, license text, and
+  attribution for every imported XML, image, and audio payload. A package with
+  unresolved redistribution rights is inventory-only until cleared.
+- Prefer extracted immutable assets plus a reproducible extraction tool over
+  hand-maintained copies. Retain original XML for parity and custom-package
+  compatibility.
+- Make optional audio capability explicit at configure/build time and runtime;
+  silent operation must remain a first-class tested mode.
+
 ## Acceptance definition
 
 For every upstream pet package:
@@ -45,8 +65,9 @@ Checks: inventory script, XML parse, image/audio MIME detection, license report.
 
 ### PET-1 — generalize package data model and parser
 
-Replace sheep-specific and fixed-capacity assumptions with validated dynamic
-package data sized for the largest upstream package. Add package metadata,
+Introduce an owned `EsheepPackage` representation with GLib containers and
+single-owner cleanup boundaries. Replace sheep-specific and fixed-capacity
+assumptions with validated dynamic package data sized for the largest upstream package. Add package metadata,
 character name, tile dimensions, embedded icon/spritesheet fields, sounds, and
 all authored animation records. Preserve generated built-in sheep data and
 the current generated-data synchronization gate.
@@ -56,7 +77,8 @@ large animation counts, duplicate IDs, invalid references, and memory cleanup.
 
 ### PET-2 — extract and register the complete pet catalog
 
-Add the upstream packages to a versioned asset/catalog layout. Register stable
+Add the upstream packages to a versioned asset/catalog layout generated from a
+manifest, not hand-wired conditionals. Register stable
 names and aliases, including sheep color variants, bunny, ham ham, fox,
 Grian, Mareep, Neko variants, Pikachu, Pingus, Pokémon/anime pets, skeleton,
 zombie, and the remaining upstream packages. Add `--list-characters` and make
@@ -80,41 +102,44 @@ one special animation, and terminate cleanly.
 
 ### AUDIO-1 — audio backend decision and abstraction
 
-Audit available supported libraries in the build/container environment. Use an
-idiomatic asynchronous backend capable of decoding the upstream embedded MP3
-data, preferably GStreamer when available, behind a small `EsheepAudio`
-interface. Keep audio playback off the GTK animation tick and cap/consolidate
-concurrent voices for multiple pets. Provide a build-time capability check and
-a no-audio fallback with a clear warning.
+Audit available supported libraries inside the project validation container;
+never install a dependency on the host. Select the smallest maintained
+asynchronous backend capable of decoding upstream MP3 data, preferably
+GStreamer if the project/container already supports it. Hide it behind a
+small opaque `EsheepAudio` interface with explicit init/shutdown ownership.
+Keep playback off the GTK animation tick, cap concurrent voices, and provide a
+build-time capability check plus a no-audio fallback with a clear diagnostic.
 
 Checks: backend init/shutdown, decode failure, cancellation, repeated events,
 multiple pets, no-display/headless mode, and no blocking on the GTK main loop.
 
 ### AUDIO-2 — parse, cache, and schedule authored sounds
 
-Decode `<sounds>` base64 payloads into memory or a managed cache, preserve
-animation ID, probability, and loop count, and trigger sounds at the same
-animation lifecycle points as the upstream behavior. Define deterministic RNG
-semantics for sound probability without perturbing movement RNG. Ensure each
-package can have duplicate upstream sound IDs only when the source semantics
-define how they combine; otherwise report and choose a documented policy.
+Decode `<sounds>` base64 payloads into a managed cache, preserve animation ID,
+probability, loop count, and source order, and trigger sounds at the same
+animation lifecycle points as the upstream behavior. Give sound selection its
+own deterministic RNG stream so movement sequences do not change. Preserve
+duplicate animation IDs as separate records and test their authored ordering.
 
 Checks: fixture audio, all sound-bearing packages, probability seed tests,
 loop tests, cache lifetime, malformed payloads, and sound-disabled operation.
 
 ### AUDIO-3 — controls and user configuration
 
-Add configuration and CLI/environment controls for enabled/disabled audio,
-master volume, and maximum concurrent voices. Add the setting to the existing
-settings UI/tray action if practical, without making audio initialization
-mandatory for silent packages or test runs.
+Add configuration, CLI, and environment controls for enabled/disabled audio,
+master volume, and maximum concurrent voices with one documented precedence
+order. Add the setting to the existing settings UI/tray action only through a
+small adapter; audio initialization must remain optional for silent packages
+and test runs.
 
 Checks: config/env/CLI precedence, volume bounds, runtime toggle, and
 multi-sheep performance at 1/5/10/32 pets.
 
 ### PET-4 — packaging, attribution, and documentation
 
-Install the full catalog, extracted sprites, and required audio/license files.
+Install the full catalog, extracted sprites, audio, manifest, and license/
+attribution files. Fail packaging when a required asset has no provenance
+record rather than shipping an untracked binary.
 Update README/man pages with catalog names, selection examples, audio controls,
 asset provenance, and known backend limitations. Remove the stale statement
 that UFO/pilot tiles are unused.
@@ -136,9 +161,11 @@ alongside AUDIO-1 once the asset policy is fixed. PET-3 depends on PET-1 and
 PET-2. AUDIO-2 depends on PET-1 and AUDIO-1. PET-4 waits for PET-2 and the
 audio data layout. PET-5 waits for all implementation phases.
 
-The safest first implementation wave is PET-1 plus AUDIO-1 in separate
-worktrees, followed by PET-2 and AUDIO-2. Do not edit generated tables or the
-same package manifest concurrently without a clear ownership boundary.
+The safest first implementation wave is PET-0, then PET-1 plus AUDIO-1 in
+separate worktrees, followed by PET-2 and AUDIO-2. PET-0 owns the single source
+manifest and provenance records; no other phase may edit them concurrently.
+Do not edit generated tables or the same package manifest concurrently without
+a clear ownership boundary.
 
 ## Explicit non-goals for this plan
 
