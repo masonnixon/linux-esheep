@@ -52,6 +52,9 @@ For every upstream pet package:
 
 ## Phase sequence
 
+Current status: PET-0 accepted in `9396cb7`. PET-1 is active. AUDIO-1 is
+queued and may proceed independently after PET-0's asset/provenance boundary.
+
 ### PET-0 — freeze upstream inventory and asset policy
 
 Record the upstream revision, all 26 package names, animation/transition/child
