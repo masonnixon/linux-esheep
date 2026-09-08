@@ -8,7 +8,10 @@
 static const char PACKAGE_XML[] =
     "<animations xmlns=\"https://esheep.petrucci.ch/\">"
     "<header><tilesx>4</tilesx><tilesy>4</tilesy></header>"
-    "<image><file>custom.png</file></image>"
+    "<image><tilesx>2</tilesx><tilesy>3</tilesy><file>custom.png</file>"
+    "<png>iVBORw0KGgo=</png><transparency>Transparent</transparency></image>"
+    "<sounds><sound animationid=\"2\"><probability>25</probability>"
+    "<loop>2</loop><base64>YWJj</base64></sound></sounds>"
     "<spawns><spawn id=\"1\" probability=\"100\"><x>10</x><y>20</y>"
     "<next>1</next></spawn></spawns>"
     "<animations>"
@@ -54,7 +57,7 @@ int main(void) {
     assert(error == NULL);
 
     esheep_pet_package_activate(package);
-    assert(esheep_tiles_x == 4 && esheep_tiles_y == 4);
+    assert(esheep_tiles_x == 2 && esheep_tiles_y == 3);
     assert(esheep_animation_count == 2);
     assert(strcmp(esheep_animations[0].name, "custom walk") == 0);
     assert(esheep_animations[0].frame_count == 2);
@@ -66,6 +69,15 @@ int main(void) {
     assert(esheep_child_count == 2);
     assert(g_str_has_suffix(esheep_pet_package_spritesheet(package),
                             "/custom.png"));
+    const EsheepPackageImage *image = esheep_pet_package_image(package);
+    assert(image != NULL && image->tiles_x == 2 && image->tiles_y == 3);
+    assert(image->transparency == ESHEEP_TRANSPARENCY_TRANSPARENT);
+    assert(image->png_size == 8 && memcmp(image->png_data, "\x89PNG\r\n\x1a\n", 8) == 0);
+    assert(esheep_pet_package_sound_count(package) == 1);
+    const EsheepPackageSound *const *sounds = esheep_pet_package_sounds(package);
+    assert(sounds != NULL && sounds[0]->animation_id == 2);
+    assert(sounds[0]->probability == 25 && sounds[0]->loop_count == 2);
+    assert(sounds[0]->payload_size == 3 && memcmp(sounds[0]->payload, "abc", 3) == 0);
 
     esheep_pet_package_free(package);
     assert(esheep_animation_count == esheep_default_animation_count);
@@ -95,6 +107,22 @@ int main(void) {
     remove(invalid_path);
 
     package = NULL;
+    const char *invalid_base64_path = "/tmp/esheep-test-invalid-base64.xml";
+    const char *invalid_base64_xml =
+        "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
+        "<image><png>not-base64!</png></image>"
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame></sequence></animation></animations>"
+        "</animations>";
+    assert(g_file_set_contents(invalid_base64_path, invalid_base64_xml, -1,
+                               &error));
+    assert(!esheep_pet_package_load(invalid_base64_path, &package, &error));
+    assert(package == NULL && error != NULL);
+    assert(strstr(error->message, "invalid base64 PNG data") != NULL);
+    g_clear_error(&error);
+    remove(invalid_base64_path);
+
+    package = NULL;
     const char *invalid_action_path = "/tmp/esheep-test-invalid-action.xml";
     const char *invalid_action_xml =
         "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
@@ -111,19 +139,20 @@ int main(void) {
     remove(invalid_action_path);
 
     package = NULL;
-    const char *invalid_number_path = "/tmp/esheep-test-invalid-number.xml";
-    const char *invalid_number_xml =
+    const char *invalid_transition_path = "/tmp/esheep-test-invalid-transition.xml";
+    const char *invalid_transition_xml =
         "<animations><header><tilesx>1</tilesx><tilesy>1</tilesy></header>"
-        "<animations><animation id=\"1\"><start><opacity>nan</opacity>"
-        "</start><end/><sequence><frame>0</frame></sequence></animation>"
-        "</animations></animations>";
-    assert(g_file_set_contents(invalid_number_path, invalid_number_xml, -1,
+        "<animations><animation id=\"1\"><start/><end/>"
+        "<sequence><frame>0</frame><next probability=\"100\">2</next>"
+        "</sequence></animation></animations></animations>";
+    assert(g_file_set_contents(invalid_transition_path, invalid_transition_xml, -1,
                                &error));
-    assert(!esheep_pet_package_load(invalid_number_path, &package, &error));
+    assert(!esheep_pet_package_load(invalid_transition_path, &package, &error));
     assert(package == NULL);
     assert(error != NULL);
+    assert(strstr(error->message, "invalid animation transition") != NULL);
     g_clear_error(&error);
-    remove(invalid_number_path);
+    remove(invalid_transition_path);
 
     package = NULL;
     const char *invalid_expression_path = "/tmp/esheep-test-invalid-expression.xml";
@@ -148,23 +177,23 @@ int main(void) {
         "</animation></animations></animations>";
     char *range_xml = g_strdup_printf(range_prefix, "2147483648", "0", "0");
     assert_invalid_package("/tmp/esheep-test-position-range.xml", range_xml,
-                           "animation pose expression");
+                           "animation pose expression must be a finite 32-bit integer");
     g_free(range_xml);
 
     range_xml = g_strdup_printf(range_prefix, "0", "2147483648", "0");
     assert_invalid_package("/tmp/esheep-test-repeat-range.xml", range_xml,
-                           "animation repeat expression");
+                           "animation repeat expression must be a finite 32-bit integer");
     g_free(range_xml);
 
     range_xml = g_strdup_printf(range_prefix, "0", "0", "2147483648");
     assert_invalid_package("/tmp/esheep-test-frame-range.xml", range_xml,
-                           "frame index");
+                           "frame index must be a non-negative representable integer");
     g_free(range_xml);
 
     range_xml = g_strdup_printf(range_prefix, "0",
                                 "Convert(2147483648,System.Int32)", "0");
     assert_invalid_package("/tmp/esheep-test-convert-range.xml", range_xml,
-                           "animation repeat expression");
+                           "animation repeat expression must be a finite 32-bit integer");
     g_free(range_xml);
 
     /* Test malformed XML with unfinished transition (missing closing next tag) */
