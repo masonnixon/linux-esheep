@@ -52,8 +52,11 @@ For every upstream pet package:
 
 ## Phase sequence
 
-Current status: PET-0 accepted in `9396cb7`. PET-1 is active. AUDIO-1 is
-queued and may proceed independently after PET-0's asset/provenance boundary.
+Current status: PET-0 accepted in `9396cb7`. PET-1B (image/sound package
+model and parser) is accepted in `02df328`; it parses all 26 upstream XML
+packages, including embedded images and sound-bearing packages. The remaining
+PET-1 metadata/runtime work is queued. AUDIO-1 is queued and may proceed
+independently after PET-0's asset/provenance boundary.
 
 ### PET-0 — freeze upstream inventory and asset policy
 
