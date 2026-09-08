@@ -58,6 +58,35 @@ packages, including embedded images and sound-bearing packages. The remaining
 PET-1 metadata/runtime work is queued. AUDIO-1 is queued and may proceed
 independently after PET-0's asset/provenance boundary.
 
+### Active handoff: PET-1C — embedded image runtime integration
+
+MODE: GREEN
+
+OWN: `src/main.c`, `src/pet_package.h`, `src/pet_package.c`,
+`tests/test_pet_package.c`, and focused documentation only.
+
+DENY: generated animation tables, `assets/`, catalog files, audio playback,
+window/monitor behavior, and unrelated cleanup.
+
+DO:
+
+1. When a loaded package has embedded PNG data and no explicit `--sprite`,
+   load that image directly from owned package bytes using GTK/GdkPixbuf.
+2. Preserve explicit sprite precedence: `--sprite`, environment, config,
+   then package embedded image, then the existing built-in default.
+3. Validate the embedded image against the package tile grid and preserve the
+   existing diagnostics for incompatible sheets.
+4. Add focused tests proving embedded-image selection and explicit override;
+   do not require a live desktop for these tests.
+
+CHECK: `make test-pet-package`, existing parser/runtime tests, `make`, and a
+focused embedded-image precedence test.
+
+COMMIT: `Use embedded package images at runtime`
+
+STOP: exactly one commit, no dependency installation, no reset/restore/clean,
+and no changes outside OWN.
+
 ### PET-0 — freeze upstream inventory and asset policy
 
 Record the upstream revision, all 26 package names, animation/transition/child
