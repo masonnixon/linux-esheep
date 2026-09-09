@@ -20,6 +20,7 @@
 #include "expression.h"
 #include "interpreter.h"
 #include "pet_package.h"
+#include "pet_catalog.h"
 #include "renderer.h"
 
 #define TICK_MS 33
@@ -853,7 +854,8 @@ static void print_usage(const char *program) {
     g_print("  --help                 Show this help.\n");
     g_print("  --version              Show the version.\n");
     g_print("  --sprite PATH          Use a spritesheet.\n");
-    g_print("  --character NAME       Use sheep or penguin sprites.\n");
+    g_print("  --character NAME       Use sheep or penguin sprites, or a catalog name.\n");
+    g_print("  --list-characters      List all available catalog characters.\n");
     g_print("  --package PATH         Load a validated XML behavior package.\n");
     g_print("  --config PATH          Load settings from an INI config file.\n");
     g_print("  --spawn MODE           Use bottom, window, or random spawn.\n");
@@ -3401,6 +3403,31 @@ int main(int argc, char **argv) {
             character_override = argv[++i];
             continue;
         }
+        if (strcmp(argv[i], "--list-characters") == 0) {
+            EsheepPetCatalog *catalog = esheep_pet_catalog_load("manifest.json", NULL);
+            if (catalog) {
+                g_print("Available characters (%d):\n", esheep_pet_catalog_count(catalog));
+                for (int i = 0; i < esheep_pet_catalog_count(catalog); i++) {
+                    const EsheepPetCatalogEntry *entry = esheep_pet_catalog_get_by_index(catalog, i);
+                    const char *avail = esheep_pet_catalog_entry_is_available(entry) ? "" : " [unavailable]";
+                    g_print("  %s (%s)%s\n",
+                            esheep_pet_catalog_entry_stable_name(entry),
+                            esheep_pet_catalog_entry_title(entry),
+                            avail);
+                    const char **aliases = esheep_pet_catalog_entry_aliases(entry);
+                    int alias_count = esheep_pet_catalog_entry_alias_count(entry);
+                    if (alias_count > 0) {
+                        g_print("    aliases: ");
+                        for (int j = 0; j < alias_count; j++) {
+                            g_print("%s%s", j > 0 ? ", " : "", aliases[j]);
+                        }
+                        g_print("\n");
+                    }
+                }
+                esheep_pet_catalog_free(catalog);
+            }
+            return 0;
+        }
         if (strcmp(argv[i], "--package") == 0 && i + 1 < argc) {
             package_override = argv[++i];
             continue;
@@ -3621,6 +3648,9 @@ int main(int argc, char **argv) {
     }
     if (runtime_package) esheep_pet_package_activate(runtime_package);
 
+    /* Load catalog for character resolution */
+    EsheepPetCatalog *catalog = esheep_pet_catalog_load("manifest.json", NULL);
+
     if ((review_animation > 0 && review_animation > esheep_animation_count) ||
         (review_parent > 0 && review_parent > esheep_animation_count)) {
         g_printerr("review animation ID is outside the active graph (use 1-%d)\n",
@@ -3651,15 +3681,53 @@ int main(int argc, char **argv) {
     gboolean custom_sprite_selected = sprite_override ||
                                       getenv("ESHEEP_SPRITESHEET") ||
                                       config_sprite;
+
+    /* Load catalog to resolve catalog character names */
+    const EsheepPetCatalogEntry *catalog_entry = NULL;
+    if (character && catalog) {
+        catalog_entry = esheep_pet_catalog_lookup(catalog, character);
+    }
+
     if (character && strcasecmp(character, "sheep") != 0 &&
         strcasecmp(character, "penguin") != 0 && !custom_sprite_selected) {
-        g_printerr("invalid character '%s' (use sheep or penguin, or provide "
-                   "a custom spritesheet)\n", character);
-        esheep_pet_package_free(runtime_package);
-        g_free(config_character); g_free(config_sprite); g_free(config_spawn);
-        g_free(config_package); g_free(default_config_path);
-        g_key_file_free(config);
-        return 2;
+        if (!catalog_entry) {
+            g_printerr("invalid character '%s' (use sheep or penguin, or a catalog name; see --list-characters)\n", character);
+            if (catalog) esheep_pet_catalog_free(catalog);
+            esheep_pet_package_free(runtime_package);
+            g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+            g_free(config_package); g_free(default_config_path);
+            g_key_file_free(config);
+            return 2;
+        }
+        /* Catalog character resolved - check if package is available */
+        if (!esheep_pet_catalog_entry_is_available(catalog_entry)) {
+            g_printerr("character '%s' is unavailable (no embedded image or spritesheet reference)\n", character);
+            if (catalog) esheep_pet_catalog_free(catalog);
+            esheep_pet_package_free(runtime_package);
+            g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+            g_free(config_package); g_free(default_config_path);
+            g_key_file_free(config);
+            return 2;
+        }
+
+        /* Load the package from the catalog if no explicit package was provided */
+        if (!runtime_package && !package_override && !getenv("ESHEEP_PACKAGE")) {
+            const char *pkg_path = esheep_pet_catalog_entry_package_path(catalog_entry);
+            if (pkg_path && *pkg_path) {
+                GError *pkg_error = NULL;
+                if (!esheep_pet_package_load(pkg_path, &runtime_package, &pkg_error)) {
+                    g_printerr("failed to load catalog package '%s': %s\n", pkg_path,
+                               pkg_error ? pkg_error->message : "invalid package");
+                    if (pkg_error) g_error_free(pkg_error);
+                    if (catalog) esheep_pet_catalog_free(catalog);
+                    g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+                    g_free(config_package); g_free(default_config_path);
+                    g_key_file_free(config);
+                    return 2;
+                }
+                esheep_pet_package_activate(runtime_package);
+            }
+        }
     }
     /* Custom-pet package: resolve spritesheet respecting precedence.
      * An explicit --sprite takes absolute priority; then ESHEEP_SPRITESHEET
@@ -3970,5 +4038,6 @@ int main(int argc, char **argv) {
     g_key_file_free(config);
     g_object_unref(sheet);
     esheep_pet_package_free(runtime_package);
+    if (catalog) esheep_pet_catalog_free(catalog);
     return 0;
 }

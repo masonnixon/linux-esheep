@@ -22,7 +22,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-static const char ESHEEP_BIN[] = "/home/mason/repos/linux-esheep.git/esheep";
+static const char ESHEEP_BIN[] = "./esheep";
 
 /* Returns: exit code of child, or -1 on fork/pipe error.
  * Output is always NUL-terminated (truncated if > out_bufsiz-1). */

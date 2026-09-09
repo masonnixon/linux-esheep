@@ -26,6 +26,10 @@ test-actor:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_actor tests/test_actor.c src/actor.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_actor
 
+test-pet-catalog:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GLIB_CFLAGS) -o /tmp/esheep_test_pet_catalog tests/test_pet_catalog.c src/pet_catalog.c $(GLIB_LIBS) $(MATH_LIBS)
+	/tmp/esheep_test_pet_catalog
+
 test-pet-package:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GLIB_CFLAGS) -o /tmp/esheep_test_pet_package tests/test_pet_package.c src/pet_package.c src/animations_data.c src/expression.c $(GLIB_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_pet_package
@@ -124,10 +128,10 @@ test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-acto
 
 test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli
 
-esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c
-	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c
+	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 
-install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c
+install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
 		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
