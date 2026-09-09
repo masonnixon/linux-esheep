@@ -52,11 +52,10 @@ For every upstream pet package:
 
 ## Phase sequence
 
-Current status: PET-0 accepted in `9396cb7`. PET-1B (image/sound package
-model and parser) is accepted in `02df328`; it parses all 26 upstream XML
-packages, including embedded images and sound-bearing packages. The remaining
-PET-1 metadata/runtime work is queued. AUDIO-1 is queued and may proceed
-independently after PET-0's asset/provenance boundary.
+Current status: PET-0 accepted in `9396cb7`; PET-1B parser support accepted in
+`02df328`; PET-1C embedded-image runtime support accepted in `8225090`.
+PET-2 catalog integration is now active. AUDIO-1 remains independently
+queueable after PET-0's asset/provenance boundary.
 
 ### Active handoff: PET-1C — embedded image runtime integration
 
@@ -111,6 +110,22 @@ Checks: parser unit tests for every upstream package, malformed base64/XML,
 large animation counts, duplicate IDs, invalid references, and memory cleanup.
 
 ### PET-2 — extract and register the complete pet catalog
+
+MODE: GREEN
+
+OWN: catalog source/tooling, `src/main.c`, focused catalog tests, and catalog
+documentation. DENY: generated animation tables, audio playback, and window/
+monitor behavior. Use the frozen PET-0 manifest as the source of package names
+and provenance; do not hand-wire per-pet conditionals. Add stable-name lookup,
+`--list-characters`, and preserve `--package`/`--sprite` precedence. Do not
+silently bundle packages whose provenance gate is unresolved; represent them
+as inventory-only or make the packaging decision explicit in the catalog.
+
+CHECK: catalog tests enumerate all manifest packages, names and aliases resolve
+deterministically, invalid names fail clearly, and the existing build/tests
+remain green.
+
+COMMIT: `Register upstream pet catalog`
 
 Add the upstream packages to a versioned asset/catalog layout generated from a
 manifest, not hand-wired conditionals. Register stable
