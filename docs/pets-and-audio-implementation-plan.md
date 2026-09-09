@@ -54,8 +54,9 @@ For every upstream pet package:
 
 Current status: PET-0 accepted in `9396cb7`; PET-1B parser support accepted in
 `02df328`; PET-1C embedded-image runtime support accepted in `8225090`.
-PET-2 catalog integration is now active. AUDIO-1 remains independently
-queueable after PET-0's asset/provenance boundary.
+PET-2 catalog integration is accepted in `fcd6658`; PET-3 rendering
+compatibility is now active. AUDIO-1 remains independently queueable after
+PET-0's asset/provenance boundary.
 
 ### Active handoff: PET-1C — embedded image runtime integration
 
@@ -139,6 +140,22 @@ Checks: catalog enumerates every package, each name resolves, each package's
 sprite dimensions match its XML, and CLI/config precedence remains intact.
 
 ### PET-3 — rendering compatibility for non-sheep packages
+
+MODE: GREEN
+
+OWN: renderer/package integration, focused rendering tests, and the Makefile
+test wiring needed for those tests. DENY: catalog data, audio playback,
+window/monitor behavior, and generated animation tables. Validate tile grids,
+transparency modes, alpha bounds, flips, child scenes, large animation IDs,
+spawn coordinates, and package expressions without adding sheep-specific
+heuristics. Add deterministic smoke coverage for representative small,
+child-scene, and 268-animation packages using fixtures or metadata rather
+than silently requiring unavailable upstream binaries.
+
+CHECK: existing tests, package/parser tests, focused renderer compatibility
+tests, and a clean build.
+
+COMMIT: `Add non-sheep rendering compatibility`
 
 Verify tile sizes, transparency models, alpha bounds, flips, child scenes,
 large scenes, spawn coordinates, animation IDs, and package-specific expression
