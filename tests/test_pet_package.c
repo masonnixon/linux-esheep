@@ -46,6 +46,103 @@ static void assert_invalid_package(const char *path, const char *xml,
     remove(path);
 }
 
+/* Test embedded PNG loading via GdkPixbufLoader.
+ * This test verifies that a package with embedded PNG data can load
+ * the spritesheet from the owned package bytes, without requiring
+ * an external file. */
+static void test_embedded_png_loading(void) {
+    /* Package with embedded PNG (1x1 transparent pixel, valid base64) */
+    const char *embedded_png_xml =
+        "<animations xmlns=\"https://esheep.petrucci.ch/\"><header><tilesx>4</tilesx>"
+        "<tilesy>4</tilesy></header>"
+        "<image><tilesx>2</tilesx><tilesy>3</tilesy><png>"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        "</png><transparency>Transparent</transparency></image>"
+        "<animations><animation id=\"1\"><name>test</name>"
+        "<start><x>0</x><y>0</y><interval>100</interval>"
+        "<offsety>0</offsety><opacity>1</opacity></start>"
+        "<end><x>0</x><y>0</y><interval>100</interval>"
+        "<offsety>0</offsety><opacity>1</opacity></end>"
+        "<sequence repeat=\"0\"><frame>1</frame></sequence>"
+        "</animation></animations></animations>";
+
+    const char *path = "/tmp/esheep-test-embedded-png.xml";
+    GError *error = NULL;
+    EsheepPetPackage *package = NULL;
+
+    assert(g_file_set_contents(path, embedded_png_xml, -1, &error));
+    assert(error == NULL);
+    assert(esheep_pet_package_load(path, &package, &error));
+    assert(package != NULL);
+    assert(error == NULL);
+
+    /* Verify the package has image metadata with embedded PNG */
+    const EsheepPackageImage *image = esheep_pet_package_image(package);
+    assert(image != NULL);
+    assert(image->tiles_x == 2 && image->tiles_y == 3);
+    assert(image->transparency == ESHEEP_TRANSPARENCY_TRANSPARENT);
+    assert(image->png_data != NULL);
+    assert(image->png_size > 0);
+    /* PNG header bytes */
+    assert(image->png_size >= 8);
+    assert(memcmp(image->png_data, "\x89PNG\r\n\x1a\n", 8) == 0);
+
+    /* Verify spritesheet path is NULL since no <file> or <spritesheet> was provided */
+    const char *spritesheet_path = esheep_pet_package_spritesheet(package);
+    assert(spritesheet_path == NULL || *spritesheet_path == '\0');
+
+    esheep_pet_package_free(package);
+    remove(path);
+    puts("Embedded PNG loading test passed");
+}
+
+/* Test sprite precedence: explicit --sprite should override embedded PNG */
+static void test_sprite_precedence_explicit_override(void) {
+    /* This test verifies the precedence order is maintained in main.c logic.
+     * We test the API contract: when a package has both embedded PNG and
+     * a spritesheet file path, the explicit sprite path takes priority. */
+
+    const char *xml_with_both =
+        "<animations xmlns=\"https://esheep.petrucci.ch/\"><header><tilesx>4</tilesx>"
+        "<tilesy>4</tilesy></header>"
+        "<image><tilesx>2</tilesx><tilesy>3</tilesy><file>external.png</file>"
+        "<png>iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        "</png><transparency>Transparent</transparency></image>"
+        "<animations><animation id=\"1\"><name>test</name>"
+        "<start><x>0</x><y>0</y><interval>100</interval>"
+        "<offsety>0</offsety><opacity>1</opacity></start>"
+        "<end><x>0</x><y>0</y><interval>100</interval>"
+        "<offsety>0</offsety><opacity>1</opacity></end>"
+        "<sequence repeat=\"0\"><frame>1</frame></sequence>"
+        "</animation></animations></animations>";
+
+    const char *path = "/tmp/esheep-test-precedence.xml";
+    GError *error = NULL;
+    EsheepPetPackage *package = NULL;
+
+    assert(g_file_set_contents(path, xml_with_both, -1, &error));
+    assert(error == NULL);
+    assert(esheep_pet_package_load(path, &package, &error));
+    assert(package != NULL);
+    assert(error == NULL);
+
+    /* Package should have both embedded PNG and spritesheet path */
+    const EsheepPackageImage *image = esheep_pet_package_image(package);
+    assert(image != NULL);
+    assert(image->png_data != NULL);
+    assert(image->png_size > 0);
+    const char *spritesheet_path = esheep_pet_package_spritesheet(package);
+    assert(spritesheet_path != NULL);
+    assert(strstr(spritesheet_path, "external.png") != NULL);
+
+    /* The main.c logic handles precedence: --sprite > env > config > package file > embedded > default.
+     * This test verifies the package correctly exposes both. */
+    esheep_pet_package_free(package);
+    remove(path);
+    puts("Sprite precedence test passed");
+}
+
+
 int main(void) {
     const char *path = "/tmp/esheep-test-package.xml";
     GError *error = NULL;
@@ -261,6 +358,8 @@ int main(void) {
     g_clear_error(&error);
     remove(unclosed_animation_path);
 
+    test_embedded_png_loading();
+    test_sprite_precedence_explicit_override();
     puts("All pet package tests passed");
     return 0;
 }

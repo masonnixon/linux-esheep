@@ -3661,29 +3661,64 @@ int main(int argc, char **argv) {
         g_key_file_free(config);
         return 2;
     }
-    /* Custom-pet package: resolve spritesheet path respecting precedence.
+    /* Custom-pet package: resolve spritesheet respecting precedence.
      * An explicit --sprite takes absolute priority; then ESHEEP_SPRITESHEET
-     * env var; then the config file spritesheet key; finally the built-in
-     * default for the selected character. */
-    const char *sheet_path;
+     * env var; then the config file spritesheet key; then the package file
+     * path; then package embedded PNG; finally the built-in default. */
+    const char *sheet_path = NULL;
     char default_sheet_path_buf[4096];
+    GdkPixbuf *sheet = NULL;
+
     if (sprite_override) {
         sheet_path = sprite_override;
+        sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
     } else {
         const char *env_path = getenv("ESHEEP_SPRITESHEET");
-        sheet_path = env_path ? env_path : config_sprite;
-        if (!sheet_path && runtime_package)
+        if (env_path) {
+            sheet_path = env_path;
+            sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
+        } else if (config_sprite) {
+            sheet_path = config_sprite;
+            sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
+        } else if (runtime_package) {
+            const EsheepPackageImage *pkg_image = esheep_pet_package_image(runtime_package);
             sheet_path = esheep_pet_package_spritesheet(runtime_package);
-        if (!sheet_path) {
+            if (sheet_path && *sheet_path)
+                sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
+            if (!sheet && error)
+                g_clear_error(&error);
+
+            /* If no usable package file exists, decode the owned PNG bytes. */
+            if (!sheet && pkg_image && pkg_image->png_data && pkg_image->png_size > 0) {
+                GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+                if (loader) {
+                    if (gdk_pixbuf_loader_write(loader, pkg_image->png_data,
+                                                pkg_image->png_size, &error) &&
+                        gdk_pixbuf_loader_close(loader, &error)) {
+                        sheet = gdk_pixbuf_loader_get_pixbuf(loader);
+                        if (sheet)
+                            g_object_ref(sheet);
+                    }
+                    g_object_unref(loader);
+                }
+                if (!sheet && error) {
+                    g_printerr("failed to load embedded spritesheet from package: %s\n",
+                               error->message);
+                    g_clear_error(&error);
+                }
+                sheet_path = "package:embedded";
+            }
+        }
+        if (!sheet) {
             snprintf(default_sheet_path_buf, sizeof(default_sheet_path_buf),
                      "%s/%s_spritesheet.png", ESHEEP_DATADIR,
                      character && strcasecmp(character, "penguin") == 0 ?
                      "penguin_ice_blue" : "sheep");
             sheet_path = default_sheet_path_buf;
+            sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
         }
     }
 
-    GdkPixbuf *sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
     if (!sheet) {
         g_printerr("failed to load spritesheet '%s': %s\n", sheet_path,
                    error ? error->message : "unknown error");
