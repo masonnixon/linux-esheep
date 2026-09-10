@@ -34,6 +34,10 @@ test-pet-package:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GLIB_CFLAGS) -o /tmp/esheep_test_pet_package tests/test_pet_package.c src/pet_package.c src/animations_data.c src/expression.c $(GLIB_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_pet_package
 
+test-esheep-audio:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GLIB_CFLAGS) -o /tmp/esheep_test_audio tests/test_esheep_audio.c src/esheep_audio.c $(GLIB_LIBS)
+	/tmp/esheep_test_audio
+
 test-runtime:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_runtime tests/test_runtime.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_runtime
@@ -126,7 +130,7 @@ test-context:
 # Strict mode for CI: fails if Xvfb/ImageMagick are missing instead of skipping
 test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli
 
 esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
@@ -155,9 +159,9 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
+.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
 clean:
-	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_expression /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
+	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_audio /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_expression /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
 
 # P7: Real X11 WM integration test - opt-in, skips if prerequisites absent
 test-x11-wm-integration:
