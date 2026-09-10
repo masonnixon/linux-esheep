@@ -2142,6 +2142,9 @@ static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet
     int h = gdk_pixbuf_get_height(sheet);
     if (!gdk_pixbuf_get_has_alpha(sheet) ||
         gdk_pixbuf_get_n_channels(sheet) < 4) {
+        /* Check if this is a package-loaded sheet that needs chroma key.
+         * The caller should have already applied it for packages, but
+         * external --sprite paths don't get chroma key treatment. */
         g_printerr("spritesheet '%s' has no alpha channel; transparent "
                    "RGBA sprites are required to avoid a rectangular "
                    "desktop surface.\n", sheet_path);
@@ -2169,6 +2172,76 @@ static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet
                    character, esheep_tiles_x, esheep_tiles_y);
     }
     return TRUE;
+}
+
+
+/* Apply chroma key transparency to a pixbuf based on the package's declared
+ * transparency mode. Returns a new pixbuf with alpha channel, or NULL on error.
+ * The caller owns the returned pixbuf. */
+static GdkPixbuf *
+apply_chroma_key(const GdkPixbuf *src, int transparency_mode)
+{
+    if (!src) return NULL;
+
+    if (transparency_mode == ESHEEP_TRANSPARENCY_NONE)
+        return g_object_ref((GdkPixbuf *)src);
+
+    if (transparency_mode == ESHEEP_TRANSPARENCY_TRANSPARENT)
+        return g_object_ref((GdkPixbuf *)src);
+
+    guint32 key_color = 0;
+    switch (transparency_mode) {
+        case ESHEEP_TRANSPARENCY_MAGENTA:
+            key_color = 0xFF00FF;  // #FF00FF
+            break;
+        case ESHEEP_TRANSPARENCY_GREEN:
+            key_color = 0x00FF00;  // #00FF00
+            break;
+        case ESHEEP_TRANSPARENCY_CYAN:
+            key_color = 0x00FFFF;  // #00FFFF
+            break;
+        default:
+            return g_object_ref((GdkPixbuf *)src);
+    }
+
+    int w = gdk_pixbuf_get_width(src);
+    int h = gdk_pixbuf_get_height(src);
+    int rowstride = gdk_pixbuf_get_rowstride(src);
+    int channels = gdk_pixbuf_get_n_channels(src);
+    guchar *pixels = gdk_pixbuf_get_pixels(src);
+
+    GdkPixbuf *dest = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, w, h);
+    if (!dest) return NULL;
+
+    int dest_rowstride = gdk_pixbuf_get_rowstride(dest);
+    guchar *dest_pixels = gdk_pixbuf_get_pixels(dest);
+
+    guint8 kr = (key_color >> 16) & 0xFF;
+    guint8 kg = (key_color >> 8) & 0xFF;
+    guint8 kb = key_color & 0xFF;
+
+    for (int y = 0; y < h; y++) {
+        guchar *src_row = pixels + y * rowstride;
+        guchar *dest_row = dest_pixels + y * dest_rowstride;
+
+        for (int x = 0; x < w; x++) {
+            guchar r = src_row[x * channels + 0];
+            guchar g = src_row[x * channels + 1];
+            guchar b = src_row[x * channels + 2];
+
+            dest_row[x * 4 + 0] = r;
+            dest_row[x * 4 + 1] = g;
+            dest_row[x * 4 + 2] = b;
+
+            if (r == kr && g == kg && b == kb) {
+                dest_row[x * 4 + 3] = 0;  // transparent
+            } else {
+                dest_row[x * 4 + 3] = 255;  // opaque
+            }
+        }
+    }
+
+    return dest;
 }
 
 static void set_sprite_input_region(App *app) {
@@ -3777,6 +3850,21 @@ int main(int argc, char **argv) {
                 sheet_path = "package:embedded";
             }
         }
+
+        /* Apply chroma key transparency if the package declares a non-alpha mode.
+         * This must happen after loading the sheet but before validation. */
+        if (runtime_package) {
+            const EsheepPackageImage *pkg_image = esheep_pet_package_image(runtime_package);
+            if (pkg_image && pkg_image->transparency != ESHEEP_TRANSPARENCY_TRANSPARENT &&
+                pkg_image->transparency != ESHEEP_TRANSPARENCY_NONE) {
+                GdkPixbuf *converted = apply_chroma_key(sheet, pkg_image->transparency);
+                if (converted) {
+                    g_object_unref(sheet);
+                    sheet = converted;
+                }
+            }
+        }
+
         if (!sheet) {
             snprintf(default_sheet_path_buf, sizeof(default_sheet_path_buf),
                      "%s/%s_spritesheet.png", ESHEEP_DATADIR,

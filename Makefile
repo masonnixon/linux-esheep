@@ -43,20 +43,20 @@ test-expression:
 	/tmp/esheep_test_expression
 
 test-desktop:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_desktop
 
 test-x11-refresh:
 	command -v xvfb-run >/dev/null
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_refresh tests/test_x11_refresh.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_refresh tests/test_x11_refresh.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	xvfb-run -a /tmp/esheep_test_x11_refresh
 
 test-behavior:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_behavior tests/test_behavior.c src/actor.c src/animations_data.c src/interpreter.c src/expression.c src/renderer.c src/context.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_behavior tests/test_behavior.c src/actor.c src/animations_data.c src/interpreter.c src/expression.c src/renderer.c src/context.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_behavior
 
 test-multisheep:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/actor.c src/interpreter.c src/animations_data.c src/expression.c src/context.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/actor.c src/interpreter.c src/animations_data.c src/expression.c src/context.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_multisheep
 
 test-performance: test-multisheep
@@ -133,7 +133,7 @@ esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/conte
 
 install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
-		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
 	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
 	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
@@ -162,5 +162,5 @@ clean:
 # P7: Real X11 WM integration test - opt-in, skips if prerequisites absent
 test-x11-wm-integration:
 	command -v xvfb-run >/dev/null
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_wm_integration tests/test_x11_wm_integration.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_wm_integration tests/test_x11_wm_integration.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_x11_wm_integration || [ $$? -eq 77 ]
