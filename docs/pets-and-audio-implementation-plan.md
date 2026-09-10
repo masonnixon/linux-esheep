@@ -56,7 +56,8 @@ Current status: PET-0 accepted in `9396cb7`; PET-1B parser support accepted in
 `02df328`; PET-1C embedded-image runtime support accepted in `8225090`.
 PET-2 catalog integration is accepted in `fcd6658`; PET-3 rendering
 compatibility is accepted in `54053b9` (the pre-existing child-scene smoke
-test remains separately tracked). AUDIO-1 is now active.
+test remains separately tracked). AUDIO-1 is accepted in `423cdbc`; AUDIO-2
+is now active.
 
 ### Active handoff: PET-1C — embedded image runtime integration
 
@@ -195,6 +196,21 @@ Checks: backend init/shutdown, decode failure, cancellation, repeated events,
 multiple pets, no-display/headless mode, and no blocking on the GTK main loop.
 
 ### AUDIO-2 — parse, cache, and schedule authored sounds
+
+MODE: GREEN
+
+OWN: sound cache/scheduling files, animation integration, focused audio tests,
+and required Makefile wiring. DENY: catalog data, generated animation tables,
+window/monitor behavior, and backend implementation changes. Consume the
+accepted package sound records without deduplication; preserve animation ID,
+probability, loop count, and source order. Use a separate deterministic RNG
+stream and ensure silent/no-backend operation never changes movement or
+crashes. Keep scheduling off the GTK tick when backend work is available.
+
+CHECK: sound fixture decode/cache tests, seeded probability and ordering tests,
+malformed payload handling, sound-disabled operation, and existing tests.
+
+COMMIT: `Schedule authored package sounds`
 
 Decode `<sounds>` base64 payloads into a managed cache, preserve animation ID,
 probability, loop count, and source order, and trigger sounds at the same
