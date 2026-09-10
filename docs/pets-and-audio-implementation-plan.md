@@ -55,8 +55,8 @@ For every upstream pet package:
 Current status: PET-0 accepted in `9396cb7`; PET-1B parser support accepted in
 `02df328`; PET-1C embedded-image runtime support accepted in `8225090`.
 PET-2 catalog integration is accepted in `fcd6658`; PET-3 rendering
-compatibility is now active. AUDIO-1 remains independently queueable after
-PET-0's asset/provenance boundary.
+compatibility is accepted in `54053b9` (the pre-existing child-scene smoke
+test remains separately tracked). AUDIO-1 is now active.
 
 ### Active handoff: PET-1C — embedded image runtime integration
 
@@ -168,6 +168,20 @@ Checks: all catalog packages launch under Xvfb, render at least one normal and
 one special animation, and terminate cleanly.
 
 ### AUDIO-1 — audio backend decision and abstraction
+
+MODE: GREEN
+
+OWN: audio backend abstraction files, build/configure detection, focused audio
+tests, and required Makefile wiring. DENY: catalog data, generated animation
+tables, window/monitor behavior, and broad runtime sound scheduling. Audit
+libraries available in the validation environment; do not install host
+dependencies. Prefer an already-supported asynchronous backend, keep the
+interface opaque, cap concurrency, and provide a clear no-audio fallback.
+
+CHECK: backend capability detection, init/shutdown, decode failure,
+cancellation, no-audio mode, and a clean build with existing tests.
+
+COMMIT: `Add asynchronous audio backend abstraction`
 
 Audit available supported libraries inside the project validation container;
 never install a dependency on the host. Select the smallest maintained
