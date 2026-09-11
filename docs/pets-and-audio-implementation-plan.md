@@ -255,7 +255,7 @@ generated data/assets, and attribution files cover every upstream package.
 
 ### PET-5 — final parity and regression acceptance
 
-STATUS: NEXT.
+STATUS: ACCEPTED in `daff1c7`.
 
 Run package inventory/parity tests, all parser/renderer/audio tests, complete
 `make test`, optimized build, staged install, catalog rendering, CLI checks,
