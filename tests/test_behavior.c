@@ -710,6 +710,16 @@ static void test_group_animation_review_selection(void) {
     assert(!group_set_review_animation(&group, esheep_animation_count + 1));
 }
 
+static void test_builtin_character_selects_matching_sheet(void) {
+    SheepGroup group = {0};
+    strcpy(group.spritesheet, "assets/sheep_spritesheet.png");
+    apply_builtin_character_sheet(&group, "penguin");
+    assert(strcmp(group.spritesheet,
+                  "assets/penguin_ice_blue_spritesheet.png") == 0);
+    apply_builtin_character_sheet(&group, "sheep");
+    assert(strcmp(group.spritesheet, "assets/sheep_spritesheet.png") == 0);
+}
+
 /* Every authored parent must produce a valid composited scene, including any
  * child records reachable from that parent. This is a deterministic runtime
  * coverage gate; actual pixel appearance remains a separate visual review. */
@@ -860,6 +870,9 @@ int main(void) {
 
     test_group_animation_review_selection();
     printf("  test_group_animation_review_selection: PASSED\n");
+
+    test_builtin_character_selects_matching_sheet();
+    printf("  test_builtin_character_selects_matching_sheet: PASSED\n");
 
     test_all_authored_animations_compose();
     printf("  test_all_authored_animations_compose: PASSED\n");

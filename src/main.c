@@ -3164,6 +3164,22 @@ static void populate_spritesheet_combo(GtkComboBoxText *combo,
     }
 }
 
+static void apply_builtin_character_sheet(SheepGroup *group,
+                                          const char *character) {
+    if (!group || !character) return;
+    const char *filename = NULL;
+    if (strcasecmp(character, "sheep") == 0)
+        filename = "sheep_spritesheet.png";
+    else if (strcasecmp(character, "penguin") == 0)
+        filename = "penguin_ice_blue_spritesheet.png";
+    if (!filename) return;
+
+    const char *root = g_str_has_prefix(group->spritesheet, "assets/") ?
+                       "assets" : ESHEEP_DATADIR;
+    g_snprintf(group->spritesheet, sizeof(group->spritesheet), "%s/%s",
+               root, filename);
+}
+
 static void on_settings_response(GtkDialog *dialog, gint response,
                                  gpointer user_data) {
     SheepGroup *group = user_data;
@@ -3217,11 +3233,18 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             GTK_COMBO_BOX(character));
         const char *spritesheet_id = gtk_combo_box_get_active_id(
             GTK_COMBO_BOX(spritesheet));
+        char previous_spritesheet[sizeof(group->spritesheet)];
+        g_strlcpy(previous_spritesheet, group->spritesheet,
+                  sizeof(previous_spritesheet));
         if (character_id)
             g_strlcpy(group->character, character_id, sizeof(group->character));
         if (spritesheet_id)
-            g_strlcpy(group->spritesheet, spritesheet_id,
-                      sizeof(group->spritesheet));
+            if (strcmp(spritesheet_id, previous_spritesheet) != 0)
+                g_strlcpy(group->spritesheet, spritesheet_id,
+                          sizeof(group->spritesheet));
+        if (character_id && spritesheet_id &&
+            strcmp(spritesheet_id, previous_spritesheet) == 0)
+            apply_builtin_character_sheet(group, character_id);
         g_strlcpy(group->package, gtk_entry_get_text(package),
                   sizeof(group->package));
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
