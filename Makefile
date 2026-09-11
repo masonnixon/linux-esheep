@@ -59,16 +59,16 @@ test-expression:
 	/tmp/esheep_test_expression
 
 test-desktop:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_desktop tests/test_desktop.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_desktop
 
 test-x11-refresh:
 	command -v xvfb-run >/dev/null
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_refresh tests/test_x11_refresh.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_refresh tests/test_x11_refresh.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	xvfb-run -a /tmp/esheep_test_x11_refresh
 
 test-behavior:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_behavior tests/test_behavior.c src/actor.c src/animations_data.c src/interpreter.c src/expression.c src/renderer.c src/context.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_behavior tests/test_behavior.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_behavior
 
 test-multisheep:
@@ -80,13 +80,13 @@ test-performance: test-multisheep
 
 test-gui: esheep
 	command -v xvfb-run >/dev/null
-	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --no-window-landing
-	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --character penguin --no-window-landing
-	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --count 3 --no-window-landing
-	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --package tools/esheep_animations.xml --sprite assets/sheep_spritesheet.png --no-window-landing
-	xvfb-run -a env ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
-	xvfb-run -a env WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
-	xvfb-run -a sh -c 'set -eu; ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 101 --no-window-landing & first=$$!; ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 202 --no-window-landing & second=$$!; wait "$$first"; wait "$$second"'
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --no-window-landing
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --character penguin --no-window-landing
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --count 3 --no-window-landing
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --package tools/esheep_animations.xml --sprite assets/sheep_spritesheet.png --no-window-landing
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
+	xvfb-run -a env ESHEEP_MONITOR=0 WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
+	xvfb-run -a sh -c 'set -eu; ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 101 --no-window-landing & first=$$!; ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 202 --no-window-landing & second=$$!; wait "$$first"; wait "$$second"'
 
 test-cli: esheep
 	gcc -std=c11 -Wall -Wextra -Werror -o /tmp/esheep_test_cli tests/test_cli.c
@@ -193,7 +193,7 @@ clean:
 # P7: Real X11 WM integration test - opt-in, skips if prerequisites absent
 test-x11-wm-integration:
 	command -v xvfb-run >/dev/null
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_wm_integration tests/test_x11_wm_integration.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_x11_wm_integration tests/test_x11_wm_integration.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_x11_wm_integration || [ $$? -eq 77 ]
 
 test-sound-cache:

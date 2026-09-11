@@ -48,9 +48,10 @@ static int run_esheep_capture(char *const *args, int nargs, const char *extra_en
         for (int i = 0; i < nargs && n < 15; i++) xvfb_argv[n++] = (char *)args[i];
         xvfb_argv[n++] = NULL;
 
-        char *envp[4];
+        char *envp[5];
         int e = 0;
         envp[e++] = (char *)"ESHEEP_AUTOQUIT_MS=500";
+        envp[e++] = (char *)"ESHEEP_MONITOR=0";
         if (extra_env) envp[e++] = (char *)extra_env;
         envp[e++] = NULL;
 
@@ -176,9 +177,10 @@ static void test_zero_review_animation_restores_normal(void) {
 static void test_invalid_character(void) {
     fprintf(stderr, "test: invalid character exits 2 with diagnostic\n");
     if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
-    char *argv[] = { "--character", "dragon", "--no-window-landing" };
+    char *argv[] = { "--character", "dragon", "--config", "/dev/null",
+                     "--no-window-landing" };
     char buf[4096] = {0};
-    int rc = run_esheep_capture(argv, 3, "ESHEEP_AUTOQUIT_MS=1",
+    int rc = run_esheep_capture(argv, 5, "ESHEEP_AUTOQUIT_MS=1",
                                 buf, sizeof(buf));
     assert(rc == 2);
     assert(strstr(buf, "invalid character") != NULL);

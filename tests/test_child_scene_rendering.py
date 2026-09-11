@@ -91,6 +91,10 @@ def render_scene(animation_id, out_path):
     # window catches both sprites on screen -- is reproducible instead
     # of depending on which way the sheep happened to face this run.
     env["ESHEEP_SEED"] = "12345"
+    # Ignore a developer's persistent monitor preference.  Xvfb exposes one
+    # monitor, so an inherited monitor=1 setting would make the test exit
+    # before rendering anything.
+    env["ESHEEP_MONITOR"] = "0"
     
     # Ask Xvfb to allocate a genuinely free display. Fixed/random display
     # numbers collide with stale sockets left by other test invocations.
