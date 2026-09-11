@@ -269,7 +269,7 @@ static void test_sound_cache_no_sounds_package(void) {
 }
 
 static void test_sound_cache_disabled_audio(void) {
-    printf("Testing sound cache with disabled audio (noop backend)...\n");
+    printf("Testing sound cache with disabled audio...\n");
     
     const char *path = "/tmp/esheep-test-disabled-audio.xml";
     write_temp_file(path, SOUND_PACKAGE_XML);
@@ -279,17 +279,16 @@ static void test_sound_cache_disabled_audio(void) {
     assert(esheep_pet_package_load(path, &package, &error));
     assert(package != NULL);
 
-    /* Create audio but it's a noop backend */
-    EsheepAudioInitParams params = { .max_voices = 4, .app_name = "test" };
+    EsheepAudioInitParams params = { .max_voices = 4, .enabled = FALSE, .app_name = "test" };
     EsheepAudio *audio = esheep_audio_init(&params, &error);
     assert(audio != NULL);
-    assert(esheep_audio_is_noop(audio));
+    assert(!esheep_audio_is_noop(audio));
 
     EsheepSoundCache *cache = esheep_sound_cache_new(package, audio, &error);
     assert(cache != NULL);
     assert(esheep_sound_cache_entry_count(cache) == 4);
 
-    /* Trigger should work but return 0 (noop backend returns NULL without error) */
+    /* Trigger should work but return 0 while audio is disabled. */
     int triggered = esheep_sound_cache_trigger(cache, 1, 0);
     assert(triggered == 0); /* No actual voices started */
 

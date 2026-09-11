@@ -8,6 +8,7 @@ typedef struct EsheepAudioVoice EsheepAudioVoice;
 
 typedef enum {
     ESHEEP_AUDIO_CAP_NONE = 0,
+    ESHEEP_AUDIO_CAP_MP3 = 1 << 0,
 } EsheepAudioCaps;
 
 typedef struct {
@@ -17,8 +18,8 @@ typedef struct {
     const char *app_name;
 } EsheepAudioInitParams;
 
-/* Initializes the optional backend. With the current build dependencies this
- * is an explicit silent backend; initialization succeeds without an error. */
+/* Initializes the optional backend. If no player is available this remains a
+ * silent backend and initialization still succeeds. */
 EsheepAudio *esheep_audio_init(const EsheepAudioInitParams *params,
                                GError **error);
 void esheep_audio_shutdown(EsheepAudio *audio);
