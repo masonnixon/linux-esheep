@@ -58,7 +58,8 @@ PET-2 catalog integration is accepted in `fcd6658`; PET-3 rendering
 compatibility is accepted in `54053b9` (the pre-existing child-scene smoke
 test remains separately tracked). AUDIO-1 is accepted in `423cdbc`; AUDIO-2
 is accepted in `033cbb9`. AUDIO-3 controls and configuration are accepted in
-`d77c9fa`. The current implementation remains a silent audio backend until a
+`d77c9fa`. PET-4 packaging, attribution, and documentation are accepted in
+`37adf90`. The current implementation remains a silent audio backend until a
 decoder/output backend is added in a later audio phase.
 
 ### Active handoff: PET-1C — embedded image runtime integration
@@ -240,6 +241,8 @@ multi-sheep performance at 1/5/10/32 pets.
 
 ### PET-4 — packaging, attribution, and documentation
 
+STATUS: ACCEPTED in `37adf90`.
+
 Install the full catalog, extracted sprites, audio, manifest, and license/
 attribution files. Fail packaging when a required asset has no provenance
 record rather than shipping an untracked binary.
@@ -251,6 +254,8 @@ Checks: staged install contains every required file, clean checkout reproduces
 generated data/assets, and attribution files cover every upstream package.
 
 ### PET-5 — final parity and regression acceptance
+
+STATUS: NEXT.
 
 Run package inventory/parity tests, all parser/renderer/audio tests, complete
 `make test`, optimized build, staged install, catalog rendering, CLI checks,
