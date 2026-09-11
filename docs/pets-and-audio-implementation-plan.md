@@ -57,8 +57,9 @@ Current status: PET-0 accepted in `9396cb7`; PET-1B parser support accepted in
 PET-2 catalog integration is accepted in `fcd6658`; PET-3 rendering
 compatibility is accepted in `54053b9` (the pre-existing child-scene smoke
 test remains separately tracked). AUDIO-1 is accepted in `423cdbc`; AUDIO-2
-is accepted in `033cbb9`. The current implementation remains a silent audio
-backend until a decoder/output backend is added in a later audio phase.
+is accepted in `033cbb9`. AUDIO-3 controls and configuration are accepted in
+`d77c9fa`. The current implementation remains a silent audio backend until a
+decoder/output backend is added in a later audio phase.
 
 ### Active handoff: PET-1C — embedded image runtime integration
 
@@ -225,6 +226,8 @@ Checks: fixture audio, all sound-bearing packages, probability seed tests,
 loop tests, cache lifetime, malformed payloads, and sound-disabled operation.
 
 ### AUDIO-3 — controls and user configuration
+
+STATUS: ACCEPTED in `d77c9fa`.
 
 Add configuration, CLI, and environment controls for enabled/disabled audio,
 master volume, and maximum concurrent voices with one documented precedence
