@@ -21,6 +21,8 @@
 #include "interpreter.h"
 #include "pet_package.h"
 #include "pet_catalog.h"
+#include "esheep_audio.h"
+#include "esheep_sound_cache.h"
 #include "renderer.h"
 
 #define TICK_MS 33
@@ -220,6 +222,8 @@ struct App {
     int scene_origin_x;
     int scene_origin_y;
     gboolean scene_changed;
+    EsheepAudio *audio;
+    EsheepSoundCache *sound_cache;
 };
 
 struct SheepGroup {
@@ -2844,6 +2848,18 @@ static gboolean on_tick(gpointer user_data) {
             }
             if (edge_animation_finished || hit[0] != 'n') break;
         }
+        
+        /* Trigger sounds for frame events - use separate RNG so audio doesn't affect movement */
+        if (app->sound_cache && app->state.event_count > 0) {
+            for (int event_index = 0; event_index < app->state.event_count; event_index++) {
+                EsheepFrameEvent event = app->state.events[event_index];
+                /* Package sounds are authored per animation, not per frame.
+                 * Trigger at the animation's first frame so a multi-frame
+                 * animation does not replay its sound on every tick. */
+                if (event.frame_index == 0)
+                    esheep_sound_cache_trigger(app->sound_cache, event.animation_id, event.frame_index);
+            }
+        }
     }
 
     resolve_sheep_collisions(app);
@@ -3721,6 +3737,27 @@ int main(int argc, char **argv) {
     }
     if (runtime_package) esheep_pet_package_activate(runtime_package);
 
+    /* Initialize audio backend (silent fallback if no backend available) */
+    EsheepAudioInitParams audio_params = { .max_voices = 8, .app_name = "esheep" };
+    GError *audio_error = NULL;
+    EsheepAudio *audio = esheep_audio_init(&audio_params, &audio_error);
+    if (audio_error) {
+        g_printerr("audio backend init failed: %s\n", audio_error->message);
+        g_clear_error(&audio_error);
+        audio = NULL;
+    }
+
+    /* Create sound cache if package has sounds and audio is available */
+    EsheepSoundCache *sound_cache = NULL;
+    if (audio && runtime_package && esheep_pet_package_sound_count(runtime_package) > 0) {
+        GError *cache_error = NULL;
+        sound_cache = esheep_sound_cache_new(runtime_package, audio, &cache_error);
+        if (cache_error) {
+            g_printerr("sound cache creation failed: %s\n", cache_error->message);
+            g_clear_error(&cache_error);
+        }
+    }
+
     /* Load catalog for character resolution */
     EsheepPetCatalog *catalog = esheep_pet_catalog_load("manifest.json", NULL);
 
@@ -4037,6 +4074,8 @@ int main(int argc, char **argv) {
     for (guint i = 0; i < count; i++) {
         App *app = &sheep[i];
         app->sheet = sheet;
+        app->audio = audio;
+        app->sound_cache = sound_cache;
         app->tile_size = tile_size;
         app->ordinal = (int)i;
         app->direction = app_random_0_99(app) < 50 ? -1 : 1;
@@ -4117,6 +4156,10 @@ int main(int argc, char **argv) {
 
     for (guint i = 0; i < count; i++)
         cleanup_app(&sheep[i]);
+
+    /* Clean up audio and sound cache */
+    if (sound_cache) esheep_sound_cache_free(sound_cache);
+    if (audio) esheep_audio_shutdown(audio);
 
     g_free(config_character);
     g_free(config_sprite);

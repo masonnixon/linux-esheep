@@ -124,7 +124,6 @@ static void test_help_shows_usage(void) {
 
 static void test_list_transitions_uses_active_graph(void) {
     fprintf(stderr, "test: --list-transitions shows generated graph\n");
-    if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
     char *argv[] = { "--list-transitions" };
     char buf[4096] = {0};
     int rc = run_esheep_capture(argv, 1, "ESHEEP_AUTOQUIT_MS=1",
@@ -145,6 +144,7 @@ static void test_invalid_monitor_is_rejected(void) {
 }
 
 static void test_invalid_seed_is_rejected(void) {
+    if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
     fprintf(stderr, "test: invalid --seed is rejected\n");
     char *argv[] = { "--seed", "0" };
     char buf[4096] = {0};
