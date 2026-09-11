@@ -51,6 +51,16 @@ Disable X11 window and panel detection.
 .B --allow-conky
 Allow Conky windows as landing surfaces.
 .TP
+.B --audio / --no-audio
+Enable or disable package audio. The current backend is silent and exposes no
+playback capability; the setting is retained for packages and future backends.
+.TP
+.BI --master-volume\ N
+Set package audio volume from 0 to 100.
+.TP
+.BI --max-voices\ N
+Set the package audio voice limit from 1 to 32.
+.TP
 .B --x11-fallback
 Use the XWayland-backed GTK X11 backend when running under Wayland.
 .TP
@@ -73,6 +83,10 @@ Display parent animation N with its authored child scene for review.
 .B --list-animations
 List the IDs and names in the active built-in or custom behavior graph and
 exit.
+.TP
+.B --list-characters
+List the 26 upstream catalog names, aliases, and availability metadata. Only
+the bundled sheep and penguin have local payloads in this release.
 .SH ENVIRONMENT
 .TP
 .B ESHEEP_SPRITESHEET
@@ -92,6 +106,15 @@ Set to 0 to allow Conky landing.
 .TP
 .B ESHEEP_X11_FALLBACK
 Set to 1 to select the X11 backend through XWayland when available.
+.TP
+.B ESHEEP_AUDIO
+Enable or disable package audio.
+.TP
+.B ESHEEP_MASTER_VOLUME
+Set package audio volume from 0 to 100.
+.TP
+.B ESHEEP_MAX_VOICES
+Set the package audio voice limit from 1 to 32.
 .TP
 .B ESHEEP_SPAWN
 Set to \fBwindow\fR to start on an application window.
@@ -114,3 +137,9 @@ variables and then command-line options.
 .PP
 Autostart is opt-in. Use the packaged XDG autostart entry through
 \fBmake install-autostart\fR; a normal installation does not enable it.
+.PP
+The installed catalog manifest is an attribution and hash inventory, not a
+license grant. The upstream package payloads are not bundled because their
+artwork and audio rights are unresolved and their files are not tracked in
+this repository. See \fBPROVENANCE.md\fR and \fBNOTICE.md\fR under the data
+directory.

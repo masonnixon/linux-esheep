@@ -32,6 +32,10 @@ Command-line options are available with `./esheep --help`:
 --review-animation N Show animation N for transition review (0 = normal walk).
 --list-animations  List active animation IDs and names.
 --list-transitions  List active generated transitions for review tooling.
+--list-characters  List the catalog names and availability metadata.
+--audio / --no-audio Enable or disable package audio.
+--master-volume N  Set package audio volume from 0 to 100.
+--max-voices N     Set the package audio voice limit from 1 to 32.
 ```
 
 Requires `libgtk-3-dev` (`pkg-config gtk+-3.0`). Run from the repo root so
@@ -61,6 +65,9 @@ seed=12345
 review_animation=0
 window_landing=true
 exclude_conky=true
+audio_enabled=true
+master_volume=100
+max_voices=8
 ```
 
 Settings resolve in this order: config file, environment variables, then
@@ -84,6 +91,9 @@ Runtime settings can be overridden with environment variables:
   walking behavior. The original value is 90. Lower it to see other floor
   behaviors more often.
 - `ESHEEP_SEED`: non-zero seed for reproducible, independent random streams.
+- `ESHEEP_AUDIO`: enable or disable package audio (`1`/`0`, or true/false).
+- `ESHEEP_MASTER_VOLUME`: package audio volume from 0 to 100.
+- `ESHEEP_MAX_VOICES`: maximum concurrent package voices from 1 to 32.
 
 Left-click-drag picks the sheep up. Right-click opens a pet menu with
 Pause, Hide, Bring to Front, and Quit. Runtime settings can be overridden
@@ -144,7 +154,9 @@ make install PREFIX=/usr/local   # or your preferred prefix; DESTDIR also suppor
 make uninstall PREFIX=/usr/local
 ```
 
-Installs the binary, spritesheet, and a `.desktop` entry.
+Installs the binary, bundled spritesheets, behavior XML, catalog inventory,
+provenance notices, and a `.desktop` entry. Installation stops with a clear
+error if any required tracked file or provenance record is missing.
 Use `make install-autostart PREFIX=/usr/local` to additionally enable eSheep
 at login; `make uninstall-autostart` removes that opt-in entry.
 
@@ -173,11 +185,11 @@ at login; `make uninstall-autostart` removes that opt-in entry.
 
 ## Known limitations / not yet built
 
-- Sound effects are not yet implemented. Neither this repository nor the
-  upstream authored package contains sound metadata or audio assets. PulseAudio
-  development support is present locally, but there is no authored content to
-  map to animation events. The tray and right-click menus plus the settings
-  dialog cover the current runtime actions.
+- Package audio controls are present: `--audio`/`--no-audio`,
+  `--master-volume N`, and `--max-voices N`, with matching config keys and
+  environment variables. The current audio backend is a deliberate silent
+  fallback (`ESHEEP_AUDIO_CAP_NONE`), so no sound is emitted until a playback
+  backend is supplied. Upstream sound-bearing packages are not bundled.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
@@ -196,9 +208,10 @@ at login; `make uninstall-autostart` removes that opt-in entry.
   original eSheep format: action variants beyond `flip`, expression forms
   beyond the current arithmetic grammar (`src/expression.c`), and richer
   package metadata are not yet represented by the loader.
-- `assets/sheep_spritesheet.png` carries unused UFO tiles (158-165) and pilot
-  tiles (166-168) inherited from the original art; no authored animation
-  references them (e.g. no meteorite animation exists to use them).
+- The UFO, pilot, spacecraft, meteorite, and re-entry tiles inherited from the
+  original art are covered by the local review-only extension animations. They
+  are not all part of the ordinary random walk graph; use
+  `--review-animation N` or the catalog renderer to inspect them.
 
 
 ## Custom sprites and characters
@@ -231,6 +244,31 @@ Exit codes from `esheep` relating to spritesheet loading:
   valid image).
 - `2` — spritesheet loaded but failed validation (wrong dimensions or invalid
   character name).
+
+## Catalog and selection
+
+The frozen upstream inventory contains these names: `bbunny` (Buster Bunny),
+`blue_ham_ham` (Blue Ham Ham), `blue_sheep` (gSheep Blue), `esheep64`
+(eSheep 64bit), `fox` (fox mate), `green_sheep` (gSheep Green), `grian`
+(Grian - Minecraft), `mareep`, `mimiko` (Black Neko Mate), `mumbojumbo`,
+`negima`, `neko`, `orange_sheep` (gSheep Orange), `pikachu`, `pingus`,
+`pink_fox`, `pink_neko`, `pink_sheep` (gSheep Pink), `purple_sheep`
+(gSheep Purple), `red_sheep` (gSheep Red), `shiny_sylveon`, `skeleton`,
+`ssj-goku`, `yellow_neko`, `yellow_sheep` (gSheep Yellow), and `zombie`.
+Run `./esheep --list-characters` to see aliases and inventory availability.
+
+Only `sheep` and `penguin` are bundled and directly selectable. For example:
+
+```sh
+./esheep --character sheep
+./esheep --character penguin
+./esheep --package /path/to/animations.xml --sprite /path/to/sheet.png
+```
+
+The 26 upstream catalog payloads are inventory-only in this release. Their
+embedded images, icons, README files, and some sounds are absent from this
+checkout, and the inventory records unresolved licenses, so the catalog names
+must not be presented as bundled parity. See [`packaging/PROVENANCE.md`](packaging/PROVENANCE.md).
 
 ## Planned Wayland migration path
 

@@ -12,6 +12,14 @@ APPDIR := $(PREFIX)/share/applications
 AUTOSTARTDIR := $(PREFIX)/share/xdg/autostart
 MANDIR := $(PREFIX)/share/man/man1
 
+INSTALL_ASSETS := \
+	assets/sheep_spritesheet.png \
+	assets/penguin_ice_blue_spritesheet.png \
+	assets/penguin_sheet_preview.png \
+	assets/penguin_ice_blue_spritesheet.md \
+	tools/esheep_animations.xml
+INSTALL_METADATA := NOTICE.md packaging/PROVENANCE.md manifest.json
+
 all: esheep
 
 test-interpreter:
@@ -124,27 +132,38 @@ test-man:
 	command -v groff >/dev/null
 	groff -T utf8 -man packaging/esheep.1 >/dev/null
 
-test-install:
-	set -eu; stage=$$(mktemp -d /tmp/esheep-install-test.XXXXXX); trap 'rm -rf "$$stage"' EXIT; $(MAKE) install-autostart DESTDIR="$$stage" PREFIX=/usr; test -x "$$stage/usr/bin/esheep"; test -f "$$stage/usr/share/esheep/sheep_spritesheet.png"; test -f "$$stage/usr/share/esheep/penguin_ice_blue_spritesheet.png"; test -f "$$stage/usr/share/applications/esheep.desktop"; test -f "$$stage/usr/share/xdg/autostart/esheep.desktop"; test -f "$$stage/usr/share/man/man1/esheep.1"
+test-provenance:
+	python3 packaging/check-provenance.py
+
+test-install: test-provenance
+	set -eu; stage=$$(mktemp -d /tmp/esheep-install-test.XXXXXX); trap 'rm -rf "$$stage"' EXIT; $(MAKE) install-autostart DESTDIR="$$stage" PREFIX=/usr; test -x "$$stage/usr/bin/esheep"; for file in $(INSTALL_ASSETS) $(INSTALL_METADATA); do test -f "$$stage/usr/share/esheep/$${file##*/}"; done; test -f "$$stage/usr/share/applications/esheep.desktop"; test -f "$$stage/usr/share/xdg/autostart/esheep.desktop"; test -f "$$stage/usr/share/man/man1/esheep.1"
 
 test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
 	/tmp/esheep_test_context
 
 # Strict mode for CI: fails if Xvfb/ImageMagick are missing instead of skipping
-test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
+test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-provenance test-install test-gui test-cli
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-provenance test-install test-gui test-cli
 
 esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c
 	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 
 install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c
+	@python3 packaging/check-provenance.py
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
 		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
-	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
-	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
+	install -d $(DESTDIR)$(DATADIR)
+	install -m644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
+	install -m644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
+	install -m644 assets/penguin_sheet_preview.png $(DESTDIR)$(DATADIR)/penguin_sheet_preview.png
+	install -m644 assets/penguin_ice_blue_spritesheet.md $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.md
+	install -m644 tools/esheep_animations.xml $(DESTDIR)$(DATADIR)/esheep_animations.xml
+	install -m644 NOTICE.md $(DESTDIR)$(DATADIR)/NOTICE.md
+	install -m644 packaging/PROVENANCE.md $(DESTDIR)$(DATADIR)/PROVENANCE.md
+	install -m644 manifest.json $(DESTDIR)$(DATADIR)/manifest.json
 	install -Dm644 packaging/esheep.desktop $(DESTDIR)$(APPDIR)/esheep.desktop
 	install -Dm644 packaging/esheep.1 $(DESTDIR)$(MANDIR)/esheep.1
 	rm -f /tmp/esheep-install-build
@@ -159,11 +178,15 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/esheep
 	rm -f $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
 	rm -f $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
+	rm -f $(DESTDIR)$(DATADIR)/penguin_sheet_preview.png
+	rm -f $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.md
+	rm -f $(DESTDIR)$(DATADIR)/esheep_animations.xml
+	rm -f $(DESTDIR)$(DATADIR)/NOTICE.md $(DESTDIR)$(DATADIR)/PROVENANCE.md $(DESTDIR)$(DATADIR)/manifest.json
 	rmdir $(DESTDIR)$(DATADIR) 2>/dev/null || true
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
+.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-provenance test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_audio /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_expression /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
 
