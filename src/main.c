@@ -3283,7 +3283,7 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), walk, 1, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Monitor index"), 0, 2, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), monitor, 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Sheep count"), 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Pet count"), 0, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), count, 1, 3, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Review animation"),
                     0, 4, 1, 1);
