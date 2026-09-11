@@ -237,6 +237,7 @@ struct SheepGroup {
     char character[64];
     char spritesheet[4096];
     char package[4096];
+    EsheepPetCatalog *catalog;
     GKeyFile *config;
     const char *config_path;
     guint tick_ms;
@@ -278,6 +279,7 @@ static void update_child_animation(App *app);
 static void advance_child_animation(App *app, int elapsed_ms);
 static void sync_scene_window(App *app);
 static void set_sprite_input_region(App *app);
+static gboolean group_set_count(SheepGroup *group, guint count);
 
 static gboolean renderers_equal(const EsheepRenderer *a,
                                 const EsheepRenderer *b) {
@@ -3106,6 +3108,62 @@ static void save_group_settings(SheepGroup *group) {
     if (error) g_error_free(error);
 }
 
+static void append_combo_option(GtkComboBoxText *combo, const char *id,
+                                const char *label) {
+    if (!id || !*id) return;
+    gtk_combo_box_text_append(combo, id, label && *label ? label : id);
+}
+
+static void populate_character_combo(GtkComboBoxText *combo,
+                                      const SheepGroup *group) {
+    append_combo_option(combo, "sheep", "Sheep (built-in)");
+    append_combo_option(combo, "penguin", "Penguin (built-in)");
+    if (group && group->catalog) {
+        for (int i = 0; i < esheep_pet_catalog_count(group->catalog); i++) {
+            const EsheepPetCatalogEntry *entry =
+                esheep_pet_catalog_get_by_index(group->catalog, i);
+            if (!esheep_pet_catalog_entry_is_available(entry)) continue;
+            const char *name = esheep_pet_catalog_entry_stable_name(entry);
+            const char *title = esheep_pet_catalog_entry_title(entry);
+            char label[256];
+            g_snprintf(label, sizeof(label), "%s (%s)",
+                       title && *title ? title : name, name);
+            append_combo_option(combo, name, label);
+        }
+    }
+    if (group && group->character[0] &&
+        !gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo), group->character)) {
+        append_combo_option(combo, group->character, group->character);
+        gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo), group->character);
+    }
+}
+
+static void populate_spritesheet_combo(GtkComboBoxText *combo,
+                                       const SheepGroup *group) {
+    const char *paths[] = {
+        ESHEEP_DATADIR "/sheep_spritesheet.png",
+        ESHEEP_DATADIR "/penguin_ice_blue_spritesheet.png",
+        "assets/sheep_spritesheet.png",
+        "assets/penguin_ice_blue_spritesheet.png"
+    };
+    for (gsize i = 0; i < G_N_ELEMENTS(paths); i++) {
+        if (!g_file_test(paths[i], G_FILE_TEST_IS_REGULAR)) continue;
+        gchar *base = g_path_get_basename(paths[i]);
+        append_combo_option(combo, paths[i], base);
+        g_free(base);
+    }
+    if (group && group->spritesheet[0]) {
+        gchar *base = g_path_get_basename(group->spritesheet);
+        if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo),
+                                         group->spritesheet)) {
+            append_combo_option(combo, group->spritesheet, base);
+            gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo),
+                                        group->spritesheet);
+        }
+        g_free(base);
+    }
+}
+
 static void on_settings_response(GtkDialog *dialog, gint response,
                                  gpointer user_data) {
     SheepGroup *group = user_data;
@@ -3116,8 +3174,8 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkSpinButton *count = g_object_get_data(G_OBJECT(dialog), "count");
         GtkComboBoxText *review = g_object_get_data(G_OBJECT(dialog), "review");
         GtkComboBoxText *spawn = g_object_get_data(G_OBJECT(dialog), "spawn");
-        GtkEntry *character = g_object_get_data(G_OBJECT(dialog), "character");
-        GtkEntry *spritesheet = g_object_get_data(G_OBJECT(dialog), "spritesheet");
+        GtkComboBoxText *character = g_object_get_data(G_OBJECT(dialog), "character");
+        GtkComboBoxText *spritesheet = g_object_get_data(G_OBJECT(dialog), "spritesheet");
         GtkEntry *package = g_object_get_data(G_OBJECT(dialog), "package");
         GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
         GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
@@ -3129,8 +3187,11 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             group, (guint)gtk_spin_button_get_value_as_int(walk));
         group_set_monitor(group,
                           (guint)gtk_spin_button_get_value_as_int(monitor));
-        group->configured_count = clamp_sheep_count(
-            (guint)gtk_spin_button_get_value_as_int(count));
+        if (!group_set_count(group, clamp_sheep_count(
+                (guint)gtk_spin_button_get_value_as_int(count)))) {
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(count),
+                                      group->configured_count);
+        }
         const char *review_id = gtk_combo_box_get_active_id(
             GTK_COMBO_BOX(review));
         char *review_end = NULL;
@@ -3152,10 +3213,15 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                       sizeof(group->spawn_mode));
             g_free(spawn_mode);
         }
-        g_strlcpy(group->character, gtk_entry_get_text(character),
-                  sizeof(group->character));
-        g_strlcpy(group->spritesheet, gtk_entry_get_text(spritesheet),
-                  sizeof(group->spritesheet));
+        const char *character_id = gtk_combo_box_get_active_id(
+            GTK_COMBO_BOX(character));
+        const char *spritesheet_id = gtk_combo_box_get_active_id(
+            GTK_COMBO_BOX(spritesheet));
+        if (character_id)
+            g_strlcpy(group->character, character_id, sizeof(group->character));
+        if (spritesheet_id)
+            g_strlcpy(group->spritesheet, spritesheet_id,
+                      sizeof(group->spritesheet));
         g_strlcpy(group->package, gtk_entry_get_text(package),
                   sizeof(group->package));
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
@@ -3203,10 +3269,12 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "bottom", "Bottom");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "window", "Window");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "random", "Random");
-    GtkWidget *character = gtk_entry_new();
-    GtkWidget *spritesheet = gtk_entry_new();
+    GtkWidget *character = gtk_combo_box_text_new();
+    GtkWidget *spritesheet = gtk_combo_box_text_new();
     GtkWidget *package = gtk_entry_new();
-    GtkWidget *note = gtk_label_new("Character, asset paths, package, and count apply on restart.");
+    populate_character_combo(GTK_COMBO_BOX_TEXT(character), group);
+    populate_spritesheet_combo(GTK_COMBO_BOX_TEXT(spritesheet), group);
+    GtkWidget *note = gtk_label_new("Character, spritesheet, and package apply on restart. Sheep count applies immediately.");
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tick interval (ms)"), 0, 0, 1, 1);
@@ -3244,8 +3312,6 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     g_snprintf(review_id, sizeof(review_id), "%d", group->review_animation);
     gtk_combo_box_set_active_id(GTK_COMBO_BOX(review), review_id);
     gtk_combo_box_set_active_id(GTK_COMBO_BOX(spawn), group->spawn_mode);
-    gtk_entry_set_text(GTK_ENTRY(character), group->character);
-    gtk_entry_set_text(GTK_ENTRY(spritesheet), group->spritesheet);
     gtk_entry_set_text(GTK_ENTRY(package), group->package);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(landing), group->window_landing);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(conky), !group->exclude_conky);
@@ -3498,6 +3564,82 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
 
     if (GDK_IS_X11_DISPLAY(display))
         app->xwindow = gdk_x11_window_get_xid(gtk_widget_get_window(window));
+}
+
+/* Initialize a sheep added after the GTK main loop has already started.  The
+ * startup path historically did this inline, which made the settings count
+ * field only affect the next process invocation.  Keep the live-resize path
+ * equivalent to startup so newly added sheep receive the same shared sheet,
+ * snapshot, collision group, and input-region setup. */
+static void initialize_group_app(SheepGroup *group, App *app, guint ordinal,
+                                 gboolean refresh_snapshot) {
+    App *template = group->count > 0 ? &group->sheep[0] : NULL;
+    GdkMonitor *monitor = gdk_display_get_monitor(
+        group->display, (gint)group->monitor_index);
+    memset(app, 0, sizeof(*app));
+    app->sheet = template ? template->sheet : NULL;
+    app->audio = group->audio;
+    app->sound_cache = template ? template->sound_cache : NULL;
+    app->tile_size = template ? template->tile_size : 40;
+    app->ordinal = (int)ordinal;
+    app->direction = app_random_0_99(app) < 50 ? -1 : 1;
+    app->tick_ms = group->tick_ms;
+    app->group = group;
+    app->window_landing = group->window_landing;
+    app->exclude_conky = group->exclude_conky;
+    app->paused = template ? template->paused : FALSE;
+    app->hidden = template ? template->hidden : FALSE;
+    app->drop_landing_enabled = template ? template->drop_landing_enabled : FALSE;
+    app->spawn_on_window = strcasecmp(group->spawn_mode, "window") == 0;
+    app->random_spawn = strcasecmp(group->spawn_mode, "random") == 0;
+    app->siblings = group->sheep;
+    app->sibling_count = (int)group->count;
+    app->bounds = template ? template->bounds : (GdkRectangle){0};
+    app->shared_snapshot = group->desktop_snapshot;
+    esheep_actor_init(&app->actor, NULL, ANIM_WALK, app->pos_x,
+                      app->pos_y, app->direction);
+    esheep_actor_set_random_source(&app->actor, actor_random_source, app);
+    setup_sheep_window(app, group->display, monitor);
+    esheep_set_walk_keep_probability(&app->state,
+                                     (int)group->walk_keep_probability);
+    if (group->review_animation > 0)
+        esheep_init(&app->state, group->review_animation);
+    if (refresh_snapshot && GDK_IS_X11_DISPLAY(group->display))
+        refresh_objects(app);
+    else if (GDK_IS_X11_DISPLAY(group->display))
+        desktop_snapshot_consume(app, app->shared_snapshot);
+    configure_initial_spawn(app);
+    gtk_window_move(GTK_WINDOW(app->window),
+                    app->pos_x - app->scene_origin_x,
+                    app->pos_y - app->scene_origin_y);
+    set_sprite_input_region(app);
+    if (app->hidden)
+        gtk_widget_hide(app->window);
+}
+
+static gboolean group_set_count(SheepGroup *group, guint count) {
+    if (!group || !group->sheep || count < 1 || count > MAX_SHEEP)
+        return FALSE;
+    guint old_count = group->count;
+    if (count == old_count) {
+        group->configured_count = count;
+        return TRUE;
+    }
+    if (count < old_count) {
+        for (guint i = count; i < old_count; i++)
+            cleanup_app(&group->sheep[i]);
+        group->count = count;
+    } else {
+        group->count = count;
+        for (guint i = old_count; i < count; i++)
+            initialize_group_app(group, &group->sheep[i], i, i == old_count);
+    }
+    for (guint i = 0; i < group->count; i++) {
+        group->sheep[i].siblings = group->sheep;
+        group->sheep[i].sibling_count = (int)group->count;
+    }
+    group->configured_count = count;
+    return TRUE;
 }
 
 int main(int argc, char **argv) {
@@ -4151,6 +4293,7 @@ int main(int argc, char **argv) {
         .configured_count = count,
         .config = config,
         .config_path = config_override,
+        .catalog = catalog,
         .tick_ms = tick_ms,
         .walk_keep_probability = walk_keep_probability,
         .window_landing = window_landing,
@@ -4253,7 +4396,7 @@ int main(int argc, char **argv) {
         g_object_unref(tray_icon);
     }
 
-    for (guint i = 0; i < count; i++)
+    for (guint i = 0; i < group.count; i++)
         cleanup_app(&sheep[i]);
 
     /* Clean up audio and sound cache */
