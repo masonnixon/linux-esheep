@@ -720,6 +720,35 @@ static void test_builtin_character_selects_matching_sheet(void) {
     assert(strcmp(group.spritesheet, "assets/sheep_spritesheet.png") == 0);
 }
 
+static void test_live_spritesheet_swap(void) {
+    GError *error = NULL;
+    GdkPixbuf *old_sheet = gdk_pixbuf_new_from_file(
+        "assets/sheep_spritesheet.png", &error);
+    assert(old_sheet != NULL && error == NULL);
+    App app = {0};
+    app.sheet = old_sheet;
+    app.tile_size = 40;
+    app.bounds = (GdkRectangle){ 0, 0, 640, 440 };
+    app.pos_x = 100;
+    app.pos_y = 400;
+    esheep_init(&app.state, ANIM_WALK);
+    SheepGroup group = {
+        .sheep = &app,
+        .count = 1,
+        .sheet = g_object_ref(old_sheet)
+    };
+    strcpy(group.spritesheet, "assets/sheep_spritesheet.png");
+    assert(group_apply_spritesheet(&group,
+                                   "assets/penguin_ice_blue_spritesheet.png",
+                                   "penguin"));
+    assert(app.sheet == group.sheet);
+    assert(app.tile_size == 80);
+    assert(strcmp(group.spritesheet,
+                  "assets/penguin_ice_blue_spritesheet.png") == 0);
+    g_object_unref(group.sheet);
+    g_object_unref(old_sheet);
+}
+
 /* Every authored parent must produce a valid composited scene, including any
  * child records reachable from that parent. This is a deterministic runtime
  * coverage gate; actual pixel appearance remains a separate visual review. */
@@ -873,6 +902,9 @@ int main(void) {
 
     test_builtin_character_selects_matching_sheet();
     printf("  test_builtin_character_selects_matching_sheet: PASSED\n");
+
+    test_live_spritesheet_swap();
+    printf("  test_live_spritesheet_swap: PASSED\n");
 
     test_all_authored_animations_compose();
     printf("  test_all_authored_animations_compose: PASSED\n");

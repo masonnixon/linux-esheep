@@ -230,6 +230,7 @@ struct App {
 struct SheepGroup {
     App *sheep;
     EsheepAudio *audio;
+    GdkPixbuf *sheet;
     guint count;
     GdkDisplay *display;
     guint monitor_index;
@@ -3108,6 +3109,47 @@ static void save_group_settings(SheepGroup *group) {
     if (error) g_error_free(error);
 }
 
+static gboolean group_apply_spritesheet(SheepGroup *group,
+                                        const char *sheet_path,
+                                        const char *character) {
+    if (!group || !group->sheep || group->count == 0 ||
+        !sheet_path || !*sheet_path)
+        return FALSE;
+    GError *error = NULL;
+    GdkPixbuf *sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
+    if (!sheet || !validate_spritesheet_pixbuf(sheet, sheet_path, character)) {
+        if (error) {
+            g_printerr("failed to switch spritesheet '%s': %s\n", sheet_path,
+                       error->message);
+            g_clear_error(&error);
+        }
+        if (sheet) g_object_unref(sheet);
+        return FALSE;
+    }
+    int tile_size = gdk_pixbuf_get_width(sheet) / esheep_tiles_x;
+    GdkPixbuf *old_sheet = group->sheet;
+    group->sheet = sheet;
+    for (guint i = 0; i < group->count; i++) {
+        App *app = &group->sheep[i];
+        app->sheet = sheet;
+        app->tile_size = tile_size;
+        esheep_set_environment(&app->state, app->bounds.width,
+                               app->bounds.height, tile_size, tile_size);
+        esheep_renderer_init(&app->scene, tile_size, tile_size);
+        update_child_animation(app);
+        advance_child_animation(app, 0);
+        if (app->window) {
+            gtk_window_resize(GTK_WINDOW(app->window), tile_size, tile_size);
+            sync_scene_window(app);
+            gtk_widget_queue_draw(app->window);
+            set_sprite_input_region(app);
+        }
+    }
+    g_strlcpy(group->spritesheet, sheet_path, sizeof(group->spritesheet));
+    if (old_sheet) g_object_unref(old_sheet);
+    return TRUE;
+}
+
 static void append_combo_option(GtkComboBoxText *combo, const char *id,
                                 const char *label) {
     if (!id || !*id) return;
@@ -3233,7 +3275,10 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             GTK_COMBO_BOX(character));
         const char *spritesheet_id = gtk_combo_box_get_active_id(
             GTK_COMBO_BOX(spritesheet));
+        char previous_character[sizeof(group->character)];
         char previous_spritesheet[sizeof(group->spritesheet)];
+        g_strlcpy(previous_character, group->character,
+                  sizeof(previous_character));
         g_strlcpy(previous_spritesheet, group->spritesheet,
                   sizeof(previous_spritesheet));
         if (character_id)
@@ -3245,6 +3290,12 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         if (character_id && spritesheet_id &&
             strcmp(spritesheet_id, previous_spritesheet) == 0)
             apply_builtin_character_sheet(group, character_id);
+        if (!group_apply_spritesheet(group, group->spritesheet, character_id)) {
+            g_strlcpy(group->character, previous_character,
+                      sizeof(group->character));
+            g_strlcpy(group->spritesheet, previous_spritesheet,
+                      sizeof(group->spritesheet));
+        }
         g_strlcpy(group->package, gtk_entry_get_text(package),
                   sizeof(group->package));
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
@@ -4310,6 +4361,7 @@ int main(int argc, char **argv) {
     SheepGroup group = {
         .sheep = sheep,
         .audio = audio,
+        .sheet = g_object_ref(sheet),
         .count = count,
         .display = display,
         .monitor_index = active_monitor_index,
@@ -4432,6 +4484,7 @@ int main(int argc, char **argv) {
     g_free(config_package);
     g_free(default_config_path);
     g_key_file_free(config);
+    if (group.sheet) g_object_unref(group.sheet);
     g_object_unref(sheet);
     esheep_pet_package_free(runtime_package);
     if (catalog) esheep_pet_catalog_free(catalog);
