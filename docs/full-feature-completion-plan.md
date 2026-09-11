@@ -65,3 +65,21 @@ missing payloads. RUNTIME-1 and UI-1 must follow ASSET-1 and touch overlapping
 runtime/settings code, so they run sequentially. AUDIO-5 can run alongside
 UI-1 after ASSET-1 because it owns audio integration/tests only. HARDEN-1 can
 run alongside AUDIO-5 after RUNTIME-1. ACCEPT-1 is last.
+
+The execution policy is:
+
+| Phase | Parallel companions | Gate |
+| --- | --- | --- |
+| ASSET-1 | None | Starts first and must be accepted before runtime work. |
+| RUNTIME-1 | None | Starts after ASSET-1; it owns the shared profile/runtime boundary. |
+| UI-1 | AUDIO-5 | Starts after RUNTIME-1; no overlapping files with AUDIO-5. |
+| AUDIO-5 | UI-1, HARDEN-1 | Starts after ASSET-1 and uses audio-only ownership. |
+| HARDEN-1 | AUDIO-5 | Starts after RUNTIME-1 and owns lifecycle/platform code. |
+| ACCEPT-1 | None | Starts only after every implementation phase is accepted. |
+
+When a phase reaches its acceptance gate, launch every newly unblocked phase
+whose ownership is disjoint from active phases. Do not serialize disjoint work
+waiting for user confirmation, and do not launch phases whose scopes overlap.
+Each parallel phase gets its own isolated worktree, run directory, contract,
+and acceptance gate; integration into the canonical branch happens only after
+the gate passes.
