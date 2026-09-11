@@ -38,6 +38,10 @@ test-esheep-audio:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GLIB_CFLAGS) -o /tmp/esheep_test_audio tests/test_esheep_audio.c src/esheep_audio.c $(GLIB_LIBS)
 	/tmp/esheep_test_audio
 
+test-audio-controls:
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GLIB_CFLAGS) -o /tmp/esheep_test_audio_controls tests/test_audio_controls.c src/esheep_audio.c src/esheep_audio_config.c $(GLIB_LIBS)
+	/tmp/esheep_test_audio_controls
+
 test-runtime:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_runtime tests/test_runtime.c src/interpreter.c src/animations_data.c
 	/tmp/esheep_test_runtime
@@ -60,7 +64,7 @@ test-behavior:
 	/tmp/esheep_test_behavior
 
 test-multisheep:
-	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/actor.c src/interpreter.c src/animations_data.c src/expression.c src/context.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+	gcc -std=c11 -Wall -Wextra -Werror -Isrc $(GTK_CFLAGS) -o /tmp/esheep_test_multisheep tests/test_multisheep.c src/actor.c src/interpreter.c src/animations_data.c src/expression.c src/context.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	/tmp/esheep_test_multisheep
 
 test-performance: test-multisheep
@@ -128,16 +132,16 @@ test-context:
 	/tmp/esheep_test_context
 
 # Strict mode for CI: fails if Xvfb/ImageMagick are missing instead of skipping
-test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
+test-strict: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-interpreter test-runtime test-expression test-multisheep test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-child-scene-rendering-strict test-man test-install test-gui test-cli
 
-test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli
+test: test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli
 
-esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c
-	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+esheep: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c
+	gcc -std=c11 -Wall -Wextra -Isrc $(GTK_CFLAGS) -o esheep src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 
-install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c
+install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c
 	gcc -std=c11 -Wall -Wextra -O2 -Isrc $(GTK_CFLAGS) -DESHEEP_DATADIR=\"$(DATADIR)\" \
-		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
+		-o /tmp/esheep-install-build src/main.c src/actor.c src/interpreter.c src/animations_data.c src/context.c src/expression.c src/renderer.c src/pet_package.c src/pet_catalog.c src/esheep_audio.c src/esheep_audio_config.c src/esheep_sound_cache.c $(GLIB_LIBS) $(GTK_LIBS) $(X11_LIBS) $(MATH_LIBS)
 	install -Dm755 /tmp/esheep-install-build $(DESTDIR)$(BINDIR)/esheep
 	install -Dm644 assets/sheep_spritesheet.png $(DESTDIR)$(DATADIR)/sheep_spritesheet.png
 	install -Dm644 assets/penguin_ice_blue_spritesheet.png $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.png
@@ -159,7 +163,7 @@ uninstall:
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1
 
-.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
+.PHONY: all test test-desktop test-x11-refresh test-behavior test-renderer test-actor test-pet-package test-esheep-audio test-audio-controls test-sound-cache test-interpreter test-runtime test-expression test-multisheep test-performance test-context test-animation-sync test-animation-data test-assets test-visual-catalog test-child-animations test-transition-parity test-child-scene-rendering test-man test-install test-gui test-cli esheep install install-autostart uninstall uninstall-autostart clean gen-animations test-animation-sync
 clean:
 	rm -f esheep /tmp/esheep_test_desktop /tmp/esheep_test_x11_refresh /tmp/esheep_test_pet_package /tmp/esheep_test_audio /tmp/esheep_test_renderer /tmp/esheep_test_actor /tmp/esheep_test_interpreter /tmp/esheep_test_runtime /tmp/esheep_test_expression /tmp/esheep_test_multisheep /tmp/esheep_test_behavior /tmp/esheep-install-build
 

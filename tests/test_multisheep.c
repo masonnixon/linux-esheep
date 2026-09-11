@@ -44,8 +44,8 @@ static void test_count_bounds(void) {
 }
 
 static void test_group_tick_scales_without_timer_multiplication(void) {
-    const int counts[] = { 1, 5, 10 };
-    for (int case_index = 0; case_index < 3; case_index++) {
+    const int counts[] = { 1, 5, 10, 32 };
+    for (int case_index = 0; case_index < 4; case_index++) {
         int count = counts[case_index];
         App sheep[MAX_SHEEP] = {0};
         SheepGroup group = { .sheep = sheep, .count = (guint)count };

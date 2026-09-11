@@ -12,6 +12,8 @@ typedef enum {
 
 typedef struct {
     int max_voices;
+    gboolean enabled;
+    int volume;
     const char *app_name;
 } EsheepAudioInitParams;
 
@@ -33,5 +35,10 @@ void esheep_audio_cancel(EsheepAudioVoice *voice);
 gboolean esheep_audio_wait(EsheepAudioVoice *voice);
 int esheep_audio_active_voices(const EsheepAudio *audio);
 int esheep_audio_max_voices(const EsheepAudio *audio);
+int esheep_audio_volume(const EsheepAudio *audio);
+gboolean esheep_audio_enabled(const EsheepAudio *audio);
+void esheep_audio_set_enabled(EsheepAudio *audio, gboolean enabled);
+void esheep_audio_set_volume(EsheepAudio *audio, int volume);
+void esheep_audio_set_max_voices(EsheepAudio *audio, int max_voices);
 
 #endif

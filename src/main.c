@@ -22,6 +22,7 @@
 #include "pet_package.h"
 #include "pet_catalog.h"
 #include "esheep_audio.h"
+#include "esheep_audio_config.h"
 #include "esheep_sound_cache.h"
 #include "renderer.h"
 
@@ -228,6 +229,7 @@ struct App {
 
 struct SheepGroup {
     App *sheep;
+    EsheepAudio *audio;
     guint count;
     GdkDisplay *display;
     guint monitor_index;
@@ -241,6 +243,9 @@ struct SheepGroup {
     guint walk_keep_probability;
     gboolean window_landing;
     gboolean exclude_conky;
+    gboolean audio_enabled;
+    guint audio_volume;
+    guint audio_max_voices;
     int review_animation;
     char spawn_mode[16];
     DesktopSnapshot *desktop_snapshot;
@@ -345,6 +350,25 @@ static void group_set_exclude_conky(SheepGroup *group, gboolean excluded) {
     for (guint i = 0; i < group->count; i++)
         group->sheep[i].exclude_conky = excluded;
     group->exclude_conky = excluded;
+}
+
+static void group_set_audio_enabled(SheepGroup *group, gboolean enabled) {
+    if (!group) return;
+    group->audio_enabled = enabled;
+    if (group->audio) esheep_audio_set_enabled(group->audio, enabled);
+}
+
+static void group_set_audio_volume(SheepGroup *group, guint volume) {
+    if (!group || volume > ESHEEP_AUDIO_MAX_VOLUME) return;
+    group->audio_volume = volume;
+    if (group->audio) esheep_audio_set_volume(group->audio, (int)volume);
+}
+
+static void group_set_audio_max_voices(SheepGroup *group, guint max_voices) {
+    if (!group || max_voices < ESHEEP_AUDIO_MIN_VOICES ||
+        max_voices > ESHEEP_AUDIO_MAX_VOICES) return;
+    group->audio_max_voices = max_voices;
+    if (group->audio) esheep_audio_set_max_voices(group->audio, (int)max_voices);
 }
 
 static gboolean group_set_monitor(SheepGroup *group, guint monitor_index) {
@@ -870,6 +894,9 @@ static void print_usage(const char *program) {
     g_print("  --x11-fallback         Use XWayland when available.\n");
     g_print("  --tick-ms N            Set the update interval (10-1000).\n");
     g_print("  --walk-keep N          Keep walking probability (0-100, default 90).\n");
+    g_print("  --audio / --no-audio   Enable or disable package audio.\n");
+    g_print("  --master-volume N      Set audio volume (0-100).\n");
+    g_print("  --max-voices N         Set concurrent voices (1-32).\n");
     g_print("  --seed N               Set the reproducible random seed.\n");
     g_print("  --review-animation N   Show animation N for transition review.\n");
     g_print("  --review-parent N      Show parent N with its authored child.\n");
@@ -3060,6 +3087,12 @@ static void save_group_settings(SheepGroup *group) {
     if (group->spawn_mode[0] != '\0')
         g_key_file_set_string(group->config, "esheep", "spawn",
                               group->spawn_mode);
+    g_key_file_set_boolean(group->config, "esheep", "audio_enabled",
+                           group->audio_enabled);
+    g_key_file_set_integer(group->config, "esheep", "master_volume",
+                           (gint)group->audio_volume);
+    g_key_file_set_integer(group->config, "esheep", "max_voices",
+                           (gint)group->audio_max_voices);
     gsize length = 0;
     GError *error = NULL;
     gchar *data = g_key_file_to_data(group->config, &length, &error);
@@ -3088,6 +3121,9 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkEntry *package = g_object_get_data(G_OBJECT(dialog), "package");
         GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
         GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
+        GtkToggleButton *audio = g_object_get_data(G_OBJECT(dialog), "audio");
+        GtkSpinButton *volume = g_object_get_data(G_OBJECT(dialog), "volume");
+        GtkSpinButton *voices = g_object_get_data(G_OBJECT(dialog), "voices");
         group_set_tick_ms(group, (guint)gtk_spin_button_get_value_as_int(tick));
         group_set_walk_keep_probability(
             group, (guint)gtk_spin_button_get_value_as_int(walk));
@@ -3124,6 +3160,9 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                   sizeof(group->package));
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
         group_set_exclude_conky(group, gtk_toggle_button_get_active(conky));
+        group_set_audio_enabled(group, gtk_toggle_button_get_active(audio));
+        group_set_audio_volume(group, (guint)gtk_spin_button_get_value_as_int(volume));
+        group_set_audio_max_voices(group, (guint)gtk_spin_button_get_value_as_int(voices));
         save_group_settings(group);
     }
     gtk_widget_destroy(GTK_WIDGET(dialog));
@@ -3157,6 +3196,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
         0, MAX(0, monitor_count - 1), 1);
     GtkWidget *landing = gtk_check_button_new_with_label("Land on windows and panels");
     GtkWidget *conky = gtk_check_button_new_with_label("Allow Conky as a surface");
+    GtkWidget *audio = gtk_check_button_new_with_label("Enable package audio");
+    GtkWidget *volume = gtk_spin_button_new_with_range(0, 100, 1);
+    GtkWidget *voices = gtk_spin_button_new_with_range(1, 32, 1);
     GtkWidget *spawn = gtk_combo_box_text_new();
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "bottom", "Bottom");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(spawn), "window", "Window");
@@ -3188,7 +3230,12 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), package, 1, 8, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), landing, 0, 9, 2, 1);
     gtk_grid_attach(GTK_GRID(grid), conky, 0, 10, 2, 1);
-    gtk_grid_attach(GTK_GRID(grid), note, 0, 11, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Master volume (%)"), 0, 11, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), volume, 1, 11, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Maximum concurrent voices"), 0, 12, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), voices, 1, 12, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), audio, 0, 13, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), note, 0, 14, 2, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
@@ -3202,6 +3249,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_entry_set_text(GTK_ENTRY(package), group->package);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(landing), group->window_landing);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(conky), !group->exclude_conky);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(volume), group->audio_volume);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(voices), group->audio_max_voices);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(audio), group->audio_enabled);
     g_object_set_data(G_OBJECT(dialog), "tick-ms", tick);
     g_object_set_data(G_OBJECT(dialog), "walk-keep", walk);
     g_object_set_data(G_OBJECT(dialog), "monitor", monitor);
@@ -3213,6 +3263,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     g_object_set_data(G_OBJECT(dialog), "package", package);
     g_object_set_data(G_OBJECT(dialog), "landing", landing);
     g_object_set_data(G_OBJECT(dialog), "conky", conky);
+    g_object_set_data(G_OBJECT(dialog), "audio", audio);
+    g_object_set_data(G_OBJECT(dialog), "volume", volume);
+    g_object_set_data(G_OBJECT(dialog), "voices", voices);
     gtk_container_set_border_width(GTK_CONTAINER(content), 12);
     gtk_container_add(GTK_CONTAINER(content), grid);
     g_signal_connect(dialog, "response", G_CALLBACK(on_settings_response), group);
@@ -3462,6 +3515,12 @@ int main(int argc, char **argv) {
     gboolean window_landing = env_bool("ESHEEP_WINDOW_LANDING", TRUE);
     gboolean exclude_conky = env_bool("ESHEEP_EXCLUDE_CONKY", TRUE);
     gboolean x11_fallback = env_bool("ESHEEP_X11_FALLBACK", FALSE);
+    gboolean audio_cli_set = FALSE;
+    gboolean audio_cli_enabled = TRUE;
+    gboolean volume_cli_set = FALSE;
+    guint volume_cli = 100;
+    gboolean voices_cli_set = FALSE;
+    guint voices_cli = 8;
     gboolean tick_cli = FALSE;
     gboolean count_cli = FALSE;
     gboolean monitor_cli = FALSE;
@@ -3586,6 +3645,27 @@ int main(int argc, char **argv) {
             }
             walk_keep_probability = (guint)value;
             walk_keep_cli = TRUE;
+            continue;
+        }
+        if (strcmp(argv[i], "--audio") == 0 || strcmp(argv[i], "--no-audio") == 0) {
+            audio_cli_set = TRUE;
+            audio_cli_enabled = strcmp(argv[i], "--audio") == 0;
+            continue;
+        }
+        if (strcmp(argv[i], "--master-volume") == 0 && i + 1 < argc) {
+            if (!esheep_audio_config_parse_volume(argv[++i], &volume_cli)) {
+                g_printerr("invalid --master-volume value (use 0-100)\n");
+                return 2;
+            }
+            volume_cli_set = TRUE;
+            continue;
+        }
+        if (strcmp(argv[i], "--max-voices") == 0 && i + 1 < argc) {
+            if (!esheep_audio_config_parse_max_voices(argv[++i], &voices_cli)) {
+                g_printerr("invalid --max-voices value (use 1-32)\n");
+                return 2;
+            }
+            voices_cli_set = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
@@ -3714,6 +3794,14 @@ int main(int argc, char **argv) {
             exclude_conky = g_key_file_get_boolean(config, "esheep",
                                                     "exclude_conky", NULL);
     }
+    EsheepAudioConfig audio_config;
+    esheep_audio_config_defaults(&audio_config);
+    if (g_key_file_load_from_file(config, config_override, G_KEY_FILE_NONE, NULL))
+        esheep_audio_config_apply_key_file(&audio_config, config);
+    esheep_audio_config_apply_environment(&audio_config);
+    esheep_audio_config_apply_cli(&audio_config, audio_cli_set,
+                                  audio_cli_enabled, volume_cli_set, volume_cli,
+                                  voices_cli_set, voices_cli);
     if (random_seed != 0)
         app_random_seed = (uint32_t)random_seed;
     else
@@ -3737,26 +3825,8 @@ int main(int argc, char **argv) {
     }
     if (runtime_package) esheep_pet_package_activate(runtime_package);
 
-    /* Initialize audio backend (silent fallback if no backend available) */
-    EsheepAudioInitParams audio_params = { .max_voices = 8, .app_name = "esheep" };
-    GError *audio_error = NULL;
-    EsheepAudio *audio = esheep_audio_init(&audio_params, &audio_error);
-    if (audio_error) {
-        g_printerr("audio backend init failed: %s\n", audio_error->message);
-        g_clear_error(&audio_error);
-        audio = NULL;
-    }
-
-    /* Create sound cache if package has sounds and audio is available */
+    EsheepAudio *audio = NULL;
     EsheepSoundCache *sound_cache = NULL;
-    if (audio && runtime_package && esheep_pet_package_sound_count(runtime_package) > 0) {
-        GError *cache_error = NULL;
-        sound_cache = esheep_sound_cache_new(runtime_package, audio, &cache_error);
-        if (cache_error) {
-            g_printerr("sound cache creation failed: %s\n", cache_error->message);
-            g_clear_error(&cache_error);
-        }
-    }
 
     /* Load catalog for character resolution */
     EsheepPetCatalog *catalog = esheep_pet_catalog_load("manifest.json", NULL);
@@ -3836,6 +3906,31 @@ int main(int argc, char **argv) {
                     return 2;
                 }
                 esheep_pet_package_activate(runtime_package);
+            }
+        }
+    }
+    if (runtime_package && esheep_pet_package_sound_count(runtime_package) > 0) {
+        EsheepAudioInitParams audio_params = {
+            .max_voices = (int)audio_config.max_voices,
+            .enabled = audio_config.enabled,
+            .volume = (int)audio_config.volume,
+            .app_name = "esheep"
+        };
+        GError *audio_error = NULL;
+        audio = esheep_audio_init(&audio_params, &audio_error);
+        if (audio_error) {
+            g_printerr("audio backend init failed: %s\n", audio_error->message);
+            g_clear_error(&audio_error);
+            audio = NULL;
+        }
+        if (audio) {
+            GError *cache_error = NULL;
+            sound_cache = esheep_sound_cache_new(runtime_package, audio,
+                                                  &cache_error);
+            if (cache_error) {
+                g_printerr("sound cache creation failed: %s\n",
+                           cache_error->message);
+                g_clear_error(&cache_error);
             }
         }
     }
@@ -4049,6 +4144,7 @@ int main(int argc, char **argv) {
     App sheep[MAX_SHEEP] = {0};
     SheepGroup group = {
         .sheep = sheep,
+        .audio = audio,
         .count = count,
         .display = display,
         .monitor_index = active_monitor_index,
@@ -4059,6 +4155,9 @@ int main(int argc, char **argv) {
         .walk_keep_probability = walk_keep_probability,
         .window_landing = window_landing,
         .exclude_conky = exclude_conky,
+        .audio_enabled = audio_config.enabled,
+        .audio_volume = audio_config.volume,
+        .audio_max_voices = audio_config.max_voices,
         .review_animation = review_animation,
         .desktop_snapshot = &group_snapshot,
     };

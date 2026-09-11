@@ -2,6 +2,8 @@
 
 struct EsheepAudio {
     int max_voices;
+    int volume;
+    gboolean enabled;
 };
 
 struct EsheepAudioVoice {
@@ -17,6 +19,9 @@ EsheepAudio *esheep_audio_init(const EsheepAudioInitParams *params,
     (void)error;
     EsheepAudio *audio = g_new0(EsheepAudio, 1);
     audio->max_voices = params && params->max_voices > 0 ? params->max_voices : 8;
+    audio->volume = params && params->volume >= 0 ? params->volume : 100;
+    if (audio->volume > 100) audio->volume = 100;
+    audio->enabled = !params || params->enabled;
     return audio;
 }
 
@@ -46,6 +51,7 @@ EsheepAudioVoice *esheep_audio_play_mp3(EsheepAudio *audio,
         g_set_error(error, audio_error_quark(), 2, "audio payload is empty");
         return NULL;
     }
+    if (!audio->enabled) return NULL;
     /* No backend is available in this build. Returning NULL without an error
      * is the documented silent fallback. */
     return NULL;
@@ -69,4 +75,26 @@ int esheep_audio_active_voices(const EsheepAudio *audio) {
 
 int esheep_audio_max_voices(const EsheepAudio *audio) {
     return audio ? audio->max_voices : 0;
+}
+
+int esheep_audio_volume(const EsheepAudio *audio) {
+    return audio ? audio->volume : 0;
+}
+
+gboolean esheep_audio_enabled(const EsheepAudio *audio) {
+    return audio && audio->enabled;
+}
+
+void esheep_audio_set_enabled(EsheepAudio *audio, gboolean enabled) {
+    if (audio) audio->enabled = enabled;
+}
+
+void esheep_audio_set_volume(EsheepAudio *audio, int volume) {
+    if (!audio) return;
+    audio->volume = CLAMP(volume, 0, 100);
+}
+
+void esheep_audio_set_max_voices(EsheepAudio *audio, int max_voices) {
+    if (!audio) return;
+    audio->max_voices = CLAMP(max_voices, 1, 32);
 }
