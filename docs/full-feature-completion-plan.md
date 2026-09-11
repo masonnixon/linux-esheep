@@ -83,3 +83,15 @@ waiting for user confirmation, and do not launch phases whose scopes overlap.
 Each parallel phase gets its own isolated worktree, run directory, contract,
 and acceptance gate; integration into the canonical branch happens only after
 the gate passes.
+
+## Handoff profile allocation
+
+Parallel phases must use different Codex profiles. Never run two concurrent
+phases through the same profile, even when their file scopes are disjoint.
+Prefer distinct free profiles first, recording the selected profile in each
+phase capsule and launch prompt. If a profile fails to launch, stalls, or
+produces no meaningful result, rotate that phase to another available free
+profile and record the reason. Do not rotate merely to exhaust the profile
+list, and do not use a paid profile when a functioning free profile is
+available. The supervisor still performs the deterministic acceptance gates
+and integrates only accepted work.
