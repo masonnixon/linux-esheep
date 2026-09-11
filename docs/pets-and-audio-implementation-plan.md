@@ -57,7 +57,8 @@ Current status: PET-0 accepted in `9396cb7`; PET-1B parser support accepted in
 PET-2 catalog integration is accepted in `fcd6658`; PET-3 rendering
 compatibility is accepted in `54053b9` (the pre-existing child-scene smoke
 test remains separately tracked). AUDIO-1 is accepted in `423cdbc`; AUDIO-2
-is now active.
+is accepted in `033cbb9`. The current implementation remains a silent audio
+backend until a decoder/output backend is added in a later audio phase.
 
 ### Active handoff: PET-1C — embedded image runtime integration
 
@@ -196,6 +197,8 @@ Checks: backend init/shutdown, decode failure, cancellation, repeated events,
 multiple pets, no-display/headless mode, and no blocking on the GTK main loop.
 
 ### AUDIO-2 — parse, cache, and schedule authored sounds
+
+STATUS: ACCEPTED in `033cbb9`.
 
 MODE: GREEN
 
