@@ -19,6 +19,7 @@ INSTALL_ASSETS := \
 	assets/penguin_ice_blue_spritesheet.md \
 	tools/esheep_animations.xml
 INSTALL_METADATA := NOTICE.md packaging/PROVENANCE.md manifest.json
+INSTALL_CATALOG_DIR := assets/Pets
 
 all: esheep
 
@@ -136,7 +137,7 @@ test-provenance:
 	python3 packaging/check-provenance.py
 
 test-install: test-provenance
-	set -eu; stage=$$(mktemp -d /tmp/esheep-install-test.XXXXXX); trap 'rm -rf "$$stage"' EXIT; $(MAKE) install-autostart DESTDIR="$$stage" PREFIX=/usr; test -x "$$stage/usr/bin/esheep"; for file in $(INSTALL_ASSETS) $(INSTALL_METADATA); do test -f "$$stage/usr/share/esheep/$${file##*/}"; done; test -f "$$stage/usr/share/applications/esheep.desktop"; test -f "$$stage/usr/share/xdg/autostart/esheep.desktop"; test -f "$$stage/usr/share/man/man1/esheep.1"
+	set -eu; stage=$$(mktemp -d /tmp/esheep-install-test.XXXXXX); trap 'rm -rf "$$stage"' EXIT; $(MAKE) install-autostart DESTDIR="$$stage" PREFIX=/usr; test -x "$$stage/usr/bin/esheep"; for file in $(INSTALL_ASSETS) $(INSTALL_METADATA); do test -f "$$stage/usr/share/esheep/$${file##*/}"; done; test -f "$$stage/usr/share/esheep/Pets/blue_sheep/animations.xml"; test -f "$$stage/usr/share/esheep/Pets/blue_sheep/icon.png"; test -f "$$stage/usr/share/esheep/Pets/blue_sheep/README.md"; test -f "$$stage/usr/share/applications/esheep.desktop"; test -f "$$stage/usr/share/xdg/autostart/esheep.desktop"; test -f "$$stage/usr/share/man/man1/esheep.1"
 
 test-context:
 	gcc -std=c11 -Wall -Wextra -Werror -Isrc -o /tmp/esheep_test_context tests/test_context.c src/context.c
@@ -164,6 +165,8 @@ install: src/main.c src/actor.c src/interpreter.c src/animations_data.c src/cont
 	install -m644 NOTICE.md $(DESTDIR)$(DATADIR)/NOTICE.md
 	install -m644 packaging/PROVENANCE.md $(DESTDIR)$(DATADIR)/PROVENANCE.md
 	install -m644 manifest.json $(DESTDIR)$(DATADIR)/manifest.json
+	install -d $(DESTDIR)$(DATADIR)/Pets
+	cp -a $(INSTALL_CATALOG_DIR)/. $(DESTDIR)$(DATADIR)/Pets/
 	install -Dm644 packaging/esheep.desktop $(DESTDIR)$(APPDIR)/esheep.desktop
 	install -Dm644 packaging/esheep.1 $(DESTDIR)$(MANDIR)/esheep.1
 	rm -f /tmp/esheep-install-build
@@ -182,6 +185,7 @@ uninstall:
 	rm -f $(DESTDIR)$(DATADIR)/penguin_ice_blue_spritesheet.md
 	rm -f $(DESTDIR)$(DATADIR)/esheep_animations.xml
 	rm -f $(DESTDIR)$(DATADIR)/NOTICE.md $(DESTDIR)$(DATADIR)/PROVENANCE.md $(DESTDIR)$(DATADIR)/manifest.json
+	rm -rf $(DESTDIR)$(DATADIR)/Pets
 	rmdir $(DESTDIR)$(DATADIR) 2>/dev/null || true
 	rm -f $(DESTDIR)$(APPDIR)/esheep.desktop
 	rm -f $(DESTDIR)$(MANDIR)/esheep.1

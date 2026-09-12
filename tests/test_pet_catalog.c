@@ -286,7 +286,7 @@ static void test_catalog_accessors(void) {
     assert(esheep_pet_catalog_entry_sound_count(entry) == 35);
     assert(esheep_pet_catalog_entry_has_sounds(entry) == TRUE);
     assert(strcmp(esheep_pet_catalog_entry_transparency(entry), "Magenta") == 0);
-    assert(strcmp(esheep_pet_catalog_entry_license_status(entry), "unresolved") == 0);
+    assert(strcmp(esheep_pet_catalog_entry_license_status(entry), "user-confirmed") == 0);
     assert(strcmp(esheep_pet_catalog_entry_attribution(entry), "Upstream contributor") == 0);
     assert(strcmp(esheep_pet_catalog_entry_upstream_revision(entry), "48ee8022c6b0363c79213e06e4bae608a3bdc332") == 0);
     assert(strcmp(esheep_pet_catalog_entry_xml_sha256(entry), "95b6384fe09322e51993c81cee42f1f94358141f494139e3cbd0cb782265cb41") == 0);

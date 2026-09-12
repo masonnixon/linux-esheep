@@ -193,6 +193,24 @@ def test_hashes_present():
     print("OK: all packages have SHA-256 hashes")
 
 
+def test_imported_payloads():
+    """The checked-in catalog must contain every manifest package payload."""
+    manifest = json.loads((REPO_ROOT / "manifest.json").read_text(encoding="utf-8"))
+    catalog_root = REPO_ROOT / "assets" / "Pets"
+    assert manifest["package_count"] == 26
+    for pkg in manifest["packages"]:
+        package_dir = catalog_root / pkg["folder"]
+        for name, key in (("animations.xml", "xml_sha256"),
+                          ("icon.png", "icon_sha256"),
+                          ("README.md", "readme_sha256")):
+            artifact = package_dir / name
+            assert artifact.is_file(), f"Missing imported artifact: {artifact}"
+            digest = __import__("hashlib").sha256(artifact.read_bytes()).hexdigest()
+            assert digest == pkg[key], f"Hash mismatch for {artifact}"
+        assert pkg["license_status"] == "user-confirmed"
+    print("OK: all imported catalog payloads and hashes verified")
+
+
 def test_license_status_unresolved():
     """All upstream packages should be flagged as having unresolved rights."""
     manifest = run_tool(json_out=True)
@@ -235,6 +253,7 @@ TESTS = [
     test_malformed_xml_directory,
     test_missing_xml_directory,
     test_hashes_present,
+    test_imported_payloads,
     test_license_status_unresolved,
     test_revision_argument,
     test_missing_upstream_dir,

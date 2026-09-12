@@ -13,13 +13,12 @@ These assets are not covered by this repository's license. Rights remain with
 their original authors. They are used here for personal, non-commercial
 recreation of the classic eSheep desktop pet.
 
-## Upstream catalog inventory
+## Upstream catalog packages
 
-`manifest.json` records the 26 upstream packages and their SHA-256 hashes,
-authors, and source revision. The package payloads are not bundled: their
-embedded artwork and some audio records have unresolved rights. See
-`packaging/PROVENANCE.md` for the exact packaging boundary and install-time
-provenance checks.
+`assets/Pets` contains the 26 upstream packages and `manifest.json` records
+their SHA-256 hashes, authors, source revision, and user-confirmed rights
+status. Their embedded artwork and audio records remain authored upstream
+content; see `packaging/PROVENANCE.md` for source and attribution details.
 
 ## Local penguin artwork
 

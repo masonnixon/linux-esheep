@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Gate installation on the tracked files having explicit provenance."""
 from pathlib import Path
+import hashlib
 import json
 import sys
 
@@ -15,6 +16,16 @@ REQUIRED = {
     "NOTICE.md",
     "packaging/PROVENANCE.md",
 }
+CATALOG_ROOT = ROOT / "assets" / "Pets"
+CONFIRMED_LICENSE_STATUS = "user-confirmed"
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 def main() -> int:
     errors = []
@@ -40,6 +51,22 @@ def main() -> int:
             errors.append(f"manifest package {folder} has no upstream revision")
         if not package.get("xml_sha256"):
             errors.append(f"manifest package {folder} has no XML hash")
+        if package.get("license_status") != CONFIRMED_LICENSE_STATUS:
+            errors.append(f"manifest package {folder} lacks user-confirmed license status")
+
+        package_dir = CATALOG_ROOT / folder
+        xml_path = package_dir / "animations.xml"
+        icon_path = package_dir / "icon.png"
+        readme_path = package_dir / "README.md"
+        for artifact in (xml_path, icon_path, readme_path):
+            if not artifact.is_file():
+                errors.append(f"catalog package {folder} is missing {artifact.name}")
+        if xml_path.is_file() and sha256_file(xml_path) != package.get("xml_sha256"):
+            errors.append(f"catalog package {folder} XML hash does not match manifest")
+        if icon_path.is_file() and sha256_file(icon_path) != package.get("icon_sha256"):
+            errors.append(f"catalog package {folder} icon hash does not match manifest")
+        if readme_path.is_file() and sha256_file(readme_path) != package.get("readme_sha256"):
+            errors.append(f"catalog package {folder} README hash does not match manifest")
 
     if errors:
         print("provenance check failed:", file=sys.stderr)
