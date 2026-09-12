@@ -2,7 +2,7 @@
 
 PHASE: RUNTIME-1 — load installed catalog packages and switch live profiles
 MODE: GREEN
-START_HEAD: 8fb6a3f0acd444950d35ed91c95cb4044d6d59e0
+START_HEAD: 6c81ebe
 OWN: `src/main.c`, `src/pet_package.c`, `src/pet_package.h`, runtime/profile
 tests and focused runtime documentation.
 DENY: `assets/`, `manifest.json`, provenance files, animation tables, audio
