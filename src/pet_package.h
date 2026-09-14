@@ -43,6 +43,10 @@ struct EsheepPackageSound {
 gboolean esheep_pet_package_load(const char *path, EsheepPetPackage **out,
                                  GError **error);
 
+/* Resolve a relative installed package path, retaining cwd-relative paths for
+ * explicit command-line compatibility. The returned path must be freed. */
+char *esheep_pet_package_resolve_path(const char *path, const char *data_root);
+
 /* Make a validated package the process-wide animation data source. Only call
  * this before creating actors or GTK windows. */
 void esheep_pet_package_activate(EsheepPetPackage *package);

@@ -231,6 +231,7 @@ struct SheepGroup {
     App *sheep;
     EsheepAudio *audio;
     GdkPixbuf *sheet;
+    EsheepPetPackage *active_package;
     guint count;
     GdkDisplay *display;
     guint monitor_index;
@@ -3109,9 +3110,9 @@ static void save_group_settings(SheepGroup *group) {
     if (error) g_error_free(error);
 }
 
-static gboolean group_apply_spritesheet(SheepGroup *group,
-                                        const char *sheet_path,
-                                        const char *character) {
+static gboolean G_GNUC_UNUSED group_apply_spritesheet(SheepGroup *group,
+                                                       const char *sheet_path,
+                                                       const char *character) {
     if (!group || !group->sheep || group->count == 0 ||
         !sheet_path || !*sheet_path)
         return FALSE;
@@ -3147,6 +3148,135 @@ static gboolean group_apply_spritesheet(SheepGroup *group,
     }
     g_strlcpy(group->spritesheet, sheet_path, sizeof(group->spritesheet));
     if (old_sheet) g_object_unref(old_sheet);
+    return TRUE;
+}
+
+static char *resolve_package_path(const char *path) {
+    char *resolved = esheep_pet_package_resolve_path(path, ESHEEP_DATADIR);
+    if (resolved && g_file_test(resolved, G_FILE_TEST_IS_REGULAR)) return resolved;
+    g_free(resolved);
+    if (!g_path_is_absolute(ESHEEP_DATADIR)) {
+        char *executable = g_file_read_link("/proc/self/exe", NULL);
+        if (executable) {
+            char *directory = g_path_get_dirname(executable);
+            char *data_root = g_build_filename(directory, ESHEEP_DATADIR, NULL);
+            resolved = esheep_pet_package_resolve_path(path, data_root);
+            g_free(data_root);
+            g_free(directory);
+            g_free(executable);
+            return resolved;
+        }
+    }
+    return esheep_pet_package_resolve_path(path, ESHEEP_DATADIR);
+}
+
+static GdkPixbuf *package_image_pixbuf(const EsheepPetPackage *package,
+                                       GError **error) {
+    const EsheepPackageImage *image = esheep_pet_package_image(package);
+    if (!image || !image->png_data || image->png_size == 0) return NULL;
+    GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+    if (!loader) return NULL;
+    GdkPixbuf *sheet = NULL;
+    if (gdk_pixbuf_loader_write(loader, image->png_data, image->png_size,
+                                error) &&
+        gdk_pixbuf_loader_close(loader, error)) {
+        sheet = gdk_pixbuf_loader_get_pixbuf(loader);
+        if (sheet) g_object_ref(sheet);
+    }
+    g_object_unref(loader);
+    return sheet;
+}
+
+static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
+                                    const char *character,
+                                    const char *sprite_path) {
+    if (!group || !group->sheep || group->count == 0) return FALSE;
+    EsheepPetPackage *package = NULL;
+    char *resolved_path = package_path ? resolve_package_path(package_path) : NULL;
+    GError *error = NULL;
+    if (resolved_path && !esheep_pet_package_load(resolved_path, &package, &error)) {
+        g_printerr("failed to load behavior package '%s': %s\n", resolved_path,
+                   error ? error->message : "invalid package");
+        g_clear_error(&error);
+        g_free(resolved_path);
+        return FALSE;
+    }
+
+    GdkPixbuf *sheet = NULL;
+    const char *effective_sheet = sprite_path;
+    char *builtin_path = NULL;
+    if (effective_sheet && *effective_sheet)
+        sheet = gdk_pixbuf_new_from_file(effective_sheet, &error);
+    else if (package) {
+        const char *package_sheet = esheep_pet_package_spritesheet(package);
+        if (package_sheet && *package_sheet)
+            sheet = gdk_pixbuf_new_from_file(package_sheet, &error);
+        if (!sheet && error) g_clear_error(&error);
+        if (!sheet) sheet = package_image_pixbuf(package, &error);
+        effective_sheet = package_sheet && *package_sheet ? package_sheet :
+                          "package:embedded";
+    } else {
+        builtin_path = g_build_filename(ESHEEP_DATADIR,
+            character && strcasecmp(character, "penguin") == 0 ?
+            "penguin_ice_blue_spritesheet.png" : "sheep_spritesheet.png", NULL);
+        sheet = gdk_pixbuf_new_from_file(builtin_path, &error);
+        effective_sheet = builtin_path;
+    }
+    if (sheet && package) {
+        const EsheepPackageImage *image = esheep_pet_package_image(package);
+        if (image && image->transparency != ESHEEP_TRANSPARENCY_NONE &&
+            image->transparency != ESHEEP_TRANSPARENCY_TRANSPARENT) {
+            GdkPixbuf *converted = apply_chroma_key(sheet, image->transparency);
+            if (converted) {
+                g_object_unref(sheet);
+                sheet = converted;
+            }
+        }
+    }
+    if (!sheet || !validate_spritesheet_pixbuf(sheet, effective_sheet, character)) {
+        if (error) g_clear_error(&error);
+        if (sheet) g_object_unref(sheet);
+        if (package) esheep_pet_package_free(package);
+        g_free(resolved_path);
+        g_free(builtin_path);
+        return FALSE;
+    }
+
+    const EsheepPackageImage *package_image = package ?
+        esheep_pet_package_image(package) : NULL;
+    int tile_columns = package_image && package_image->tiles_x > 0 ?
+                       package_image->tiles_x : esheep_tiles_x;
+    int tile_size = gdk_pixbuf_get_width(sheet) / tile_columns;
+    EsheepPetPackage *old_package = group->active_package;
+    GdkPixbuf *old_sheet = group->sheet;
+    esheep_pet_package_activate(package);
+    group->active_package = package;
+    group->sheet = sheet;
+    for (guint i = 0; i < group->count; i++) {
+        App *app = &group->sheep[i];
+        app->sheet = sheet;
+        app->tile_size = tile_size;
+        if (app->state.animation_id < 1 ||
+            app->state.animation_id > esheep_animation_count)
+            esheep_init(&app->state, ANIM_WALK);
+        else if (app->state.frame_index >=
+                 esheep_animations[app->state.animation_id - 1].frame_count)
+            app->state.frame_index = 0;
+        esheep_set_environment(&app->state, app->bounds.width,
+                               app->bounds.height, tile_size, tile_size);
+        esheep_renderer_init(&app->scene, tile_size, tile_size);
+        update_child_animation(app);
+        advance_child_animation(app, 0);
+        gtk_window_resize(GTK_WINDOW(app->window), tile_size, tile_size);
+        sync_scene_window(app);
+        gtk_widget_queue_draw(app->window);
+        set_sprite_input_region(app);
+    }
+    g_strlcpy(group->spritesheet, effective_sheet, sizeof(group->spritesheet));
+    if (old_sheet) g_object_unref(old_sheet);
+    if (old_package) esheep_pet_package_free(old_package);
+    g_free(resolved_path);
+    g_free(builtin_path);
     return TRUE;
 }
 
@@ -3275,29 +3405,48 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             GTK_COMBO_BOX(character));
         const char *spritesheet_id = gtk_combo_box_get_active_id(
             GTK_COMBO_BOX(spritesheet));
+        const char *package_id = gtk_entry_get_text(package);
         char previous_character[sizeof(group->character)];
         char previous_spritesheet[sizeof(group->spritesheet)];
+        char previous_package[sizeof(group->package)];
         g_strlcpy(previous_character, group->character,
                   sizeof(previous_character));
         g_strlcpy(previous_spritesheet, group->spritesheet,
                   sizeof(previous_spritesheet));
+        g_strlcpy(previous_package, group->package, sizeof(previous_package));
         if (character_id)
             g_strlcpy(group->character, character_id, sizeof(group->character));
         if (spritesheet_id)
             if (strcmp(spritesheet_id, previous_spritesheet) != 0)
                 g_strlcpy(group->spritesheet, spritesheet_id,
                           sizeof(group->spritesheet));
-        if (character_id && spritesheet_id &&
-            strcmp(spritesheet_id, previous_spritesheet) == 0)
+        const char *selected_sprite = spritesheet_id &&
+            strcmp(spritesheet_id, previous_spritesheet) != 0 ? spritesheet_id : NULL;
+        char *catalog_package = NULL;
+        if ((!package_id || !*package_id) && group->catalog && character_id) {
+            const EsheepPetCatalogEntry *entry =
+                esheep_pet_catalog_lookup(group->catalog, character_id);
+            if (entry)
+                catalog_package = g_strdup(
+                    esheep_pet_catalog_entry_package_path(entry));
+        }
+        const char *selected_package = package_id && *package_id ? package_id :
+                                       catalog_package;
+        if (!selected_sprite && character_id &&
+            (!selected_package || !*selected_package))
             apply_builtin_character_sheet(group, character_id);
-        if (!group_apply_spritesheet(group, group->spritesheet, character_id)) {
+        if (!group_apply_profile(group, selected_package, character_id,
+                                 selected_sprite)) {
             g_strlcpy(group->character, previous_character,
                       sizeof(group->character));
             g_strlcpy(group->spritesheet, previous_spritesheet,
                       sizeof(group->spritesheet));
+            g_strlcpy(group->package, previous_package, sizeof(group->package));
+        } else {
+            g_strlcpy(group->package, selected_package ? selected_package : "",
+                      sizeof(group->package));
         }
-        g_strlcpy(group->package, gtk_entry_get_text(package),
-                  sizeof(group->package));
+        g_free(catalog_package);
         group_set_window_landing(group, gtk_toggle_button_get_active(landing));
         group_set_exclude_conky(group, gtk_toggle_button_get_active(conky));
         group_set_audio_enabled(group, gtk_toggle_button_get_active(audio));
@@ -4109,19 +4258,22 @@ int main(int argc, char **argv) {
         /* Load the package from the catalog if no explicit package was provided */
         if (!runtime_package && !package_override && !getenv("ESHEEP_PACKAGE")) {
             const char *pkg_path = esheep_pet_catalog_entry_package_path(catalog_entry);
-            if (pkg_path && *pkg_path) {
+            char *resolved_pkg_path = pkg_path ? resolve_package_path(pkg_path) : NULL;
+            if (resolved_pkg_path && *resolved_pkg_path) {
                 GError *pkg_error = NULL;
-                if (!esheep_pet_package_load(pkg_path, &runtime_package, &pkg_error)) {
-                    g_printerr("failed to load catalog package '%s': %s\n", pkg_path,
+                if (!esheep_pet_package_load(resolved_pkg_path, &runtime_package, &pkg_error)) {
+                    g_printerr("failed to load catalog package '%s': %s\n", resolved_pkg_path,
                                pkg_error ? pkg_error->message : "invalid package");
                     if (pkg_error) g_error_free(pkg_error);
                     if (catalog) esheep_pet_catalog_free(catalog);
                     g_free(config_character); g_free(config_sprite); g_free(config_spawn);
                     g_free(config_package); g_free(default_config_path);
                     g_key_file_free(config);
+                    g_free(resolved_pkg_path);
                     return 2;
                 }
                 esheep_pet_package_activate(runtime_package);
+                g_free(resolved_pkg_path);
             }
         }
     }
@@ -4362,6 +4514,7 @@ int main(int argc, char **argv) {
         .sheep = sheep,
         .audio = audio,
         .sheet = g_object_ref(sheet),
+        .active_package = runtime_package,
         .count = count,
         .display = display,
         .monitor_index = active_monitor_index,

@@ -142,6 +142,30 @@ static void test_sprite_precedence_explicit_override(void) {
     puts("Sprite precedence test passed");
 }
 
+static void test_installed_path_and_active_replacement(void) {
+    char *path = esheep_pet_package_resolve_path(
+        "Pets/blue_sheep/animations.xml", "assets");
+    assert(path != NULL);
+    assert(g_file_test(path, G_FILE_TEST_IS_REGULAR));
+
+    GError *error = NULL;
+    EsheepPetPackage *first = NULL;
+    EsheepPetPackage *second = NULL;
+    assert(esheep_pet_package_load(path, &first, &error));
+    assert(esheep_pet_package_load("tools/esheep_animations.xml", &second,
+                                  &error));
+    esheep_pet_package_activate(first);
+    int first_animation_count = esheep_animation_count;
+    esheep_pet_package_activate(second);
+    assert(esheep_animation_count != 0);
+    esheep_pet_package_free(first);
+    assert(esheep_animation_count != 0);
+    assert(esheep_animation_count != first_animation_count ||
+           esheep_animations[0].name != NULL);
+    esheep_pet_package_free(second);
+    g_free(path);
+}
+
 
 int main(void) {
     const char *path = "/tmp/esheep-test-package.xml";
@@ -360,6 +384,7 @@ int main(void) {
 
     test_embedded_png_loading();
     test_sprite_precedence_explicit_override();
+    test_installed_path_and_active_replacement();
     puts("All pet package tests passed");
     return 0;
 }

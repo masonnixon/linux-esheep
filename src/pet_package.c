@@ -99,6 +99,8 @@ struct EsheepPetPackage {
     GArray *child_builds;
 };
 
+static EsheepPetPackage *active_package;
+
 typedef struct {
     EsheepPetPackage *package;
     gboolean in_image;
@@ -786,8 +788,25 @@ gboolean esheep_pet_package_load(const char *path, EsheepPetPackage **out,
     return TRUE;
 }
 
+char *esheep_pet_package_resolve_path(const char *path, const char *data_root) {
+    if (!path || !*path) return NULL;
+    if (g_path_is_absolute(path)) return g_strdup(path);
+    if (g_file_test(path, G_FILE_TEST_IS_REGULAR)) return g_strdup(path);
+    if (data_root && *data_root) {
+        char *resolved = g_build_filename(data_root, path, NULL);
+        if (g_file_test(resolved, G_FILE_TEST_IS_REGULAR)) return resolved;
+        g_free(resolved);
+    }
+    return g_strdup(path);
+}
+
 void esheep_pet_package_activate(EsheepPetPackage *package) {
-    if (!package) return;
+    if (!package) {
+        active_package = NULL;
+        esheep_use_default_animation_data();
+        return;
+    }
+    active_package = package;
     esheep_tiles_x = package->tiles_x; esheep_tiles_y = package->tiles_y;
     esheep_spawns = package->spawns; esheep_spawn_count = package->spawn_count;
     esheep_animations = package->animations; esheep_animation_count = package->animation_count;
@@ -812,7 +831,10 @@ const char *esheep_pet_package_spritesheet(const EsheepPetPackage *package) {
 
 void esheep_pet_package_free(EsheepPetPackage *package) {
     if (!package) return;
-        esheep_use_default_animation_data();
+        if (active_package == package) {
+            esheep_use_default_animation_data();
+            active_package = NULL;
+        }
             if (package->animation_builds) {
         for (guint i = 0; i < package->animation_builds->len; i++) {
             AnimationBuild *build = g_ptr_array_index(package->animation_builds, i);
