@@ -48,10 +48,12 @@ static int run_esheep_capture(char *const *args, int nargs, const char *extra_en
         for (int i = 0; i < nargs && n < 15; i++) xvfb_argv[n++] = (char *)args[i];
         xvfb_argv[n++] = NULL;
 
-        char *envp[5];
+        char *envp[6];
         int e = 0;
         envp[e++] = (char *)"ESHEEP_AUTOQUIT_MS=500";
         envp[e++] = (char *)"ESHEEP_MONITOR=0";
+        /* Keep CLI tests independent of the developer's saved profile. */
+        envp[e++] = (char *)"XDG_CONFIG_HOME=/tmp/esheep-cli-test-config";
         if (extra_env) envp[e++] = (char *)extra_env;
         envp[e++] = NULL;
 
@@ -137,9 +139,10 @@ static void test_list_transitions_uses_active_graph(void) {
 static void test_invalid_monitor_is_rejected(void) {
     fprintf(stderr, "test: invalid --monitor is rejected\n");
     if (skip_gtk_tests("xvfb-run returns 1 even on success")) return;
-    char *argv[] = { "--monitor", "999999", "--no-window-landing" };
+    char *argv[] = { "--monitor", "999999", "--config", "/dev/null",
+                     "--no-window-landing" };
     char buf[4096] = {0};
-    int status = run_esheep_capture(argv, 3, NULL, buf, sizeof(buf));
+    int status = run_esheep_capture(argv, 5, NULL, buf, sizeof(buf));
     assert(status == 2);
     assert(strstr(buf, "monitor index") != NULL);
 }
