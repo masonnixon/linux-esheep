@@ -2277,11 +2277,9 @@ apply_chroma_key(const GdkPixbuf *src, int transparency_mode)
             dest_row[x * 4 + 1] = g;
             dest_row[x * 4 + 2] = b;
 
-            if (r == kr && g == kg && b == kb) {
-                dest_row[x * 4 + 3] = 0;  // transparent
-            } else {
-                dest_row[x * 4 + 3] = 255;  // opaque
-            }
+            guint8 source_alpha = channels == 4 ? src_row[x * channels + 3] : 255;
+            dest_row[x * 4 + 3] = (r == kr && g == kg && b == kb) ?
+                                   0 : source_alpha;
         }
     }
 
@@ -3245,9 +3243,11 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
     const EsheepPackageImage *package_image = package ?
         esheep_pet_package_image(package) : NULL;
     int tile_columns = package_image && package_image->tiles_x > 0 ?
-                       package_image->tiles_x : esheep_tiles_x;
+                       package_image->tiles_x :
+                       (package ? esheep_tiles_x : esheep_default_tiles_x);
     int tile_rows = package_image && package_image->tiles_y > 0 ?
-                    package_image->tiles_y : esheep_tiles_y;
+                    package_image->tiles_y :
+                    (package ? esheep_tiles_y : esheep_default_tiles_y);
     if (!sheet || !validate_spritesheet_pixbuf_grid(sheet, effective_sheet,
                                                      character, tile_columns,
                                                      tile_rows)) {
@@ -3455,8 +3455,11 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             if (strcmp(spritesheet_id, previous_spritesheet) != 0)
                 g_strlcpy(group->spritesheet, spritesheet_id,
                           sizeof(group->spritesheet));
+        gboolean character_changed = character_id &&
+            strcmp(character_id, previous_character) != 0;
         const char *selected_sprite = spritesheet_id &&
-            strcmp(spritesheet_id, previous_spritesheet) != 0 ? spritesheet_id : NULL;
+            strcmp(spritesheet_id, previous_spritesheet) != 0 &&
+            !character_changed ? spritesheet_id : NULL;
         char *catalog_package = NULL;
         if (spritesheet_id && g_str_has_prefix(spritesheet_id, "catalog:")) {
             const char *catalog_name = spritesheet_id + strlen("catalog:");

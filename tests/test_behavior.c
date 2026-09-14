@@ -120,6 +120,26 @@ static void test_spritesheet_requires_alpha(void) {
     g_object_unref(opaque_sheet);
 }
 
+static void test_chroma_key_preserves_existing_alpha(void) {
+    GdkPixbuf *source = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, 2, 1);
+    assert(source != NULL);
+    guchar *pixels = gdk_pixbuf_get_pixels(source);
+    pixels[0] = pixels[1] = pixels[2] = 0;
+    pixels[3] = 0;
+    pixels[4] = 0;
+    pixels[5] = 255;
+    pixels[6] = 255;
+    pixels[7] = 255;
+
+    GdkPixbuf *converted = apply_chroma_key(source, ESHEEP_TRANSPARENCY_CYAN);
+    assert(converted != NULL);
+    const guchar *converted_pixels = gdk_pixbuf_get_pixels(converted);
+    assert(converted_pixels[3] == 0);
+    assert(converted_pixels[7] == 0);
+    g_object_unref(converted);
+    g_object_unref(source);
+}
+
 /* Test 5: Eating animation (26) flower child placement. */
 static void test_eating_flower_child_offset(void) {
     App app;
@@ -797,7 +817,10 @@ static void test_live_catalog_profile_uses_verified_grid(void) {
     assert(group.active_package != NULL);
     assert(group.sheet != old_sheet);
     assert(app.tile_size > 0);
-    esheep_pet_package_free(group.active_package);
+    assert(group_apply_profile(&group, NULL, "sheep", NULL));
+    assert(group.active_package == NULL);
+    assert(gdk_pixbuf_get_width(group.sheet) == 640);
+    assert(gdk_pixbuf_get_height(group.sheet) == 440);
     g_object_unref(group.sheet);
     g_object_unref(old_sheet);
 }
@@ -867,6 +890,8 @@ int main(void) {
     printf("  test_scaled_child_expression: PASSED\n");
 
     test_spritesheet_requires_alpha();
+    test_chroma_key_preserves_existing_alpha();
+    printf("  test_chroma_key_preserves_existing_alpha: PASSED\n");
     printf("  test_spritesheet_requires_alpha: PASSED\n");
 
     test_eating_flower_child_offset();
