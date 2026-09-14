@@ -3920,6 +3920,7 @@ static gboolean group_set_count(SheepGroup *group, guint count) {
 
 int main(int argc, char **argv) {
     const char *sprite_override = NULL;
+    gboolean sprite_cli = FALSE;
     const char *character_override = NULL;
     const char *package_override = NULL;
     const char *spawn_override = NULL;
@@ -3953,6 +3954,7 @@ int main(int argc, char **argv) {
     gboolean list_animations = FALSE;
     gboolean list_transitions = FALSE;
     gboolean review_cli = FALSE;
+    gboolean review_parent_cli = FALSE;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
@@ -3964,6 +3966,7 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "--sprite") == 0 && i + 1 < argc) {
             sprite_override = argv[++i];
+            sprite_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--character") == 0 && i + 1 < argc) {
@@ -4119,6 +4122,7 @@ int main(int argc, char **argv) {
                 return 2;
             }
             review_parent = (int)value;
+            review_parent_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--list-animations") == 0) {
@@ -4198,7 +4202,7 @@ int main(int argc, char **argv) {
             gint64 value = g_key_file_get_int64(config, "esheep", "monitor", NULL);
             if (value >= 0 && value <= G_MAXUINT) monitor_index = (guint)value;
         }
-        if (!review_cli && g_key_file_has_key(config, "esheep",
+        if (!review_cli && !review_parent_cli && g_key_file_has_key(config, "esheep",
                                               "review_animation", NULL)) {
             gint64 value = g_key_file_get_int64(config, "esheep",
                                                 "review_animation", NULL);
@@ -4233,11 +4237,14 @@ int main(int argc, char **argv) {
     EsheepPetPackage *runtime_package = NULL;
     const char *package_path = package_override ? package_override :
                                getenv("ESHEEP_PACKAGE");
+    gboolean inspect_default_graph =
+        (list_animations || list_transitions || review_cli || review_parent_cli) &&
+        !package_cli && !getenv("ESHEEP_PACKAGE");
     gboolean list_default_graph = (list_animations || list_transitions) &&
                                   !package_cli && !getenv("ESHEEP_PACKAGE");
     char *resolved_startup_package = package_path ?
         resolve_package_path(package_path) : NULL;
-    if (!list_default_graph && resolved_startup_package &&
+    if (!inspect_default_graph && resolved_startup_package &&
         !esheep_pet_package_load(resolved_startup_package, &runtime_package,
                                  &error)) {
         g_printerr("failed to load behavior package '%s': %s\n", package_path,
@@ -4377,7 +4384,7 @@ int main(int argc, char **argv) {
     char default_sheet_path_buf[4096];
     GdkPixbuf *sheet = NULL;
 
-    if (sprite_override) {
+    if (sprite_override && (sprite_cli || !inspect_default_graph)) {
         sheet_path = sprite_override;
         sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
     } else {
@@ -4385,7 +4392,7 @@ int main(int argc, char **argv) {
         if (env_path) {
             sheet_path = env_path;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
-        } else if (config_sprite) {
+        } else if (config_sprite && !inspect_default_graph) {
             sheet_path = config_sprite;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
         } else if (runtime_package) {
