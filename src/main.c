@@ -3941,6 +3941,7 @@ int main(int argc, char **argv) {
     guint voices_cli = 8;
     gboolean tick_cli = FALSE;
     gboolean count_cli = FALSE;
+    gboolean package_cli = FALSE;
     gboolean monitor_cli = FALSE;
     gboolean spawn_cli = FALSE;
     gboolean window_landing_cli = FALSE;
@@ -3996,6 +3997,7 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "--package") == 0 && i + 1 < argc) {
             package_override = argv[++i];
+            package_cli = TRUE;
             continue;
         }
         if (strcmp(argv[i], "--spawn") == 0 && i + 1 < argc) {
@@ -4231,9 +4233,11 @@ int main(int argc, char **argv) {
     EsheepPetPackage *runtime_package = NULL;
     const char *package_path = package_override ? package_override :
                                getenv("ESHEEP_PACKAGE");
+    gboolean list_default_graph = (list_animations || list_transitions) &&
+                                  !package_cli && !getenv("ESHEEP_PACKAGE");
     char *resolved_startup_package = package_path ?
         resolve_package_path(package_path) : NULL;
-    if (resolved_startup_package &&
+    if (!list_default_graph && resolved_startup_package &&
         !esheep_pet_package_load(resolved_startup_package, &runtime_package,
                                  &error)) {
         g_printerr("failed to load behavior package '%s': %s\n", package_path,
@@ -4247,6 +4251,10 @@ int main(int argc, char **argv) {
     }
     g_free(resolved_startup_package);
     if (runtime_package) esheep_pet_package_activate(runtime_package);
+    if (list_default_graph) {
+        review_animation = 0;
+        review_parent = 0;
+    }
 
     EsheepAudio *audio = NULL;
     EsheepSoundCache *sound_cache = NULL;
@@ -4254,8 +4262,9 @@ int main(int argc, char **argv) {
     /* Load catalog for character resolution */
     EsheepPetCatalog *catalog = esheep_pet_catalog_load("manifest.json", NULL);
 
-    if ((review_animation > 0 && review_animation > esheep_animation_count) ||
-        (review_parent > 0 && review_parent > esheep_animation_count)) {
+    if (!list_default_graph &&
+        ((review_animation > 0 && review_animation > esheep_animation_count) ||
+        (review_parent > 0 && review_parent > esheep_animation_count))) {
         g_printerr("review animation ID is outside the active graph (use 1-%d)\n",
                    esheep_animation_count);
         esheep_pet_package_free(runtime_package);
