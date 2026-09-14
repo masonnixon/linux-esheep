@@ -5,7 +5,7 @@
 ~~~text
 REPO: /home/mason/repos/linux-esheep.git
 PLAN: /home/mason/repos/linux-esheep.git/docs/remaining-work-plan.md
-HEAD: 9d79436
+HEAD: 541b702
 BASELINE: docs/remaining-work-plan.md intentionally dirty (one capsule change)
 LAST_ACCEPTED: repository audit; d884592; full make test passed
 LAST_ACCEPTED: P1R shared X11 restacking cache repair; 767c180; full make test passed
@@ -18,8 +18,7 @@ LAST_ACCEPTED: PERF multisheep scheduling/rendering; 67cdd26; scaling and full t
 LAST_ACCEPTED: ANIM original animation and sprite-tile parity; e6e48de; parity, tile, child, catalog, and generation gates passed
 LAST_ACCEPTED: MONITOR seam crossing and workarea correctness; a187e26 plus repair 7ab474f; focused monitor/runtime gates passed
 LAST_ACCEPTED: TRANSITION new transition visual correctness; 50a4a1a; parity, animation-data, child, spritesheet, catalog, and full test gates passed
-LAST_ACCEPTED: P7 real X11 window-manager integration; 9d79436; focused 7/7 integration gate, child-scene rendering, parity, and full make test passed
-LAST_ACCEPTED: P8 final acceptance; pending final validation commit; complete make test, optimized build, staged install, CLI, catalog, and real-WM gates passed
+LAST_ACCEPTED: P7 real X11 WM integration; 9d79436; focused 7/7 integration gate, child-scene rendering, parity, and full make test passed
 ACTIVE: none
 LAST_GATE: P7 PASS; real reparenting WM geometry, occlusion, stale-window, error, snapshot, and cached-restack coverage validated
 NEXT_COMMAND: execute P8 acceptance gates directly
@@ -40,7 +39,7 @@ SUPERVISOR_PROMPT: Continue this plan using local-model-handoff. Verify HEAD, BA
 | ANIM | P5 | RED -> GREEN | ACCEPTED | Reach original animation and sprite-tile parity, including missing spacecraft, re-entry, meteorite, and child scenes. |
 | MONITOR | P1R | RED -> GREEN | ACCEPTED | Diagnose and fix real multimonitor seam crossing and workarea mismatches. |
 | TRANSITION | ANIM | RED -> GREEN | ACCEPTED | Verify and correct new animation transitions and spacecraft child composition. |
-| P8 | P2-P7, PERF, ANIM, MONITOR, TRANSITION | ACCEPT | ACCEPTED | Final build, test, packaging, CLI, catalog, and documented limitation review passed. Native Wayland positioning and sound remain explicit limitations. |
+| P8 | P2-P7, PERF, ANIM, MONITOR, TRANSITION | ACCEPT | PENDING | Final build, test, packaging, CLI, catalog, and documented limitation review. Native Wayland positioning and sound remain explicit limitations. |
 
 ## Scope and invariants
 
