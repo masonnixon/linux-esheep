@@ -3169,9 +3169,22 @@ static char *resolve_package_path(const char *path) {
             char *data_root = g_build_filename(directory, ESHEEP_DATADIR, NULL);
             resolved = esheep_pet_package_resolve_path(path, data_root);
             g_free(data_root);
+            if (resolved && g_file_test(resolved, G_FILE_TEST_IS_REGULAR)) {
+                g_free(directory);
+                g_free(executable);
+                return resolved;
+            }
+            g_free(resolved);
+            /* Development checkouts keep installed-style packages below
+             * assets/, while installed binaries use ESHEEP_DATADIR above. */
+            char *project_assets = g_build_filename(directory, "assets", NULL);
+            resolved = esheep_pet_package_resolve_path(path, project_assets);
+            g_free(project_assets);
             g_free(directory);
             g_free(executable);
-            return resolved;
+            if (resolved && g_file_test(resolved, G_FILE_TEST_IS_REGULAR))
+                return resolved;
+            g_free(resolved);
         }
     }
     return esheep_pet_package_resolve_path(path, ESHEEP_DATADIR);
@@ -4218,6 +4231,12 @@ int main(int argc, char **argv) {
             exclude_conky = g_key_file_get_boolean(config, "esheep",
                                                     "exclude_conky", NULL);
     }
+    /* This is a selector for the package's embedded image, not a filesystem
+     * path. Normalize it before sprite precedence is evaluated. */
+    if (config_sprite &&
+        g_ascii_strcasecmp(config_sprite, "package:embedded") == 0) {
+        config_sprite = NULL;
+    }
     EsheepAudioConfig audio_config;
     esheep_audio_config_defaults(&audio_config);
     if (g_key_file_load_from_file(config, config_override, G_KEY_FILE_NONE, NULL))
@@ -4272,13 +4291,19 @@ int main(int argc, char **argv) {
     if (!list_default_graph &&
         ((review_animation > 0 && review_animation > esheep_animation_count) ||
         (review_parent > 0 && review_parent > esheep_animation_count))) {
-        g_printerr("review animation ID is outside the active graph (use 1-%d)\n",
-                   esheep_animation_count);
-        esheep_pet_package_free(runtime_package);
-        g_free(config_character); g_free(config_sprite); g_free(config_spawn);
-        g_free(config_package); g_free(default_config_path);
-        g_key_file_free(config);
-        return 2;
+        if (review_cli || review_parent_cli) {
+            g_printerr("review animation ID is outside the active graph (use 1-%d)\n",
+                       esheep_animation_count);
+            esheep_pet_package_free(runtime_package);
+            g_free(config_character); g_free(config_sprite); g_free(config_spawn);
+            g_free(config_package); g_free(default_config_path);
+            g_key_file_free(config);
+            return 2;
+        }
+        g_printerr("saved review animation is outside the active graph; "
+                   "starting normal behavior\n");
+        review_animation = 0;
+        review_parent = 0;
     }
 
     if (list_animations || list_transitions) {
@@ -4392,30 +4417,25 @@ int main(int argc, char **argv) {
         if (env_path) {
             sheet_path = env_path;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
-        } else if (config_sprite && !inspect_default_graph) {
+        } else if (config_sprite && !inspect_default_graph &&
+                   g_ascii_strcasecmp(config_sprite, "package:embedded") != 0) {
             sheet_path = config_sprite;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
         } else if (runtime_package) {
             const EsheepPackageImage *pkg_image = esheep_pet_package_image(runtime_package);
-            sheet_path = esheep_pet_package_spritesheet(runtime_package);
-            if (sheet_path && *sheet_path)
+            const char *package_sheet = esheep_pet_package_spritesheet(runtime_package);
+            sheet_path = "package:embedded";
+            if (package_sheet && *package_sheet &&
+                g_ascii_strcasecmp(package_sheet, "package:embedded") != 0) {
+                sheet_path = package_sheet;
                 sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
+            }
             if (!sheet && error)
                 g_clear_error(&error);
 
             /* If no usable package file exists, decode the owned PNG bytes. */
             if (!sheet && pkg_image && pkg_image->png_data && pkg_image->png_size > 0) {
-                GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
-                if (loader) {
-                    if (gdk_pixbuf_loader_write(loader, pkg_image->png_data,
-                                                pkg_image->png_size, &error) &&
-                        gdk_pixbuf_loader_close(loader, &error)) {
-                        sheet = gdk_pixbuf_loader_get_pixbuf(loader);
-                        if (sheet)
-                            g_object_ref(sheet);
-                    }
-                    g_object_unref(loader);
-                }
+                sheet = package_image_pixbuf(runtime_package, &error);
                 if (!sheet && error) {
                     g_printerr("failed to load embedded spritesheet from package: %s\n",
                                error->message);
@@ -4447,6 +4467,22 @@ int main(int argc, char **argv) {
             sheet_path = default_sheet_path_buf;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
         }
+    }
+
+    /* A stale package profile must not prevent the built-in character from
+     * starting when its embedded image cannot be decoded. */
+    if (!sheet && runtime_package && sheet_path &&
+        g_ascii_strcasecmp(sheet_path, "package:embedded") == 0) {
+        esheep_pet_package_activate(NULL);
+        esheep_pet_package_free(runtime_package);
+        runtime_package = NULL;
+        snprintf(default_sheet_path_buf, sizeof(default_sheet_path_buf),
+                 "%s/%s_spritesheet.png", ESHEEP_DATADIR,
+                 character && strcasecmp(character, "penguin") == 0 ?
+                 "penguin_ice_blue" : "sheep");
+        sheet_path = default_sheet_path_buf;
+        g_clear_error(&error);
+        sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
     }
 
     if (!sheet) {
