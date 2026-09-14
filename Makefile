@@ -86,6 +86,7 @@ test-gui: esheep
 	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --count 3 --no-window-landing
 	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --package tools/esheep_animations.xml --sprite assets/sheep_spritesheet.png --no-window-landing
 	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
+	xvfb-run -a sh -c 'cd /tmp && ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 $(CURDIR)/esheep --config $(CURDIR)/tests/test-relative-package.ini --no-window-landing'
 	xvfb-run -a env ESHEEP_MONITOR=0 WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
 	xvfb-run -a sh -c 'set -eu; ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 101 --no-window-landing & first=$$!; ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 202 --no-window-landing & second=$$!; wait "$$first"; wait "$$second"'
 

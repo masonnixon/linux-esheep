@@ -4231,16 +4231,21 @@ int main(int argc, char **argv) {
     EsheepPetPackage *runtime_package = NULL;
     const char *package_path = package_override ? package_override :
                                getenv("ESHEEP_PACKAGE");
-    if (package_path && !esheep_pet_package_load(package_path, &runtime_package,
-                                                  &error)) {
+    char *resolved_startup_package = package_path ?
+        resolve_package_path(package_path) : NULL;
+    if (resolved_startup_package &&
+        !esheep_pet_package_load(resolved_startup_package, &runtime_package,
+                                 &error)) {
         g_printerr("failed to load behavior package '%s': %s\n", package_path,
                    error ? error->message : "invalid package");
         if (error) g_error_free(error);
+        g_free(resolved_startup_package);
         g_free(config_character); g_free(config_sprite); g_free(config_spawn);
         g_free(config_package); g_free(default_config_path);
         g_key_file_free(config);
         return 2;
     }
+    g_free(resolved_startup_package);
     if (runtime_package) esheep_pet_package_activate(runtime_package);
 
     EsheepAudio *audio = NULL;
