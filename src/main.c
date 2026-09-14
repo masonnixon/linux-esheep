@@ -3397,6 +3397,18 @@ static void apply_builtin_character_sheet(SheepGroup *group,
                root, filename);
 }
 
+static void on_advanced_profile_toggled(GtkToggleButton *button,
+                                        gpointer user_data) {
+    (void)user_data;
+    GtkWidget *spritesheet = g_object_get_data(G_OBJECT(button),
+                                                "advanced-spritesheet");
+    GtkWidget *package = g_object_get_data(G_OBJECT(button),
+                                            "advanced-package");
+    gboolean enabled = gtk_toggle_button_get_active(button);
+    if (spritesheet) gtk_widget_set_sensitive(spritesheet, enabled);
+    if (package) gtk_widget_set_sensitive(package, enabled);
+}
+
 static void on_settings_response(GtkDialog *dialog, gint response,
                                  gpointer user_data) {
     SheepGroup *group = user_data;
@@ -3410,6 +3422,7 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         GtkComboBoxText *character = g_object_get_data(G_OBJECT(dialog), "character");
         GtkComboBoxText *spritesheet = g_object_get_data(G_OBJECT(dialog), "spritesheet");
         GtkEntry *package = g_object_get_data(G_OBJECT(dialog), "package");
+        GtkToggleButton *advanced = g_object_get_data(G_OBJECT(dialog), "advanced-profile");
         GtkToggleButton *landing = g_object_get_data(G_OBJECT(dialog), "landing");
         GtkToggleButton *conky = g_object_get_data(G_OBJECT(dialog), "conky");
         GtkToggleButton *audio = g_object_get_data(G_OBJECT(dialog), "audio");
@@ -3454,6 +3467,7 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         g_strlcpy(selected_character, character_id ? character_id :
                   group->character, sizeof(selected_character));
         const char *package_id = gtk_entry_get_text(package);
+        gboolean use_advanced_profile = gtk_toggle_button_get_active(advanced);
         char previous_character[sizeof(group->character)];
         char previous_spritesheet[sizeof(group->spritesheet)];
         char previous_package[sizeof(group->package)];
@@ -3464,7 +3478,7 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         g_strlcpy(previous_package, group->package, sizeof(previous_package));
         if (character_id)
             g_strlcpy(group->character, character_id, sizeof(group->character));
-        if (spritesheet_id)
+        if (use_advanced_profile && spritesheet_id)
             if (strcmp(spritesheet_id, previous_spritesheet) != 0)
                 g_strlcpy(group->spritesheet, spritesheet_id,
                           sizeof(group->spritesheet));
@@ -3474,7 +3488,8 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             strcmp(spritesheet_id, previous_spritesheet) != 0 &&
             !character_changed ? spritesheet_id : NULL;
         char *catalog_package = NULL;
-        if (spritesheet_id && g_str_has_prefix(spritesheet_id, "catalog:")) {
+        if (use_advanced_profile && spritesheet_id &&
+            g_str_has_prefix(spritesheet_id, "catalog:")) {
             const char *catalog_name = spritesheet_id + strlen("catalog:");
             const EsheepPetCatalogEntry *entry =
                 esheep_pet_catalog_lookup(group->catalog, catalog_name);
@@ -3487,7 +3502,18 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                 selected_sprite = NULL;
             }
         }
-        if ((!package_id || !*package_id) && group->catalog && character_id) {
+        if (!use_advanced_profile) {
+            selected_sprite = NULL;
+            catalog_package = NULL;
+            if (group->catalog && character_id) {
+                const EsheepPetCatalogEntry *entry =
+                    esheep_pet_catalog_lookup(group->catalog, selected_character);
+                if (entry)
+                    catalog_package = g_strdup(
+                        esheep_pet_catalog_entry_package_path(entry));
+            }
+            package_id = NULL;
+        } else if ((!package_id || !*package_id) && group->catalog && character_id) {
             const EsheepPetCatalogEntry *entry =
                 esheep_pet_catalog_lookup(group->catalog, selected_character);
             if (entry)
@@ -3561,9 +3587,13 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     GtkWidget *character = gtk_combo_box_text_new();
     GtkWidget *spritesheet = gtk_combo_box_text_new();
     GtkWidget *package = gtk_entry_new();
+    GtkWidget *advanced = gtk_check_button_new_with_label(
+        "Use advanced spritesheet/package overrides");
     populate_character_combo(GTK_COMBO_BOX_TEXT(character), group);
     populate_spritesheet_combo(GTK_COMBO_BOX_TEXT(spritesheet), group);
-    GtkWidget *note = gtk_label_new("Character, spritesheet, package, and pet count apply immediately. Unavailable catalog entries are kept visible and rejected safely.");
+    GtkWidget *note = gtk_label_new("Character and pet count apply immediately. "
+        "Standard characters select their complete profile; spritesheet and "
+        "package overrides are for custom/advanced use.");
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tick interval (ms)"), 0, 0, 1, 1);
@@ -3581,9 +3611,9 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), spawn, 1, 5, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Character"), 0, 6, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), character, 1, 6, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Spritesheet"), 0, 7, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Advanced spritesheet"), 0, 7, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), spritesheet, 1, 7, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Behavior package"), 0, 8, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Advanced package"), 0, 8, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), package, 1, 8, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), landing, 0, 9, 2, 1);
     gtk_grid_attach(GTK_GRID(grid), conky, 0, 10, 2, 1);
@@ -3593,6 +3623,7 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_grid_attach(GTK_GRID(grid), voices, 1, 12, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), audio, 0, 13, 2, 1);
     gtk_grid_attach(GTK_GRID(grid), note, 0, 14, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), advanced, 0, 15, 2, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(tick), group->tick_ms);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(walk), group->walk_keep_probability);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(monitor), group->monitor_index);
@@ -3607,6 +3638,17 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(volume), group->audio_volume);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(voices), group->audio_max_voices);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(audio), group->audio_enabled);
+    gboolean custom_profile = group->character[0] &&
+        strcasecmp(group->character, "sheep") != 0 &&
+        strcasecmp(group->character, "penguin") != 0 &&
+        (!group->catalog || !esheep_pet_catalog_lookup(group->catalog,
+                                                        group->character));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(advanced), custom_profile);
+    g_object_set_data(G_OBJECT(advanced), "advanced-spritesheet", spritesheet);
+    g_object_set_data(G_OBJECT(advanced), "advanced-package", package);
+    g_signal_connect(advanced, "toggled",
+                     G_CALLBACK(on_advanced_profile_toggled), NULL);
+    on_advanced_profile_toggled(GTK_TOGGLE_BUTTON(advanced), NULL);
     g_object_set_data(G_OBJECT(dialog), "tick-ms", tick);
     g_object_set_data(G_OBJECT(dialog), "walk-keep", walk);
     g_object_set_data(G_OBJECT(dialog), "monitor", monitor);
@@ -3616,6 +3658,7 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     g_object_set_data(G_OBJECT(dialog), "character", character);
     g_object_set_data(G_OBJECT(dialog), "spritesheet", spritesheet);
     g_object_set_data(G_OBJECT(dialog), "package", package);
+    g_object_set_data(G_OBJECT(dialog), "advanced-profile", advanced);
     g_object_set_data(G_OBJECT(dialog), "landing", landing);
     g_object_set_data(G_OBJECT(dialog), "conky", conky);
     g_object_set_data(G_OBJECT(dialog), "audio", audio);
