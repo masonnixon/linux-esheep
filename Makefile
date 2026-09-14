@@ -80,14 +80,14 @@ test-performance: test-multisheep
 	python3 tests/test_performance.py
 
 test-gui: esheep
-	command -v xvfb-run >/dev/null
-	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --no-window-landing
-	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --character penguin --no-window-landing
-	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --count 3 --no-window-landing
-	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --package tools/esheep_animations.xml --sprite assets/sheep_spritesheet.png --no-window-landing
-	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini
-	xvfb-run -a sh -c 'cd /tmp && ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 $(CURDIR)/esheep --config $(CURDIR)/tests/test-relative-package.ini --no-window-landing'
-	xvfb-run -a env ESHEEP_MONITOR=0 WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing
+	command -v xvfb-run >/dev/null; cfg=$$(mktemp -d /tmp/esheep-gui-config.XXXXXX); trap 'rm -rf "$$cfg"' EXIT; export XDG_CONFIG_HOME="$$cfg"; \
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --no-window-landing; \
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --character penguin --no-window-landing; \
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --count 3 --no-window-landing; \
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --package tools/esheep_animations.xml --sprite assets/sheep_spritesheet.png --no-window-landing; \
+	xvfb-run -a env ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --config tests/test-config.ini; \
+	xvfb-run -a sh -c 'cd /tmp && ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 $(CURDIR)/esheep --config $(CURDIR)/tests/test-relative-package.ini --no-window-landing'; \
+	xvfb-run -a env ESHEEP_MONITOR=0 WAYLAND_DISPLAY=fake ESHEEP_AUTOQUIT_MS=250 ./esheep --x11-fallback --no-window-landing; \
 	xvfb-run -a sh -c 'set -eu; ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 101 --no-window-landing & first=$$!; ESHEEP_MONITOR=0 ESHEEP_AUTOQUIT_MS=250 ./esheep --seed 202 --no-window-landing & second=$$!; wait "$$first"; wait "$$second"'
 
 test-cli: esheep
