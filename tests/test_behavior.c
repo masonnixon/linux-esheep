@@ -749,6 +749,59 @@ static void test_live_spritesheet_swap(void) {
     g_object_unref(old_sheet);
 }
 
+static void test_settings_persist_profile_and_count(void) {
+    char path[] = "/tmp/esheep-settings-test.XXXXXX";
+    int fd = g_mkstemp(path);
+    assert(fd >= 0);
+    close(fd);
+
+    GKeyFile *config = g_key_file_new();
+    SheepGroup group = {0};
+    group.config = config;
+    group.config_path = path;
+    group.configured_count = 7;
+    group.tick_ms = 33;
+    strcpy(group.character, "mimiko");
+    strcpy(group.spritesheet, "package:embedded");
+    strcpy(group.package, "Pets/mimiko/animations.xml");
+    save_group_settings(&group);
+
+    GKeyFile *reloaded = g_key_file_new();
+    assert(g_key_file_load_from_file(reloaded, path, G_KEY_FILE_NONE, NULL));
+    assert(g_key_file_get_integer(reloaded, "esheep", "count", NULL) == 7);
+    assert(strcmp(g_key_file_get_string(reloaded, "esheep", "character", NULL),
+                  "mimiko") == 0);
+    assert(strcmp(g_key_file_get_string(reloaded, "esheep", "spritesheet", NULL),
+                  "package:embedded") == 0);
+    assert(strcmp(g_key_file_get_string(reloaded, "esheep", "package", NULL),
+                  "Pets/mimiko/animations.xml") == 0);
+    g_key_file_free(reloaded);
+    g_key_file_free(config);
+    remove(path);
+}
+
+static void test_live_catalog_profile_uses_verified_grid(void) {
+    GError *error = NULL;
+    GdkPixbuf *old_sheet = gdk_pixbuf_new_from_file(
+        "assets/sheep_spritesheet.png", &error);
+    assert(old_sheet != NULL && error == NULL);
+    App app = {0};
+    app.sheet = old_sheet;
+    app.tile_size = 40;
+    app.bounds = (GdkRectangle){0, 0, 640, 440};
+    esheep_init(&app.state, ANIM_WALK);
+    SheepGroup group = {.sheep = &app, .count = 1,
+                        .sheet = g_object_ref(old_sheet)};
+    assert(group_apply_profile(&group, "Pets/mimiko/animations.xml",
+                               "mimiko", NULL));
+    assert(group.active_package != NULL);
+    assert(group.sheet != old_sheet);
+    assert(app.tile_size > 0);
+    esheep_pet_package_free(group.active_package);
+    g_object_unref(group.sheet);
+    g_object_unref(old_sheet);
+}
+
 /* Every authored parent must produce a valid composited scene, including any
  * child records reachable from that parent. This is a deterministic runtime
  * coverage gate; actual pixel appearance remains a separate visual review. */
@@ -905,6 +958,10 @@ int main(void) {
 
     test_live_spritesheet_swap();
     printf("  test_live_spritesheet_swap: PASSED\n");
+    test_settings_persist_profile_and_count();
+    printf("  test_settings_persist_profile_and_count: PASSED\n");
+    test_live_catalog_profile_uses_verified_grid();
+    printf("  test_live_catalog_profile_uses_verified_grid: PASSED\n");
 
     test_all_authored_animations_compose();
     printf("  test_all_authored_animations_compose: PASSED\n");

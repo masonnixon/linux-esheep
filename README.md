@@ -104,8 +104,8 @@ offers group-wide show/hide, pause/resume, bring-to-front, About, and Quit
 actions, plus a settings dialog for tick rate, walk probability, monitor,
 spawn mode, sheep count, review animation, window landing, and Conky filtering.
 The sheep
-continues to work without a tray area. Character, spritesheet, and sheep-count
-changes take effect after restarting the application.
+continues to work without a tray area. Character, package, spritesheet, and
+sheep-count changes take effect immediately and are saved to the config file.
 
 - `ESHEEP_PAUSED=1`: start with all sheep paused (animation stopped, drag
   still works to pick the sheep up).

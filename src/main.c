@@ -2170,9 +2170,10 @@ static gboolean is_landing_animation(int animation_id) {
  * when a non-built-in character is selected. The runtime behaviour graph is
  * hardcoded to the sheep/penguin 16x11 grid; custom sprites must follow the
  * same grid, and we refuse to silently keep a wrong-size image. */
-static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet,
-                                           const char *sheet_path,
-                                           const char *character) {
+static gboolean validate_spritesheet_pixbuf_grid(const GdkPixbuf *sheet,
+                                                  const char *sheet_path,
+                                                  const char *character,
+                                                  int tiles_x, int tiles_y) {
     int w = gdk_pixbuf_get_width(sheet);
     int h = gdk_pixbuf_get_height(sheet);
     if (!gdk_pixbuf_get_has_alpha(sheet) ||
@@ -2185,16 +2186,17 @@ static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet
                    "desktop surface.\n", sheet_path);
         return FALSE;
     }
-    int ts_x = w / esheep_tiles_x;
-    int ts_y = h / esheep_tiles_y;
+    if (tiles_x <= 0 || tiles_y <= 0) return FALSE;
+    int ts_x = w / tiles_x;
+    int ts_y = h / tiles_y;
     if (ts_x < 8 || ts_y < 8 || ts_x != ts_y ||
-        w != esheep_tiles_x * ts_x || h != esheep_tiles_y * ts_y) {
+        w != tiles_x * ts_x || h != tiles_y * ts_y) {
         g_printerr("spritesheet '%s' has dimensions %dx%d, which is not a "
                    "%d-column x %d-row grid of square tiles. Built-in "
                    "characters sheep and penguin use a %dx%d grid (640x440 "
                    "or 1280x880).\n",
-                   sheet_path, w, h, esheep_tiles_x, esheep_tiles_y,
-                   esheep_tiles_x * 40, esheep_tiles_y * 40);
+                   sheet_path, w, h, tiles_x, tiles_y,
+                   tiles_x * 40, tiles_y * 40);
         return FALSE;
     }
     if (character && strcasecmp(character, "sheep") != 0 &&
@@ -2204,9 +2206,16 @@ static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet
                    "penguin graph (src/animations_data.c). Custom sprites must "
                    "use the %dx%d tile grid and cover all referenced frames "
                    "(see tests/test_spritesheet.py for coverage rules).\n",
-                   character, esheep_tiles_x, esheep_tiles_y);
+                   character, tiles_x, tiles_y);
     }
     return TRUE;
+}
+
+static gboolean G_GNUC_UNUSED validate_spritesheet_pixbuf(const GdkPixbuf *sheet,
+                                                           const char *sheet_path,
+                                                           const char *character) {
+    return validate_spritesheet_pixbuf_grid(sheet, sheet_path, character,
+                                            esheep_tiles_x, esheep_tiles_y);
 }
 
 
@@ -3233,7 +3242,15 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
             }
         }
     }
-    if (!sheet || !validate_spritesheet_pixbuf(sheet, effective_sheet, character)) {
+    const EsheepPackageImage *package_image = package ?
+        esheep_pet_package_image(package) : NULL;
+    int tile_columns = package_image && package_image->tiles_x > 0 ?
+                       package_image->tiles_x : esheep_tiles_x;
+    int tile_rows = package_image && package_image->tiles_y > 0 ?
+                    package_image->tiles_y : esheep_tiles_y;
+    if (!sheet || !validate_spritesheet_pixbuf_grid(sheet, effective_sheet,
+                                                     character, tile_columns,
+                                                     tile_rows)) {
         if (error) g_clear_error(&error);
         if (sheet) g_object_unref(sheet);
         if (package) esheep_pet_package_free(package);
@@ -3242,10 +3259,6 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
         return FALSE;
     }
 
-    const EsheepPackageImage *package_image = package ?
-        esheep_pet_package_image(package) : NULL;
-    int tile_columns = package_image && package_image->tiles_x > 0 ?
-                       package_image->tiles_x : esheep_tiles_x;
     int tile_size = gdk_pixbuf_get_width(sheet) / tile_columns;
     EsheepPetPackage *old_package = group->active_package;
     GdkPixbuf *old_sheet = group->sheet;
@@ -3267,10 +3280,12 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
         esheep_renderer_init(&app->scene, tile_size, tile_size);
         update_child_animation(app);
         advance_child_animation(app, 0);
-        gtk_window_resize(GTK_WINDOW(app->window), tile_size, tile_size);
-        sync_scene_window(app);
-        gtk_widget_queue_draw(app->window);
-        set_sprite_input_region(app);
+        if (app->window) {
+            gtk_window_resize(GTK_WINDOW(app->window), tile_size, tile_size);
+            sync_scene_window(app);
+            gtk_widget_queue_draw(app->window);
+            set_sprite_input_region(app);
+        }
     }
     g_strlcpy(group->spritesheet, effective_sheet, sizeof(group->spritesheet));
     if (old_sheet) g_object_unref(old_sheet);
@@ -3294,12 +3309,13 @@ static void populate_character_combo(GtkComboBoxText *combo,
         for (int i = 0; i < esheep_pet_catalog_count(group->catalog); i++) {
             const EsheepPetCatalogEntry *entry =
                 esheep_pet_catalog_get_by_index(group->catalog, i);
-            if (!esheep_pet_catalog_entry_is_available(entry)) continue;
             const char *name = esheep_pet_catalog_entry_stable_name(entry);
             const char *title = esheep_pet_catalog_entry_title(entry);
             char label[256];
             g_snprintf(label, sizeof(label), "%s (%s)",
                        title && *title ? title : name, name);
+            if (!esheep_pet_catalog_entry_is_available(entry))
+                g_strlcat(label, " [unavailable]", sizeof(label));
             append_combo_option(combo, name, label);
         }
     }
@@ -3323,6 +3339,22 @@ static void populate_spritesheet_combo(GtkComboBoxText *combo,
         gchar *base = g_path_get_basename(paths[i]);
         append_combo_option(combo, paths[i], base);
         g_free(base);
+    }
+    if (group && group->catalog) {
+        for (int i = 0; i < esheep_pet_catalog_count(group->catalog); i++) {
+            const EsheepPetCatalogEntry *entry =
+                esheep_pet_catalog_get_by_index(group->catalog, i);
+            const char *name = esheep_pet_catalog_entry_stable_name(entry);
+            const char *title = esheep_pet_catalog_entry_title(entry);
+            char id[128];
+            char label[256];
+            g_snprintf(id, sizeof(id), "catalog:%s", name);
+            g_snprintf(label, sizeof(label), "%s (%s, embedded)",
+                       title && *title ? title : name, name);
+            if (!esheep_pet_catalog_entry_is_available(entry))
+                g_strlcat(label, " [unavailable]", sizeof(label));
+            append_combo_option(combo, id, label);
+        }
     }
     if (group && group->spritesheet[0]) {
         gchar *base = g_path_get_basename(group->spritesheet);
@@ -3405,6 +3437,9 @@ static void on_settings_response(GtkDialog *dialog, gint response,
             GTK_COMBO_BOX(character));
         const char *spritesheet_id = gtk_combo_box_get_active_id(
             GTK_COMBO_BOX(spritesheet));
+        char selected_character[sizeof(group->character)];
+        g_strlcpy(selected_character, character_id ? character_id :
+                  group->character, sizeof(selected_character));
         const char *package_id = gtk_entry_get_text(package);
         char previous_character[sizeof(group->character)];
         char previous_spritesheet[sizeof(group->spritesheet)];
@@ -3423,19 +3458,32 @@ static void on_settings_response(GtkDialog *dialog, gint response,
         const char *selected_sprite = spritesheet_id &&
             strcmp(spritesheet_id, previous_spritesheet) != 0 ? spritesheet_id : NULL;
         char *catalog_package = NULL;
+        if (spritesheet_id && g_str_has_prefix(spritesheet_id, "catalog:")) {
+            const char *catalog_name = spritesheet_id + strlen("catalog:");
+            const EsheepPetCatalogEntry *entry =
+                esheep_pet_catalog_lookup(group->catalog, catalog_name);
+            if (entry) {
+                g_strlcpy(selected_character,
+                          esheep_pet_catalog_entry_stable_name(entry),
+                          sizeof(selected_character));
+                catalog_package = g_strdup(
+                    esheep_pet_catalog_entry_package_path(entry));
+                selected_sprite = NULL;
+            }
+        }
         if ((!package_id || !*package_id) && group->catalog && character_id) {
             const EsheepPetCatalogEntry *entry =
-                esheep_pet_catalog_lookup(group->catalog, character_id);
+                esheep_pet_catalog_lookup(group->catalog, selected_character);
             if (entry)
                 catalog_package = g_strdup(
                     esheep_pet_catalog_entry_package_path(entry));
         }
         const char *selected_package = package_id && *package_id ? package_id :
                                        catalog_package;
-        if (!selected_sprite && character_id &&
+        if (!selected_sprite && selected_character[0] &&
             (!selected_package || !*selected_package))
-            apply_builtin_character_sheet(group, character_id);
-        if (!group_apply_profile(group, selected_package, character_id,
+            apply_builtin_character_sheet(group, selected_character);
+        if (!group_apply_profile(group, selected_package, selected_character,
                                  selected_sprite)) {
             g_strlcpy(group->character, previous_character,
                       sizeof(group->character));
@@ -3443,6 +3491,8 @@ static void on_settings_response(GtkDialog *dialog, gint response,
                       sizeof(group->spritesheet));
             g_strlcpy(group->package, previous_package, sizeof(group->package));
         } else {
+            g_strlcpy(group->character, selected_character,
+                      sizeof(group->character));
             g_strlcpy(group->package, selected_package ? selected_package : "",
                       sizeof(group->package));
         }
@@ -3497,7 +3547,7 @@ static void on_settings_activate(GtkMenuItem *item, gpointer user_data) {
     GtkWidget *package = gtk_entry_new();
     populate_character_combo(GTK_COMBO_BOX_TEXT(character), group);
     populate_spritesheet_combo(GTK_COMBO_BOX_TEXT(spritesheet), group);
-    GtkWidget *note = gtk_label_new("Character, spritesheet, and package apply on restart. Sheep count applies immediately.");
+    GtkWidget *note = gtk_label_new("Character, spritesheet, package, and pet count apply immediately. Unavailable catalog entries are kept visible and rejected safely.");
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Tick interval (ms)"), 0, 0, 1, 1);
@@ -4639,7 +4689,13 @@ int main(int argc, char **argv) {
     g_key_file_free(config);
     if (group.sheet) g_object_unref(group.sheet);
     g_object_unref(sheet);
-    esheep_pet_package_free(runtime_package);
+    /* The active package may have been replaced from the settings dialog.
+     * The group owns the current package, while runtime_package is only the
+     * startup seed and may now be stale. */
+    if (group.active_package) {
+        esheep_pet_package_free(group.active_package);
+        group.active_package = NULL;
+    }
     if (catalog) esheep_pet_catalog_free(catalog);
     return 0;
 }
