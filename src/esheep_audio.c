@@ -101,8 +101,20 @@ EsheepAudioVoice *esheep_audio_play_mp3(EsheepAudio *audio,
                                         const guchar *payload,
                                         gsize payload_size,
                                         GError **error) {
+    return esheep_audio_play_mp3_looped(audio, payload, payload_size, 0, error);
+}
+
+EsheepAudioVoice *esheep_audio_play_mp3_looped(EsheepAudio *audio,
+                                               const guchar *payload,
+                                               gsize payload_size,
+                                               int loop_count,
+                                               GError **error) {
     if (!audio) {
         g_set_error(error, audio_error_quark(), 1, "audio backend is not initialized");
+        return NULL;
+    }
+    if (loop_count < 0) {
+        g_set_error(error, audio_error_quark(), 4, "audio loop count is negative");
         return NULL;
     }
     if (!payload || payload_size == 0) {
@@ -139,10 +151,11 @@ EsheepAudioVoice *esheep_audio_play_mp3(EsheepAudio *audio,
     close(fd);
     pid_t pid = fork();
     if (pid == 0) {
-        char volume[4];
+        char volume[4], loop[12];
         g_snprintf(volume, sizeof volume, "%d", audio->volume);
+        g_snprintf(loop, sizeof loop, "%d", loop_count);
         char *const argv[] = { audio->player, "-nodisp", "-autoexit", "-loglevel", "quiet",
-                               "-volume", volume, path, NULL };
+                               "-volume", volume, "-loop", loop, path, NULL };
         execv(audio->player, argv);
         _exit(127);
     }

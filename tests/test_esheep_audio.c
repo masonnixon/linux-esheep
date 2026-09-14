@@ -1,13 +1,18 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "../src/esheep_audio.h"
 
 int main(void) {
     const char *player = "/tmp/esheep-test-audio-player.sh";
-    assert(g_file_set_contents(player, "#!/bin/sh\nexec sleep 1\n", -1, NULL));
+    const char *log = "/tmp/esheep-test-audio-player.log";
+    unlink(log);
+    assert(g_file_set_contents(player,
+                               "#!/bin/sh\nprintf '%s\\n' \"$*\" >> /tmp/esheep-test-audio-player.log\nexec sleep 1\n",
+                               -1, NULL));
     assert(chmod(player, 0700) == 0);
     assert(g_setenv("ESHEEP_AUDIO_PLAYER", player, TRUE));
 
@@ -44,6 +49,16 @@ int main(void) {
     assert(esheep_audio_wait(second));
     assert(esheep_audio_active_voices(audio) == 0);
 
+    EsheepAudioVoice *looped = esheep_audio_play_mp3_looped(audio, payload,
+                                                             sizeof(payload), 2,
+                                                             &error);
+    assert(looped != NULL && error == NULL);
+    assert(esheep_audio_wait(looped));
+    gchar *log_contents = NULL;
+    assert(g_file_get_contents(log, &log_contents, NULL, NULL));
+    assert(strstr(log_contents, "-loop 2") != NULL);
+    g_free(log_contents);
+
     esheep_audio_set_enabled(audio, FALSE);
     assert(esheep_audio_play_mp3(audio, payload, sizeof(payload), &error) == NULL);
     assert(error == NULL && esheep_audio_active_voices(audio) == 0);
@@ -53,6 +68,7 @@ int main(void) {
     assert(cleanup_voice != NULL && esheep_audio_active_voices(audio) == 1);
     esheep_audio_shutdown(audio);
     unlink(player);
+    unlink(log);
     g_unsetenv("ESHEEP_AUDIO_PLAYER");
     puts("All audio abstraction tests passed");
     return 0;

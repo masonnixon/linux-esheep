@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "../src/esheep_audio.h"
 #include "../src/esheep_sound_cache.h"
@@ -15,7 +17,7 @@ static const char SOUND_PACKAGE_XML[] =
     "</png><transparency>Transparent</transparency></image>"
     "<sounds>"
     "  <sound animationid=\"1\"><probability>50</probability><loop>0</loop><base64>YWJj</base64></sound>"
-    "  <sound animationid=\"2\"><probability>100</probability><loop>1</loop><base64>ZGVm</base64></sound>"
+    "  <sound animationid=\"2\"><probability>100</probability><loop>1</loop><base64>SUQzAAAAAAAAAA==</base64></sound>"
     "  <sound animationid=\"1\"><probability>25</probability><loop>2</loop><base64>Z2hp</base64></sound>"
     "  <sound animationid=\"3\"><probability>1</probability><loop>0</loop><base64>amts</base64></sound>"
     "</sounds>"
@@ -423,6 +425,52 @@ static void test_sound_cache_cache_lifetime(void) {
     printf("  PASSED\n");
 }
 
+static void test_sound_cache_forwards_loop_count(void) {
+    printf("Testing sound cache loop forwarding...\n");
+    const char *path = "/tmp/esheep-test-sound-loop.xml";
+    const char *player = "/tmp/esheep-test-sound-player.sh";
+    const char *log = "/tmp/esheep-test-sound-player.log";
+    write_temp_file(path, SOUND_PACKAGE_XML);
+    unlink(log);
+    assert(g_file_set_contents(player,
+                               "#!/bin/sh\nprintf '%s\\n' \"$*\" >> /tmp/esheep-test-sound-player.log\nexit 0\n",
+                               -1, NULL));
+    assert(chmod(player, 0700) == 0);
+    assert(g_setenv("ESHEEP_AUDIO_PLAYER", player, TRUE));
+
+    GError *error = NULL;
+    EsheepPetPackage *package = NULL;
+    assert(esheep_pet_package_load(path, &package, &error));
+    EsheepAudioInitParams params = { .max_voices = 2, .enabled = TRUE, .volume = 100 };
+    EsheepAudio *audio = esheep_audio_init(&params, &error);
+    EsheepSoundCache *cache = esheep_sound_cache_new(package, audio, &error);
+    assert(cache != NULL && error == NULL);
+    const EsheepSoundEntry *entries[2];
+    assert(esheep_sound_cache_query(cache, 2, 0, entries, 2) == 1);
+    assert(entries[0]->payload_size == 10);
+    assert(entries[0]->payload[0] == 0x49);
+    EsheepAudioVoice *voice = esheep_audio_play_mp3(audio, entries[0]->payload,
+                                                    entries[0]->payload_size,
+                                                    &error);
+    assert(voice != NULL && error == NULL);
+    assert(esheep_audio_wait(voice));
+    assert(esheep_sound_cache_trigger(cache, 2, 0) == 1);
+    g_usleep(100000);
+    gchar *contents = NULL;
+    assert(g_file_get_contents(log, &contents, NULL, NULL));
+    assert(strstr(contents, "-loop 1") != NULL);
+    g_free(contents);
+
+    esheep_sound_cache_free(cache);
+    esheep_audio_shutdown(audio);
+    esheep_pet_package_free(package);
+    g_unsetenv("ESHEEP_AUDIO_PLAYER");
+    unlink(player);
+    unlink(log);
+    unlink(path);
+    printf("  PASSED\n");
+}
+
 int main(void) {
     test_sound_cache_creation_and_query();
     test_sound_cache_seeded_probability();
@@ -431,6 +479,7 @@ int main(void) {
     test_sound_cache_disabled_audio();
     test_sound_cache_source_order_preserved();
     test_sound_cache_cache_lifetime();
+    test_sound_cache_forwards_loop_count();
     puts("All sound cache tests passed");
     return 0;
 }

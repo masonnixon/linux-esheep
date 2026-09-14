@@ -107,10 +107,9 @@ int esheep_sound_cache_trigger(EsheepSoundCache *cache,
         int roll = sound_rng_next(cache);
         if (roll < entry->probability) {
             GError *error = NULL;
-            EsheepAudioVoice *voice = esheep_audio_play_mp3(cache->audio,
-                                                            entry->payload,
-                                                            entry->payload_size,
-                                                            &error);
+            EsheepAudioVoice *voice = esheep_audio_play_mp3_looped(
+                cache->audio, entry->payload, entry->payload_size,
+                entry->loop_count, &error);
             if (voice) triggered++;
             else if (error) {
                 g_warning("Sound playback failed for animation %d: %s",

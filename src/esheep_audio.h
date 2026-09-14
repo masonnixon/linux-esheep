@@ -32,6 +32,12 @@ EsheepAudioVoice *esheep_audio_play_mp3(EsheepAudio *audio,
                                         const guchar *payload,
                                         gsize payload_size,
                                         GError **error);
+/* Play an MP3 payload, repeating it loop_count times after the first play. */
+EsheepAudioVoice *esheep_audio_play_mp3_looped(EsheepAudio *audio,
+                                               const guchar *payload,
+                                               gsize payload_size,
+                                               int loop_count,
+                                               GError **error);
 void esheep_audio_cancel(EsheepAudioVoice *voice);
 gboolean esheep_audio_wait(EsheepAudioVoice *voice);
 int esheep_audio_active_voices(const EsheepAudio *audio);

@@ -187,9 +187,12 @@ at login; `make uninstall-autostart` removes that opt-in entry.
 
 - Package audio controls are present: `--audio`/`--no-audio`,
   `--master-volume N`, and `--max-voices N`, with matching config keys and
-  environment variables. The current audio backend is a deliberate silent
-  fallback (`ESHEEP_AUDIO_CAP_NONE`), so no sound is emitted until a playback
-  backend is supplied. Upstream sound-bearing packages are not bundled.
+  environment variables. Package sounds are decoded and played asynchronously
+  through `ffplay` when it is available. Missing players and unavailable audio
+  remain silent. To smoke-test a real player with an imported package, run
+  `ESHEEP_AUDIO_PLAYER=ffplay ./esheep --package path/to/animations.xml`.
+  Imported sound-bearing packages are bundled under `assets/Pets` when the
+  catalog is installed.
 - Native Wayland window discovery and arbitrary popup positioning require
   compositor-specific protocols. On Wayland with XWayland, use
   `--x11-fallback` or `ESHEEP_X11_FALLBACK=1` for the X11 landing backend.
