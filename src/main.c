@@ -199,6 +199,7 @@ struct App {
     uint32_t random_state;
     bool edge_dispatched;
     gboolean cleaned_up;
+    gboolean window_destroyed;
     gboolean paused;
     gboolean hidden;
     gboolean fullscreen_suppressed;
@@ -230,6 +231,7 @@ struct App {
 struct SheepGroup {
     App *sheep;
     EsheepAudio *audio;
+    EsheepSoundCache *sound_cache;
     GdkPixbuf *sheet;
     EsheepPetPackage *active_package;
     guint count;
@@ -395,6 +397,8 @@ static gboolean group_set_monitor(SheepGroup *group, guint monitor_index) {
         if (old_usable > 0 && new_usable > 0)
             relative_x = (int)((gint64)relative_x * new_usable / old_usable);
         app->bounds = bounds;
+        esheep_set_environment(&app->state, bounds.width, bounds.height,
+                               app->tile_size, app->tile_size);
         app->pos_x = clamp_pos_x(app, bounds.x + relative_x);
         app->pos_y = grounded ? floor_pos_y(app) :
                      CLAMP(app->pos_y, bounds.y, floor_pos_y(app));
@@ -407,6 +411,25 @@ static gboolean group_set_monitor(SheepGroup *group, guint monitor_index) {
     }
     group->monitor_index = monitor_index;
     return TRUE;
+}
+
+static void on_monitor_added(GdkDisplay *display, GdkMonitor *monitor,
+                             gpointer user_data) {
+    (void)display;
+    (void)monitor;
+    SheepGroup *group = user_data;
+    if (group) group_set_monitor(group, group->monitor_index);
+}
+
+static void on_monitor_removed(GdkDisplay *display, GdkMonitor *monitor,
+                               gpointer user_data) {
+    (void)display;
+    (void)monitor;
+    SheepGroup *group = user_data;
+    if (!group || !group->display) return;
+    guint count = (guint)gdk_display_get_n_monitors(group->display);
+    if (count > 0)
+        group_set_monitor(group, MIN(group->monitor_index, count - 1));
 }
 
 static gboolean group_set_review_animation(SheepGroup *group, int animation_id) {
@@ -779,7 +802,6 @@ static gboolean x11_surface_is_landing_candidate(
     const DesktopSurfaceTraits *traits) {
     return traits &&
            !traits->desktop_surface &&
-           !traits->panel_surface &&
            !traits->fullscreen_surface &&
            !traits->conky_surface;
 }
@@ -947,6 +969,7 @@ static void print_transitions(void) {
 }
 
 static void update_monitor_bounds(App *app) {
+    if (!app || !app->window || app->window_destroyed) return;
     GdkDisplay *display = gtk_widget_get_display(app->window);
     /* Probe just beyond the leading edge. Probing the center leaves a sheep
      * trapped at a monitor boundary because clamping keeps its center inside
@@ -967,6 +990,19 @@ static void update_monitor_bounds(App *app) {
         if (app->pos_y < app->bounds.y) app->pos_y = app->bounds.y;
         if (app->pos_y > floor_pos_y(app)) app->pos_y = floor_pos_y(app);
     }
+}
+
+static void update_monitor_bounds_at_point(App *app, int x, int y) {
+    if (!app || !app->window || app->window_destroyed) return;
+    GdkRectangle workarea;
+    GdkDisplay *display = gtk_widget_get_display(app->window);
+    if (!select_monitor_workarea(display, NULL, x, y, 0, &workarea)) return;
+    if (memcmp(&app->bounds, &workarea, sizeof(workarea)) == 0) return;
+    app->bounds = workarea;
+    app->pos_x = clamp_pos_x(app, app->pos_x);
+    app->pos_y = CLAMP(app->pos_y, app->bounds.y, floor_pos_y(app));
+    esheep_set_environment(&app->state, app->bounds.width, app->bounds.height,
+                           app->tile_size, app->tile_size);
 }
 
 static gboolean rects_overlap_x(int left_a, int width_a, int left_b, int width_b) {
@@ -1752,7 +1788,7 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
                                     (unsigned char **)&windows);
     x11_refresh_sync(display);
     if (x11_bad_window || result != Success || !windows || format != 32 ||
-        actual_type != XA_WINDOW) {
+        actual_type != XA_WINDOW || bytes_after != 0) {
         if (windows) XFree(windows);
         XSetErrorHandler(x11_previous_error_handler);
         snap->refresh_failed = TRUE;
@@ -1766,7 +1802,7 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
                                 &format, &stacking_count, &bytes_after,
                                 (unsigned char **)&stacking);
     x11_refresh_sync(display);
-    if (x11_bad_window) {
+    if (x11_bad_window || bytes_after != 0) {
         if (stacking) XFree(stacking);
         XFree(windows);
         XSetErrorHandler(x11_previous_error_handler);
@@ -1878,7 +1914,7 @@ static gboolean x11_scan_desktop_snapshot(DesktopSnapshot *snap, App *driver,
         DesktopObject *object = &refreshed_objects[refreshed_count++];
         object->rect = (GdkRectangle){ probe.frame_x, probe.frame_y,
                                        probe.frame.width, probe.frame.height };
-        object->taskbar = FALSE;
+        object->taskbar = traits.panel_surface;
         object->stack_order = stacking_order(stacking, stacking_count,
                                              windows[i]);
     }
@@ -2712,6 +2748,8 @@ static void advance_child_animation(App *app, int dt_ms) {
 
 static gboolean on_tick(gpointer user_data) {
     App *app = user_data;
+    if (!app || app->cleaned_up || app->window_destroyed)
+        return G_SOURCE_CONTINUE;
     if (app->paused && !app->dragging) return G_SOURCE_CONTINUE;
 
     if (app->dragging) {
@@ -2931,6 +2969,8 @@ static gboolean group_tick(gpointer user_data) {
     if (!group || !group->sheep) return G_SOURCE_REMOVE;
     group->group_tick_count++;
     for (guint i = 0; i < group->count; i++) {
+        if (group->sheep[i].cleaned_up || group->sheep[i].window_destroyed)
+            continue;
         group->sheep_tick_count++;
         on_tick(&group->sheep[i]);
     }
@@ -3273,14 +3313,23 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
     }
 
     int tile_size = gdk_pixbuf_get_width(sheet) / tile_columns;
+    EsheepSoundCache *new_sound_cache = NULL;
+    if (package && group->audio) {
+        GError *sound_error = NULL;
+        new_sound_cache = esheep_sound_cache_new(package, group->audio,
+                                                 &sound_error);
+        g_clear_error(&sound_error);
+    }
     EsheepPetPackage *old_package = group->active_package;
     GdkPixbuf *old_sheet = group->sheet;
+    EsheepSoundCache *old_sound_cache = group->sound_cache;
     esheep_pet_package_activate(package);
     group->active_package = package;
     group->sheet = sheet;
     for (guint i = 0; i < group->count; i++) {
         App *app = &group->sheep[i];
         app->sheet = sheet;
+        app->sound_cache = new_sound_cache;
         app->tile_size = tile_size;
         if (app->state.animation_id < 1 ||
             app->state.animation_id > esheep_animation_count)
@@ -3301,6 +3350,8 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
         }
     }
     g_strlcpy(group->spritesheet, effective_sheet, sizeof(group->spritesheet));
+    group->sound_cache = new_sound_cache;
+    if (old_sound_cache) esheep_sound_cache_free(old_sound_cache);
     if (old_sheet) g_object_unref(old_sheet);
     if (old_package) esheep_pet_package_free(old_package);
     g_free(resolved_path);
@@ -3706,6 +3757,8 @@ static void on_tray_popup(GtkStatusIcon *icon, guint button, guint activate_time
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), about);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
     gtk_widget_show_all(menu);
+    g_signal_connect_swapped(menu, "selection-done",
+                             G_CALLBACK(gtk_widget_destroy), menu);
     (void)icon;
     gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
 }
@@ -3766,6 +3819,8 @@ static void show_pet_menu(App *app, GdkEventButton *event) {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit_item);
 
     gtk_widget_show_all(menu);
+    g_signal_connect_swapped(menu, "selection-done",
+                             G_CALLBACK(gtk_widget_destroy), menu);
     gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
 }
 
@@ -3786,8 +3841,8 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpoint
         esheep_init(&app->state, 25); /* authored jump animation for groups */
     } else if (event->button == 1) {
         app->dragging = TRUE;
-        app->drag_grab_x = (int)event->x;
-        app->drag_grab_y = (int)event->y;
+        app->drag_grab_x = (int)event->x - app->scene_origin_x;
+        app->drag_grab_y = (int)event->y - app->scene_origin_y;
         esheep_init(&app->state, ANIM_DRAG);
         set_sprite_input_region(app);
     } else if (event->button == 3) {
@@ -3804,7 +3859,8 @@ static gboolean on_button_release(GtkWidget *widget, GdkEventButton *event, gpoi
         app->dragging = FALSE;
         app->pos_x = (int)event->x_root - app->drag_grab_x;
         app->pos_y = (int)event->y_root - app->drag_grab_y;
-        update_monitor_bounds(app);
+        update_monitor_bounds_at_point(app, (int)event->x_root,
+                                       (int)event->y_root);
         int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
         esheep_init(&app->state, app->pos_y < floor_y ? ANIM_FALL : ANIM_WALK);
         app->drop_landing_enabled = app->pos_y < floor_y;
@@ -3826,6 +3882,15 @@ static gboolean on_motion(GtkWidget *widget, GdkEventMotion *event, gpointer use
                         app->pos_y - app->scene_origin_y);
     }
     return TRUE;
+}
+
+static void on_sheep_window_destroy(GtkWidget *widget, gpointer user_data) {
+    App *app = user_data;
+    if (!app) return;
+    if (app->window == widget) app->window = NULL;
+    app->xwindow = 0;
+    app->window_destroyed = TRUE;
+    app->dragging = FALSE;
 }
 
 
@@ -3889,6 +3954,7 @@ static void setup_sheep_window(App *app, GdkDisplay *display,
     gtk_widget_add_events(window, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK |
                                        GDK_POINTER_MOTION_MASK);
     g_signal_connect(window, "draw", G_CALLBACK(on_draw), app);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_sheep_window_destroy), app);
     g_signal_connect(window, "button-press-event", G_CALLBACK(on_button_press), app);
     g_signal_connect(window, "button-release-event", G_CALLBACK(on_button_release), app);
     g_signal_connect(window, "motion-notify-event", G_CALLBACK(on_motion), app);
@@ -4666,6 +4732,7 @@ int main(int argc, char **argv) {
     SheepGroup group = {
         .sheep = sheep,
         .audio = audio,
+        .sound_cache = sound_cache,
         .sheet = g_object_ref(sheet),
         .active_package = runtime_package,
         .count = count,
@@ -4694,6 +4761,10 @@ int main(int argc, char **argv) {
               spawn_override ? spawn_override :
               (getenv("ESHEEP_SPAWN") ? getenv("ESHEEP_SPAWN") : "bottom"),
               sizeof(group.spawn_mode));
+    g_signal_connect(display, "monitor-added", G_CALLBACK(on_monitor_added),
+                     &group);
+    g_signal_connect(display, "monitor-removed", G_CALLBACK(on_monitor_removed),
+                     &group);
     for (guint i = 0; i < count; i++) {
         App *app = &sheep[i];
         app->sheet = sheet;
@@ -4781,7 +4852,7 @@ int main(int argc, char **argv) {
         cleanup_app(&sheep[i]);
 
     /* Clean up audio and sound cache */
-    if (sound_cache) esheep_sound_cache_free(sound_cache);
+    if (group.sound_cache) esheep_sound_cache_free(group.sound_cache);
     if (audio) esheep_audio_shutdown(audio);
 
     g_free(config_character);

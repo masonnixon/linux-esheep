@@ -39,6 +39,9 @@ EsheepAudioVoice *esheep_audio_play_mp3_looped(EsheepAudio *audio,
                                                int loop_count,
                                                GError **error);
 void esheep_audio_cancel(EsheepAudioVoice *voice);
+/* Release a fire-and-forget voice.  The backend retains it until playback
+ * exits, then reaps it and removes its temporary file. */
+void esheep_audio_release_voice(EsheepAudioVoice *voice);
 gboolean esheep_audio_wait(EsheepAudioVoice *voice);
 int esheep_audio_active_voices(const EsheepAudio *audio);
 int esheep_audio_max_voices(const EsheepAudio *audio);

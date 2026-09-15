@@ -21,6 +21,7 @@ struct EsheepAudioVoice {
     pid_t pid;
     char *path;
     gboolean completed;
+    gboolean released;
 };
 
 static GQuark audio_error_quark(void) {
@@ -49,11 +50,17 @@ static void voice_cleanup(EsheepAudioVoice *voice) {
 }
 
 static void reap_finished_locked(EsheepAudio *audio) {
-    for (GList *node = audio->voices; node; node = node->next) {
+    for (GList *node = audio->voices; node;) {
+        GList *next = node->next;
         EsheepAudioVoice *voice = node->data;
         if (!voice->completed &&
             (errno = 0, waitpid(voice->pid, NULL, WNOHANG) == voice->pid || errno == ECHILD))
             voice->completed = TRUE;
+        if (voice->completed && voice->released) {
+            audio->voices = g_list_delete_link(audio->voices, node);
+            voice_cleanup(voice);
+        }
+        node = next;
     }
 }
 
@@ -178,6 +185,15 @@ void esheep_audio_cancel(EsheepAudioVoice *voice) {
         voice->completed = TRUE;
     }
     g_mutex_unlock(&voice->audio->mutex);
+}
+
+void esheep_audio_release_voice(EsheepAudioVoice *voice) {
+    if (!voice) return;
+    EsheepAudio *audio = voice->audio;
+    g_mutex_lock(&audio->mutex);
+    voice->released = TRUE;
+    reap_finished_locked(audio);
+    g_mutex_unlock(&audio->mutex);
 }
 
 gboolean esheep_audio_wait(EsheepAudioVoice *voice) {

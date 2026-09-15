@@ -36,7 +36,7 @@ static bool find_landing_target(int pos_x, int pos_y, int image_width, int image
             top < obj->y + obj->height;
         if ((at_top || overlapping) &&
             rects_overlap_x(pos_x, image_width, obj->x, obj->width)) {
-            int priority = obj->taskbar ? 0 : 1;
+            int priority = obj->taskbar ? 1 : 0;
             if (obj->stack_order > best_stack_order ||
                 (obj->stack_order == best_stack_order && priority > (best_surface == ESHEEP_SURFACE_TASKBAR ? 1 : 0))) {
                 best_stack_order = obj->stack_order;
@@ -82,7 +82,10 @@ static bool find_swept_landing_target(int pos_x, int previous_bottom, int curren
         if ((!at_top && !(crossing &&
                           (window_landing_enabled || drop_landing_enabled))) ||
             !rects_overlap_x(pos_x, image_width, obj->x, obj->width)) continue;
-        if (obj->stack_order >= best_stack_order) {
+        int priority = obj->taskbar ? 1 : 0;
+        int best_priority = best_surface == ESHEEP_SURFACE_TASKBAR ? 1 : 0;
+        if (obj->stack_order > best_stack_order ||
+            (obj->stack_order == best_stack_order && priority > best_priority)) {
             best_stack_order = obj->stack_order;
             best_surface = obj->taskbar ? ESHEEP_SURFACE_TASKBAR : ESHEEP_SURFACE_WINDOW;
             best_y = obj->y;

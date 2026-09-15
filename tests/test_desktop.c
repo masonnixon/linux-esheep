@@ -102,7 +102,7 @@ static void test_child_coordinates_are_local_to_scene(void) {
                                                   0)) == 756);
 }
 
-static void test_fullscreen_and_panel_surfaces_are_excluded(void) {
+static void test_fullscreen_and_panel_surfaces_are_classified(void) {
     DesktopSurfaceTraits normal = {0};
     DesktopSurfaceTraits fullscreen = { .fullscreen_surface = TRUE };
     DesktopSurfaceTraits panel = { .panel_surface = TRUE };
@@ -111,7 +111,10 @@ static void test_fullscreen_and_panel_surfaces_are_excluded(void) {
 
     assert(x11_surface_is_landing_candidate(&normal));
     assert(!x11_surface_is_landing_candidate(&fullscreen));
-    assert(!x11_surface_is_landing_candidate(&panel));
+    /* Panels/taskbars are valid landing surfaces; the snapshot preserves
+     * their classification so the context resolver can apply taskbar
+     * priority. */
+    assert(x11_surface_is_landing_candidate(&panel));
     assert(!x11_surface_is_landing_candidate(&desktop));
     assert(!x11_surface_is_landing_candidate(&conky));
 }
@@ -167,7 +170,7 @@ int main(void) {
     test_offset_monitor_requires_vertical_overlap();
     test_surface_sync_filters_other_monitors();
     test_child_coordinates_are_local_to_scene();
-    test_fullscreen_and_panel_surfaces_are_excluded();
+    test_fullscreen_and_panel_surfaces_are_classified();
     test_x11_fallback_capabilities();
     test_x11_occlusion_stacking_policy();
     test_fullscreen_surface_coverage();

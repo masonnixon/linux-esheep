@@ -659,9 +659,9 @@ static void test_walk_in_front_of_taskbar_not_lifted(void) {
     assert(ctx.surface_y == 360);
 }
 
-/* Desktop, panel, fullscreen, and conky surfaces are rejected before surface
- * selection, so none of them can false-positive as a landing target. */
-static void test_excluded_surfaces_rejected(void) {
+/* Desktop/fullscreen/conky surfaces are rejected; panels remain candidates
+ * and retain their taskbar classification for landing priority. */
+static void test_surface_candidate_classification(void) {
     DesktopSurfaceTraits traits;
     memset(&traits, 0, sizeof(traits));
     assert(x11_surface_is_landing_candidate(&traits));
@@ -669,7 +669,7 @@ static void test_excluded_surfaces_rejected(void) {
     traits = (DesktopSurfaceTraits){ .desktop_surface = TRUE };
     assert(!x11_surface_is_landing_candidate(&traits));
     traits = (DesktopSurfaceTraits){ .panel_surface = TRUE };
-    assert(!x11_surface_is_landing_candidate(&traits));
+    assert(x11_surface_is_landing_candidate(&traits));
     traits = (DesktopSurfaceTraits){ .fullscreen_surface = TRUE };
     assert(!x11_surface_is_landing_candidate(&traits));
     traits = (DesktopSurfaceTraits){ .conky_surface = TRUE };
@@ -963,7 +963,7 @@ int main(void) {
     test_walk_in_front_of_taskbar_not_lifted();
     printf("  test_walk_in_front_of_taskbar_not_lifted: PASSED\n");
 
-    test_excluded_surfaces_rejected();
+    test_surface_candidate_classification();
     printf("  test_excluded_surfaces_rejected: PASSED\n");
 
     test_stacking_policy_allows_occlusion();
