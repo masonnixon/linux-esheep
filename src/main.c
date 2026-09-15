@@ -4,6 +4,7 @@
  * workarea.
  */
 #include <gtk/gtk.h>
+#include <pango/pangocairo.h>
 #include <gdk/gdkx.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -3822,11 +3823,45 @@ static void on_tray_activate(GtkStatusIcon *icon, gpointer user_data) {
     group_present(user_data);
 }
 
+static GdkPixbuf *create_tray_emoji(void) {
+    const int size = 24;
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+                                                            size, size);
+    cairo_t *cr = cairo_create(surface);
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *font =
+        pango_font_description_from_string("Noto Color Emoji 18");
+    int text_width = 0;
+    int text_height = 0;
+
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    pango_layout_set_text(layout, "🐑", -1);
+    pango_layout_set_font_description(layout, font);
+    pango_layout_get_pixel_size(layout, &text_width, &text_height);
+    cairo_move_to(cr, (size - text_width) / 2.0,
+                  (size - text_height) / 2.0);
+    pango_cairo_show_layout(cr, layout);
+
+    GdkPixbuf *pixbuf = gdk_pixbuf_get_from_surface(surface, 0, 0, size, size);
+    pango_font_description_free(font);
+    g_object_unref(layout);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
+    return pixbuf;
+}
+
 static GtkStatusIcon *create_tray_icon(SheepGroup *group) {
     GtkStatusIcon *icon;
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    icon = gtk_status_icon_new_from_icon_name("face-smile");
+    icon = gtk_status_icon_new();
     if (!icon) return NULL;
+    GdkPixbuf *emoji = create_tray_emoji();
+    if (emoji) {
+        gtk_status_icon_set_from_pixbuf(icon, emoji);
+        g_object_unref(emoji);
+    }
     gtk_status_icon_set_title(icon, "linux-esheep");
     gtk_status_icon_set_tooltip_text(icon, "linux-esheep");
     G_GNUC_END_IGNORE_DEPRECATIONS
