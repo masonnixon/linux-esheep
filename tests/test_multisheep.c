@@ -24,6 +24,9 @@ static void init_stub_app(App *app, App *siblings, int sibling_count, int ordina
     app->sibling_count = sibling_count;
     app->ordinal = ordinal;
     app->tile_size = tile_size;
+    app->walk_animation_id = ANIM_WALK;
+    app->drag_animation_id = ANIM_DRAG;
+    app->fall_animation_id = ANIM_FALL;
     app->tick_ms = TICK_MS;
     app->direction = ordinal % 2 == 0 ? -1 : 1;
     app->window_landing = TRUE;

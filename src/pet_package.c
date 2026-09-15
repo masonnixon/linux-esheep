@@ -829,6 +829,23 @@ const char *esheep_pet_package_spritesheet(const EsheepPetPackage *package) {
     return package ? package->spritesheet : NULL;
 }
 
+gboolean esheep_pet_package_set_image_grid(EsheepPetPackage *package,
+                                           int tiles_x, int tiles_y) {
+    if (!package || tiles_x < 1 || tiles_y < 1) return FALSE;
+    for (int i = 0; i < package->animation_count; i++) {
+        const EsheepAnimation *animation = &package->animations[i];
+        for (int frame = 0; frame < animation->frame_count; frame++)
+            if (animation->frames[frame] >= tiles_x * tiles_y) return FALSE;
+    }
+    package->tiles_x = tiles_x;
+    package->tiles_y = tiles_y;
+    if (package->image) {
+        package->image->tiles_x = tiles_x;
+        package->image->tiles_y = tiles_y;
+    }
+    return TRUE;
+}
+
 void esheep_pet_package_free(EsheepPetPackage *package) {
     if (!package) return;
         if (active_package == package) {

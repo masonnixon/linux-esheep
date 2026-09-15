@@ -19,6 +19,9 @@ static void init_stub_app(App *app, int bounds_x, int bounds_y,
                           int bounds_width, int bounds_height, int tile_size) {
     memset(app, 0, sizeof(*app));
     app->tile_size = tile_size;
+    app->walk_animation_id = ANIM_WALK;
+    app->drag_animation_id = ANIM_DRAG;
+    app->fall_animation_id = ANIM_FALL;
     app->direction = 1;
     app->bounds = (GdkRectangle){ bounds_x, bounds_y, bounds_width, bounds_height };
     app->pos_x = bounds_x + 50;

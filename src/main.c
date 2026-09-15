@@ -177,6 +177,9 @@ struct App {
         EsheepActor actor; /* authoritative root ownership and child links */
     };
     int tile_size;
+    int walk_animation_id;
+    int drag_animation_id;
+    int fall_animation_id;
     GdkRectangle bounds; /* primary monitor geometry, the whole "world" for now */
     int pos_x, pos_y;    /* top-left of the sprite window, in screen coords */
     gboolean dragging;
@@ -235,6 +238,9 @@ struct SheepGroup {
     GdkPixbuf *sheet;
     EsheepPetPackage *active_package;
     guint count;
+    int walk_animation_id;
+    int drag_animation_id;
+    int fall_animation_id;
     GdkDisplay *display;
     guint monitor_index;
     guint configured_count;
@@ -261,6 +267,23 @@ struct SheepGroup {
 
 static int clamp_pos_x(const App *app, int pos_x);
 static int floor_pos_y(const App *app);
+
+static int animation_id_named(const char *name, int fallback) {
+    if (name) {
+        for (int i = 0; i < esheep_animation_count; i++)
+            if (esheep_animations[i].name &&
+                g_ascii_strcasecmp(esheep_animations[i].name, name) == 0)
+                return esheep_animations[i].id;
+    }
+    return fallback <= esheep_animation_count ? fallback : 1;
+}
+
+static void group_resolve_animation_ids(SheepGroup *group) {
+    if (!group) return;
+    group->walk_animation_id = animation_id_named("walk", ANIM_WALK);
+    group->drag_animation_id = animation_id_named("drag", ANIM_DRAG);
+    group->fall_animation_id = animation_id_named("fall", ANIM_FALL);
+}
 
 /* Each sheep owns its random stream. This prevents child animation draws or
  * a sibling's decisions from changing another sheep's behavior sequence. */
@@ -875,7 +898,7 @@ static void choose_random_spawn(App *app) {
         app->direction = -1;
         app->pos_x = monitor_global_x(&app->bounds, app->bounds.width + 10);
         app->pos_y = floor_pos_y(app);
-        esheep_init(&app->state, ANIM_WALK);
+        esheep_init(&app->state, app->walk_animation_id);
         return;
     }
 
@@ -1218,7 +1241,7 @@ static void resolve_sheep_collisions(App *app) {
             app->pos_x = left_gap <= right_gap ? left_of_other : right_of_other;
         }
 
-        if (app->state.animation_id == ANIM_WALK) {
+        if (app->state.animation_id == app->walk_animation_id) {
             app->direction = app->pos_x < other->pos_x ? -1 : 1;
             esheep_init(&app->state, 2);
         } else if (is_airborne_animation(app->state.animation_id)) {
@@ -1327,7 +1350,7 @@ static void keep_walk_inside_bounds(App *app) {
         esheep_init(&app->state, 41);
         return;
     }
-    if (app->state.animation_id != ANIM_WALK) return;
+    if (app->state.animation_id != app->walk_animation_id) return;
     const EsheepAnimation *walk = &esheep_animations[ANIM_WALK - 1];
     int dx = horizontal_delta(app, walk, pose_delta(app, walk, 0, TRUE));
     if ((at_left && dx < 0) || (at_right && dx > 0)) {
@@ -2085,7 +2108,7 @@ static const char *object_underfoot(const App *app) {
 }
 
 static gboolean start_window_climb(App *app, const EsheepAnimation *anim) {
-    if (app->state.animation_id != ANIM_WALK) return FALSE;
+    if (app->state.animation_id != app->walk_animation_id) return FALSE;
     int dx = horizontal_delta(app, anim, pose_delta(app, anim, 0, TRUE));
     if (dx == 0) return FALSE;
 
@@ -2187,6 +2210,10 @@ static int pose_offset_y(const EsheepAnimation *anim, int frame_index) {
 }
 
 static gboolean is_airborne_animation(int animation_id) {
+    if (animation_id >= 1 && animation_id <= esheep_animation_count &&
+        esheep_animations[animation_id - 1].name &&
+        g_ascii_strcasecmp(esheep_animations[animation_id - 1].name, "fall") == 0)
+        return TRUE;
     switch (animation_id) {
     case 5: case 6: case 9: case 10:
     case 25: case 44: case 45: case 46:
@@ -2237,11 +2264,11 @@ static gboolean validate_spritesheet_pixbuf_grid(const GdkPixbuf *sheet,
     }
     if (character && strcasecmp(character, "sheep") != 0 &&
         strcasecmp(character, "penguin") != 0) {
-        g_printerr("custom-pet package note: custom character '%s' accepted, "
-                   "but runtime animation behavior is fixed to the sheep/"
-                   "penguin graph (src/animations_data.c). Custom sprites must "
-                   "use the %dx%d tile grid and cover all referenced frames "
-                   "(see tests/test_spritesheet.py for coverage rules).\n",
+        g_printerr("custom-pet package note: custom character '%s' accepted; "
+                   "runtime movement uses its authored walk/drag/fall "
+                   "animations. Custom sprites must use the %dx%d tile grid "
+                   "and cover all referenced frames (see "
+                   "tests/test_spritesheet.py for coverage rules).\n",
                    character, tiles_x, tiles_y);
     }
     return TRUE;
@@ -2750,6 +2777,12 @@ static gboolean on_tick(gpointer user_data) {
     App *app = user_data;
     if (!app || app->cleaned_up || app->window_destroyed)
         return G_SOURCE_CONTINUE;
+    if (app->walk_animation_id < 1)
+        app->walk_animation_id = animation_id_named("walk", ANIM_WALK);
+    if (app->drag_animation_id < 1)
+        app->drag_animation_id = animation_id_named("drag", ANIM_DRAG);
+    if (app->fall_animation_id < 1)
+        app->fall_animation_id = animation_id_named("fall", ANIM_FALL);
     if (app->paused && !app->dragging) return G_SOURCE_CONTINUE;
 
     if (app->dragging) {
@@ -2819,7 +2852,7 @@ static gboolean on_tick(gpointer user_data) {
     int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
 
     gboolean climbing = FALSE;
-    if (!climbing && app->state.animation_id == ANIM_WALK)
+    if (!climbing && app->state.animation_id == app->walk_animation_id)
         climbing = start_window_climb(app, &esheep_animations[ANIM_WALK - 1]);
 
     /* Handle edge transitions: only trigger once per edge encounter */
@@ -2848,10 +2881,10 @@ static gboolean on_tick(gpointer user_data) {
         !is_airborne_animation(app->state.animation_id) &&
         app->pos_y < floor_y &&
         !object_underfoot(app) &&
-        app->state.animation_id != ANIM_FALL) {
+        app->state.animation_id != app->fall_animation_id) {
         esheep_gravity_event(&app->state, "none", app_random_0_99(app));
-        if (app->state.animation_id != ANIM_FALL)
-            esheep_init(&app->state, ANIM_FALL);
+        if (app->state.animation_id != app->fall_animation_id)
+            esheep_init(&app->state, app->fall_animation_id);
     }
 
     /* Movement/collision context is decided by the CURRENT position, before
@@ -2906,7 +2939,7 @@ static gboolean on_tick(gpointer user_data) {
                      * or window behavior frame also reports its supporting
                      * surface, so do not reset it on every frame. */
                     if (is_landing_animation(event.animation_id))
-                        esheep_init(&app->state, ANIM_WALK);
+                        esheep_init(&app->state, app->walk_animation_id);
                 } else {
                     int border_roll = app_random_0_99(app);
                     border_changed = esheep_border_event(&app->state, hit,
@@ -3300,7 +3333,22 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
                        (package ? esheep_tiles_x : esheep_default_tiles_x);
     int tile_rows = package_image && package_image->tiles_y > 0 ?
                     package_image->tiles_y :
-                    (package ? esheep_tiles_y : esheep_default_tiles_y);
+                       (package ? esheep_tiles_y : esheep_default_tiles_y);
+    /* A few upstream packages carry stale row metadata for their embedded
+     * PNG.  Derive the row count only when the decoded image is an exact
+     * square-tile grid and all authored frames remain representable. */
+    if (package && sheet && tile_columns > 0 &&
+        gdk_pixbuf_get_width(sheet) % tile_columns == 0) {
+        int candidate_size = gdk_pixbuf_get_width(sheet) / tile_columns;
+        if (candidate_size > 0 &&
+            gdk_pixbuf_get_height(sheet) % candidate_size == 0) {
+            int candidate_rows = gdk_pixbuf_get_height(sheet) / candidate_size;
+            if (candidate_rows != tile_rows &&
+                esheep_pet_package_set_image_grid(package, tile_columns,
+                                                  candidate_rows))
+                tile_rows = candidate_rows;
+        }
+    }
     if (!sheet || !validate_spritesheet_pixbuf_grid(sheet, effective_sheet,
                                                      character, tile_columns,
                                                      tile_rows)) {
@@ -3324,6 +3372,7 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
     GdkPixbuf *old_sheet = group->sheet;
     EsheepSoundCache *old_sound_cache = group->sound_cache;
     esheep_pet_package_activate(package);
+    group_resolve_animation_ids(group);
     group->active_package = package;
     group->sheet = sheet;
     for (guint i = 0; i < group->count; i++) {
@@ -3331,9 +3380,12 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
         app->sheet = sheet;
         app->sound_cache = new_sound_cache;
         app->tile_size = tile_size;
+        app->walk_animation_id = group->walk_animation_id;
+        app->drag_animation_id = group->drag_animation_id;
+        app->fall_animation_id = group->fall_animation_id;
         if (app->state.animation_id < 1 ||
             app->state.animation_id > esheep_animation_count)
-            esheep_init(&app->state, ANIM_WALK);
+            esheep_init(&app->state, app->walk_animation_id);
         else if (app->state.frame_index >=
                  esheep_animations[app->state.animation_id - 1].frame_count)
             app->state.frame_index = 0;
@@ -3843,7 +3895,7 @@ static gboolean on_button_press(GtkWidget *widget, GdkEventButton *event, gpoint
         app->dragging = TRUE;
         app->drag_grab_x = (int)event->x - app->scene_origin_x;
         app->drag_grab_y = (int)event->y - app->scene_origin_y;
-        esheep_init(&app->state, ANIM_DRAG);
+        esheep_init(&app->state, app->drag_animation_id);
         set_sprite_input_region(app);
     } else if (event->button == 3) {
         show_pet_menu(app, event);
@@ -3862,7 +3914,8 @@ static gboolean on_button_release(GtkWidget *widget, GdkEventButton *event, gpoi
         update_monitor_bounds_at_point(app, (int)event->x_root,
                                        (int)event->y_root);
         int floor_y = app->bounds.y + app->bounds.height - app->tile_size;
-        esheep_init(&app->state, app->pos_y < floor_y ? ANIM_FALL : ANIM_WALK);
+        esheep_init(&app->state, app->pos_y < floor_y ? app->fall_animation_id :
+                    app->walk_animation_id);
         app->drop_landing_enabled = app->pos_y < floor_y;
         refresh_objects(app);
         set_sprite_input_region(app);
@@ -3979,6 +4032,9 @@ static void initialize_group_app(SheepGroup *group, App *app, guint ordinal,
     app->audio = group->audio;
     app->sound_cache = template ? template->sound_cache : NULL;
     app->tile_size = template ? template->tile_size : 40;
+    app->walk_animation_id = group->walk_animation_id;
+    app->drag_animation_id = group->drag_animation_id;
+    app->fall_animation_id = group->fall_animation_id;
     app->ordinal = (int)ordinal;
     app->direction = app_random_0_99(app) < 50 ? -1 : 1;
     app->tick_ms = group->tick_ms;
@@ -3994,7 +4050,7 @@ static void initialize_group_app(SheepGroup *group, App *app, guint ordinal,
     app->sibling_count = (int)group->count;
     app->bounds = template ? template->bounds : (GdkRectangle){0};
     app->shared_snapshot = group->desktop_snapshot;
-    esheep_actor_init(&app->actor, NULL, ANIM_WALK, app->pos_x,
+    esheep_actor_init(&app->actor, NULL, app->walk_animation_id, app->pos_x,
                       app->pos_y, app->direction);
     esheep_actor_set_random_source(&app->actor, actor_random_source, app);
     setup_sheep_window(app, group->display, monitor);
@@ -4289,7 +4345,8 @@ int main(int argc, char **argv) {
                                                    "spritesheet", NULL);
             sprite_override = config_sprite;
         }
-        if (!package_override && !getenv("ESHEEP_PACKAGE")) {
+        if (!package_override && !getenv("ESHEEP_PACKAGE") &&
+            (config_character || !character_override)) {
             config_package = g_key_file_get_string(config, "esheep",
                                                    "package", NULL);
             package_override = config_package;
@@ -4431,9 +4488,8 @@ int main(int argc, char **argv) {
 
     const char *character = character_override ? character_override :
                             getenv("ESHEEP_CHARACTER");
-    gboolean custom_sprite_selected = sprite_override ||
-                                      getenv("ESHEEP_SPRITESHEET") ||
-                                      config_sprite;
+    gboolean custom_sprite_selected = sprite_cli ||
+                                      getenv("ESHEEP_SPRITESHEET");
 
     /* Load catalog to resolve catalog character names */
     const EsheepPetCatalogEntry *catalog_entry = NULL;
@@ -4518,7 +4574,9 @@ int main(int argc, char **argv) {
     char default_sheet_path_buf[4096];
     GdkPixbuf *sheet = NULL;
 
-    if (sprite_override && (sprite_cli || !inspect_default_graph)) {
+    if (sprite_override &&
+        (sprite_cli || getenv("ESHEEP_SPRITESHEET") ||
+         (!character_override && !inspect_default_graph))) {
         sheet_path = sprite_override;
         sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
     } else {
@@ -4526,7 +4584,9 @@ int main(int argc, char **argv) {
         if (env_path) {
             sheet_path = env_path;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
-        } else if (config_sprite && !inspect_default_graph &&
+        } else if (config_sprite && !character_override &&
+                   !getenv("ESHEEP_CHARACTER") &&
+                   !inspect_default_graph &&
                    g_ascii_strcasecmp(config_sprite, "package:embedded") != 0) {
             sheet_path = config_sprite;
             sheet = gdk_pixbuf_new_from_file(sheet_path, &error);
@@ -4613,6 +4673,24 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (runtime_package && sheet && esheep_tiles_x > 0) {
+        const EsheepPackageImage *image = esheep_pet_package_image(runtime_package);
+        if (image && image->tiles_x > 0 && image->tiles_y > 0) {
+            esheep_tiles_x = image->tiles_x;
+            esheep_tiles_y = image->tiles_y;
+        }
+        int candidate_size = gdk_pixbuf_get_width(sheet) / esheep_tiles_x;
+        if (candidate_size > 0 &&
+            gdk_pixbuf_get_width(sheet) % esheep_tiles_x == 0 &&
+            gdk_pixbuf_get_height(sheet) % candidate_size == 0) {
+            int candidate_rows = gdk_pixbuf_get_height(sheet) / candidate_size;
+            if (candidate_rows != esheep_tiles_y &&
+                esheep_pet_package_set_image_grid(runtime_package,
+                                                  esheep_tiles_x,
+                                                  candidate_rows))
+                esheep_tiles_y = candidate_rows;
+        }
+    }
     int tile_size = gdk_pixbuf_get_width(sheet) / esheep_tiles_x;
     if (!validate_spritesheet_pixbuf(sheet, sheet_path, character)) {
         g_object_unref(sheet);
@@ -4757,6 +4835,7 @@ int main(int argc, char **argv) {
     g_strlcpy(group.spritesheet, sheet_path, sizeof(group.spritesheet));
     if (package_path)
         g_strlcpy(group.package, package_path, sizeof(group.package));
+    group_resolve_animation_ids(&group);
     g_strlcpy(group.spawn_mode,
               spawn_override ? spawn_override :
               (getenv("ESHEEP_SPAWN") ? getenv("ESHEEP_SPAWN") : "bottom"),
@@ -4775,6 +4854,9 @@ int main(int argc, char **argv) {
         app->direction = app_random_0_99(app) < 50 ? -1 : 1;
         app->tick_ms = tick_ms;
         app->group = &group;
+        app->walk_animation_id = group.walk_animation_id;
+        app->drag_animation_id = group.drag_animation_id;
+        app->fall_animation_id = group.fall_animation_id;
         app->window_landing = window_landing;
         app->exclude_conky = exclude_conky;
         app->spawn_on_window = spawn_override ?
@@ -4787,7 +4869,7 @@ int main(int argc, char **argv) {
         app->sibling_count = (int)count;
         app->bounds = initial_bounds;
         app->shared_snapshot = &group_snapshot;
-        esheep_actor_init(&app->actor, NULL, ANIM_WALK, app->pos_x,
+        esheep_actor_init(&app->actor, NULL, app->walk_animation_id, app->pos_x,
                           app->pos_y, app->direction);
         esheep_actor_set_random_source(&app->actor, actor_random_source, app);
         setup_sheep_window(app, display,

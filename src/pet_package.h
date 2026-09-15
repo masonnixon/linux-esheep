@@ -63,6 +63,12 @@ int esheep_pet_package_sound_count(const EsheepPetPackage *package);
  * <image><spritesheet>; the package owns the returned string. */
 const char *esheep_pet_package_spritesheet(const EsheepPetPackage *package);
 
+/* Correct a package's image grid after decoding embedded media whose
+ * metadata is known to be stale. Returns FALSE if the package or grid is
+ * invalid, or if any authored frame would fall outside the corrected grid. */
+gboolean esheep_pet_package_set_image_grid(EsheepPetPackage *package,
+                                           int tiles_x, int tiles_y);
+
 /* Restore generated data and release a package. The package must not be
  * active while actors are using it. */
 void esheep_pet_package_free(EsheepPetPackage *package);
