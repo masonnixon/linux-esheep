@@ -458,7 +458,7 @@ static void test_sound_cache_forwards_loop_count(void) {
     g_usleep(100000);
     gchar *contents = NULL;
     assert(g_file_get_contents(log, &contents, NULL, NULL));
-    assert(strstr(contents, "-loop 1") != NULL);
+    assert(strstr(contents, "-loop 2") != NULL);
     g_free(contents);
 
     esheep_sound_cache_free(cache);

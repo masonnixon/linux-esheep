@@ -160,7 +160,12 @@ EsheepAudioVoice *esheep_audio_play_mp3_looped(EsheepAudio *audio,
     if (pid == 0) {
         char volume[4], loop[12];
         g_snprintf(volume, sizeof volume, "%d", audio->volume);
-        g_snprintf(loop, sizeof loop, "%d", loop_count);
+        /* The public API expresses repeats after the initial playback, while
+         * ffplay's -loop value expresses total playbacks.  In particular,
+         * ffplay interprets -loop 0 as infinite looping, so forwarding the
+         * API value directly would make every ordinary one-shot sound loop
+         * forever. */
+        g_snprintf(loop, sizeof loop, "%d", loop_count + 1);
         char *const argv[] = { audio->player, "-nodisp", "-autoexit", "-loglevel", "quiet",
                                "-volume", volume, "-loop", loop, path, NULL };
         execv(audio->player, argv);

@@ -56,7 +56,7 @@ int main(void) {
     assert(esheep_audio_wait(looped));
     gchar *log_contents = NULL;
     assert(g_file_get_contents(log, &log_contents, NULL, NULL));
-    assert(strstr(log_contents, "-loop 2") != NULL);
+    assert(strstr(log_contents, "-loop 3") != NULL);
     g_free(log_contents);
 
     esheep_audio_set_enabled(audio, FALSE);
