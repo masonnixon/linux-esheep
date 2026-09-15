@@ -35,7 +35,7 @@ static gboolean parse_bool(const char *value, gboolean *out) {
 
 void esheep_audio_config_defaults(EsheepAudioConfig *config) {
     if (!config) return;
-    config->enabled = TRUE;
+    config->enabled = FALSE;
     config->volume = 100;
     config->max_voices = 8;
 }

@@ -65,7 +65,7 @@ seed=12345
 review_animation=0
 window_landing=true
 exclude_conky=true
-audio_enabled=true
+audio_enabled=false
 master_volume=100
 max_voices=8
 ```
@@ -187,7 +187,8 @@ at login; `make uninstall-autostart` removes that opt-in entry.
 
 - Package audio controls are present: `--audio`/`--no-audio`,
   `--master-volume N`, and `--max-voices N`, with matching config keys and
-  environment variables. Package sounds are decoded and played asynchronously
+  environment variables. Audio is disabled by default and must be enabled
+  explicitly. Package sounds are decoded and played asynchronously
   through `ffplay` when it is available. Missing players and unavailable audio
   remain silent. To smoke-test a real player with an imported package, run
   `ESHEEP_AUDIO_PLAYER=ffplay ./esheep --package path/to/animations.xml`.

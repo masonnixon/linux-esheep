@@ -467,6 +467,7 @@ static gboolean group_set_review_animation(SheepGroup *group, int animation_id) 
                                app->tile_size);
         esheep_set_walk_keep_probability(&app->state,
                                          (int)group->walk_keep_probability);
+        esheep_set_walk_animation_id(&app->state, app->walk_animation_id);
         update_child_animation(app);
         advance_child_animation(app, 0);
         if (app->window) {
@@ -3383,6 +3384,7 @@ static gboolean group_apply_profile(SheepGroup *group, const char *package_path,
         app->walk_animation_id = group->walk_animation_id;
         app->drag_animation_id = group->drag_animation_id;
         app->fall_animation_id = group->fall_animation_id;
+        esheep_set_walk_animation_id(&app->state, app->walk_animation_id);
         if (app->state.animation_id < 1 ||
             app->state.animation_id > esheep_animation_count)
             esheep_init(&app->state, app->walk_animation_id);
@@ -4056,6 +4058,7 @@ static void initialize_group_app(SheepGroup *group, App *app, guint ordinal,
     setup_sheep_window(app, group->display, monitor);
     esheep_set_walk_keep_probability(&app->state,
                                      (int)group->walk_keep_probability);
+    esheep_set_walk_animation_id(&app->state, app->walk_animation_id);
     if (group->review_animation > 0)
         esheep_init(&app->state, group->review_animation);
     if (refresh_snapshot && GDK_IS_X11_DISPLAY(group->display))
@@ -4878,6 +4881,7 @@ int main(int argc, char **argv) {
                                                             initial_bounds.y + initial_bounds.height / 2));
         esheep_set_walk_keep_probability(&app->state,
                                          (int)walk_keep_probability);
+        esheep_set_walk_animation_id(&app->state, app->walk_animation_id);
         if (review_parent > 0)
             esheep_init(&app->state, review_parent);
         else if (review_animation > 0)

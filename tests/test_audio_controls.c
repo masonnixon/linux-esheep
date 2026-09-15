@@ -10,6 +10,7 @@ static void test_precedence_and_bounds(void) {
     EsheepAudioConfig config;
     guint value;
     esheep_audio_config_defaults(&config);
+    assert(!config.enabled);
     g_key_file_set_boolean(key_file, "esheep", "audio_enabled", FALSE);
     g_key_file_set_integer(key_file, "esheep", "master_volume", 20);
     g_key_file_set_integer(key_file, "esheep", "max_voices", 3);

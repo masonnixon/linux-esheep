@@ -17,6 +17,7 @@ static int default_area_height = 1080;
 static int default_image_width = 40;
 static int default_image_height = 40;
 static int default_walk_keep_probability = -1;
+static int default_walk_animation_id = 1;
 
 static int repeat_value(const EsheepState *state, const char *repeat_str,
                         int roll_0_99) {
@@ -84,6 +85,7 @@ void esheep_init(EsheepState *state, int animation_id) {
     state->area_height = default_area_height;
     state->image_width = default_image_width;
     state->image_height = default_image_height;
+    state->walk_animation_id = default_walk_animation_id;
     state->walk_keep_probability = default_walk_keep_probability;
     state->event_count = 0;
 }
@@ -92,6 +94,13 @@ void esheep_set_walk_keep_probability(EsheepState *state, int probability) {
     if (probability < 0 || probability > 100) return;
     default_walk_keep_probability = probability;
     state->walk_keep_probability = probability;
+}
+
+void esheep_set_walk_animation_id(EsheepState *state, int animation_id) {
+    if (!state || animation_id < 1 || animation_id > esheep_animation_count)
+        return;
+    default_walk_animation_id = animation_id;
+    state->walk_animation_id = animation_id;
 }
 
 void esheep_set_environment(EsheepState *state, int area_width, int area_height,
@@ -153,7 +162,8 @@ bool esheep_tick(EsheepState *state, int dt_ms, const char *context, int roll_0_
             state->repeat_index++;
             if (state->repeat_index >= repeat_count) {
                 int transition_roll = roll_0_99;
-                if (anim->id == 1 && context && strcmp(context, "none") == 0 &&
+                if (anim->id == state->walk_animation_id &&
+                    context && strcmp(context, "none") == 0 &&
                     state->walk_keep_probability >= 0) {
                     int keep = state->walk_keep_probability;
                     if (roll_0_99 < keep)

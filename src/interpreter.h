@@ -20,6 +20,7 @@ typedef struct {
     int area_height;
     int image_width;
     int image_height;
+    int walk_animation_id;
     int walk_keep_probability;
     int event_count;
     EsheepFrameEvent events[ESHEEP_MAX_TICK_EVENTS];
@@ -29,6 +30,7 @@ void esheep_init(EsheepState *state, int animation_id);
 void esheep_set_environment(EsheepState *state, int area_width, int area_height,
                             int image_width, int image_height);
 void esheep_set_walk_keep_probability(EsheepState *state, int probability);
+void esheep_set_walk_animation_id(EsheepState *state, int animation_id);
 int esheep_current_tile(const EsheepState *state);
 /* Advance every animation frame whose interval elapsed. Returns true when at
  * least one frame boundary was crossed. The events array records the
